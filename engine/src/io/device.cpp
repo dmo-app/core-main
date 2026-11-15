@@ -59,7 +59,7 @@ class MiniaudioOutput final : public AudioOutput {
     const uint64_t start = nowNs();
     float* out = static_cast<float*>(output);
     ma_uint32 done = 0;
-    // An exception must not leave the device's thread (it would end the engine): a unit that throws
+    // An exception must not leave the device's thread (it would end the engine): a plugin that throws
     // costs that buffer, which is silence, and is counted (engine.stats callbackErrors).
     try {
       while (done < frames) {

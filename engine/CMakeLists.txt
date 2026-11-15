@@ -14,7 +14,7 @@ endif()
 
 # Engine core: no audio device, no OS calls. Used by the app, the tests and the measurements.
 add_library(core_engine_lib STATIC
-  src/core/project.cpp src/core/tempo_map.cpp src/core/graph.cpp src/core/engine.cpp src/core/server.cpp src/core/render_job.cpp src/core/assets.cpp
+  src/core/project.cpp src/core/tempo_map.cpp src/core/graph.cpp src/core/engine.cpp src/core/server.cpp src/core/render_job.cpp src/core/assets.cpp src/core/qualify.cpp
   src/dsp/instruments.cpp src/dsp/wavetables.cpp src/dsp/sampler.cpp src/dsp/sample_path.cpp src/dsp/effects.cpp src/dsp/devices.cpp src/dsp/registry.cpp src/dsp/loudness.cpp src/dsp/output_guard.cpp src/dsp/analyzer.cpp src/io/wav.cpp src/io/audio_file.cpp)
 target_include_directories(core_engine_lib PUBLIC src third_party)
 
@@ -58,3 +58,17 @@ if(WIN32)
   target_link_libraries(core-engine PRIVATE dbghelp)  # crash dumps (serve --dumps)
 endif()
 
+# VST3 hosting, with JUCE when the root build has it: only to A/B Core's own sounds against a reference
+# plugin (Serum 2) in the same engine. Core's sound stays its own. The JUCE code stays inside this library;
+# core-engine sees only plugins/juce_host.hpp.
+if(TARGET juce::juce_audio_processors)
+  add_library(core_plugin_host STATIC src/plugins/juce_host.cpp)
+  target_include_directories(core_plugin_host PUBLIC src third_party)
+  target_link_libraries(core_plugin_host
+    PRIVATE juce::juce_audio_processors juce::juce_gui_basics juce::juce_recommended_config_flags
+    PUBLIC core_engine_lib)
+  target_compile_definitions(core_plugin_host PRIVATE
+    JUCE_PLUGINHOST_VST3=1 JUCE_PLUGINHOST_AU=0 JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_STANDALONE_APPLICATION=1)
+  target_link_libraries(core-engine PRIVATE core_plugin_host)
+  target_compile_definitions(core-engine PRIVATE CORE_ENGINE_PLUGINS=1)
+endif()

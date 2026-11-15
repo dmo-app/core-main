@@ -5,9 +5,13 @@
 //   core-engine demo [bpm]                      prints the demo project
 //   core-engine devices
 //   core-engine --version                       the build: version + git commit
+//   core-engine scan <file.vst3>                 what a plugin file holds (JSON), run by the app per file
+//   core-engine qualify <file.vst3> [--sr 48000] each plugin of the file played on its own (JSON); exit 3 = unsafe
+//   core-engine matrix <file.vst3> [--sr 48000] [--tail 20]  M10: latency, tail, repeatability, call sizes,
+//                    live vs offline and mono input of each plugin of the file (JSON; see qualify.hpp)
 //   core-engine soak <project.json> [--minutes 120] [--block 128] [--exclusive] [--device name] [--backend wasapi] [--live-threads n]
 //                    [--no-edits]  M10: plays the song in a loop through the device, with edits, and reports
-//                    every minute (JSON lines); exit 0 = no overrun, starvation, NaN or callback error
+//                    every minute (JSON lines); exit 0 = no overrun, starvation, NaN, callback error or failed plugin
 //   core-engine loopcheck <project.json> [--passes 4] [--bars 8] [--out live.wav] [--block n] [--device name]
 //                    the loop played through the device and recorded: is every pass the same (and the same as offline)?
 #include <atomic>
@@ -21,6 +25,7 @@
 #include <vector>
 #include "app/measure.hpp"
 #include "app/protocol.hpp"
+#include "core/qualify.hpp"
 #include "core/server.hpp"
 #include "io/device.hpp"
 #include "io/wav.hpp"
@@ -59,6 +64,25 @@ static double residentMb() {
   return (double)resident * (double)sysconf(_SC_PAGESIZE) / 1048576.0;
 }
 #endif
+#ifdef CORE_ENGINE_PLUGINS
+#include "plugins/juce_host.hpp"
+// The JUCE host as the server's plugin host.
+class EnginePlugins final : public core::PluginHost {
+public:
+  std::shared_ptr<core::PluginProcessor> get(const std::string& key, const core::json& plugin, double sr, bool offline, std::string* why) override {
+    return host_.get(key, plugin, sr, offline, why);
+  }
+  void keepOnly(const std::vector<std::string>& keys) override { host_.keepOnly(keys); }
+  core::json captureStates() override { return host_.captureStates(); }
+  bool showEditor(const std::string& key, bool open, std::string* why) override { return host_.showEditor(key, open, why); }
+  bool takeChanged() override { return host_.takeChanged(); }
+  void releaseAll() override { host_.releaseAll(); }
+  core::json parameters(const std::string& key) override { return host_.parameters(key); }
+  void resetAll() override { host_.resetAll(); }
+private:
+  core::plugins::JuceHost host_;
+};
+#endif
 
 using namespace core;
 
@@ -78,8 +102,8 @@ static bool flag(const std::vector<std::string>& args, const std::string& name) 
   return false;
 }
 
-// The JSON answer (serve, soak) keeps the real stdout; anything else printed there goes to stderr (the
-// engine's log) and never into the JSON.
+// The JSON answer (serve, scan, qualify) keeps the real stdout; anything else printed there, such as the
+// banner Dexed prints when it is loaded to play, goes to stderr (the engine's log) and never into the JSON.
 static FILE* g_protocol = stdout;
 static void keepStdoutForProtocol() {
   std::cout.flush();
@@ -97,9 +121,12 @@ static void emit(const std::string& line) {
   std::fflush(g_protocol);
 }
 
-static int serve() {
+static std::string g_pluginLog;  // serve --plugin-log <file>: plugin failures, one JSON line each
+
+static int serve(PluginHost* plugins) {
   std::ios::sync_with_stdio(false);
-  Server server(makeMiniaudioOutput, 48000);
+  Server server(makeMiniaudioOutput, 48000, plugins);
+  server.setFailureLog(g_pluginLog);
   std::mutex lock;  // one command or state tick at a time
   std::atomic<bool> running{true};
   // stdout carries the protocol only (one JSON object per line); diagnostics go to stderr.
@@ -120,6 +147,8 @@ static int serve() {
       // discarding 24 out of 25 snapshots also discarded short piano/MIDI attacks.
       send(server.stateEvent());
       if (server.takeEnded()) send({{"event", "ended"}});
+      server.checkPluginLatency();  // a plugin that changed its latency: the tracks are lined up again
+      if (plugins && plugins->takeChanged()) send({{"event", "pluginsChanged"}});  // the app asks for the states before saving
       for (json job : server.takeJobUpdates()) { job["event"] = "job"; send(job); }
     }
   });
@@ -147,13 +176,13 @@ static int serve() {
 // (as the app plays it) and the output is recorded; then the same loop is rendered offline. For each pass:
 // its loudness, its share of highs (above ~2 kHz: a muffled pass has less) and how far it is from pass 2 and
 // from the offline render of the same pass. --out writes the device recording as a WAV.
-static int loopcheck(const std::vector<std::string>& args) {
+static int loopcheck(PluginHost* plugins, const std::vector<std::string>& args) {
   std::ifstream in(args[1]);
   if (!in) throw std::runtime_error("Cannot read " + args[1]);
   const json project = json::parse(in);
   const int passes = std::max(2, std::stoi(option(args, "--passes", "4")));
   const int64_t bars = std::stoll(option(args, "--bars", "0"));  // 0: the whole song
-  Server live(makeMiniaudioOutput, 48000);
+  Server live(makeMiniaudioOutput, 48000, plugins);
   auto call = [](Server& server, const std::string& cmd, const json& a = json::object()) {
     json r = server.handle({{"cmd", cmd}, {"args", a}});
     if (!r.value("ok", false)) throw std::runtime_error(cmd + ": " + r.value("error", std::string("failed")));
@@ -195,7 +224,7 @@ static int loopcheck(const std::vector<std::string>& args) {
   size_t first = 0;
   while (first < L.size() && std::fabs(L[first]) < 1e-6f && std::fabs(R[first]) < 1e-6f) ++first;
   // The same loop, offline.
-  Server offline(nullptr, sr);
+  Server offline(nullptr, sr, plugins);
   call(offline, "project.load", {{"project", project}});
   call(offline, "transport.loop", {{"enabled", true}, {"startTick", 0}, {"endTick", endTick}});
   call(offline, "transport.seek", {{"tick", 0}});
@@ -271,11 +300,11 @@ static int loopcheck(const std::vector<std::string>& args) {
 
 // M10 soak: the song looping on the device for minutes or hours, with an edit every 10 s (a fader, the tempo
 // and back, the whole song loaded again as an undo does), one JSON line per minute and a summary at the end.
-static int soak(const std::vector<std::string>& args) {
+static int soak(PluginHost* plugins, const std::vector<std::string>& args) {
   std::ifstream in(args[1]);
   if (!in) throw std::runtime_error("Cannot read " + args[1]);
   const json project = json::parse(in);
-  Server server(makeMiniaudioOutput, 48000);
+  Server server(makeMiniaudioOutput, 48000, plugins);
   auto call = [&](const std::string& cmd, const json& a = json::object()) {
     json r = server.handle({{"cmd", cmd}, {"args", a}});
     if (!r.value("ok", false)) throw std::runtime_error(cmd + ": " + r.value("error", std::string("failed")));
@@ -306,7 +335,7 @@ static int soak(const std::vector<std::string>& args) {
                 {"starvations", stats["starvations"]}, {"callbackErrors", stats["callbackErrors"]}, {"nonFiniteBlocks", stats["nonFiniteBlocks"]},
                 {"avgLoadPct", stats["avgLoadPct"]}, {"loadP50Pct", stats["loadP50Pct"]}, {"loadP95Pct", stats["loadP95Pct"]},
                 {"loadP99Pct", stats["loadP99Pct"]}, {"maxLoadPct", stats["maxLoadPct"]}, {"maxEditToAudioMs", stats["maxEditToAudioMs"]},
-                {"droppedNotes", stats["droppedNotes"]}, {"leakedGraphs", stats["leakedGraphs"]},
+                {"droppedNotes", stats["droppedNotes"]}, {"leakedGraphs", stats["leakedGraphs"]}, {"failedPlugins", stats["failedPlugins"]},
                 {"deviceDriftPpm", stats["deviceDriftPpm"]}, {"rssMb", residentMb()},
                 {"liveThreads", stats["liveThreads"]}, {"liveFallback", stats["liveFallback"]}, {"liveStalls", stats["liveStalls"]}};
   };
@@ -335,7 +364,7 @@ static int soak(const std::vector<std::string>& args) {
   json end = summary(elapsed);
   call("engine.stop");
   const bool pass = end["overruns"] == 0 && end["starvations"] == 0 && end["callbackErrors"] == 0 && end["nonFiniteBlocks"] == 0 &&
-                    end["leakedGraphs"] == 0;
+                    end["leakedGraphs"] == 0 && end["failedPlugins"].empty();
   end["event"] = "end";
   end["pass"] = pass;
   emit(end.dump());
@@ -371,6 +400,10 @@ static void dumpsInto(const std::string& folderUtf8) {
   if (n <= 0) return;
   wcscat_s(dumpPath, name);
   SetUnhandledExceptionFilter(writeDump);
+#ifdef CORE_ENGINE_PLUGINS
+  // A plugin may put its own crash handler in (some do when they load): ours goes back after each call.
+  core::plugins::setAfterPluginCode([] { SetUnhandledExceptionFilter(writeDump); });
+#endif
 }
 #else
 static void dumpsInto(const std::string&) {}
@@ -380,24 +413,93 @@ int main(int argc, char** argv) {
   std::vector<std::string> args(argv + 1, argv + argc);
   const std::string mode = args.empty() ? "help" : args[0];
   if (mode == "--version" || mode == "version") { std::cout << "core-engine " << CORE_BUILD_ID << '\n'; return 0; }
-  if (mode == "serve") dumpsInto(option(args, "--dumps", ""));
-  if (mode == "serve" || mode == "soak") keepStdoutForProtocol();
+  if (mode == "serve") { dumpsInto(option(args, "--dumps", "")); g_pluginLog = option(args, "--plugin-log", ""); }
+  if (mode == "serve" || mode == "scan" || mode == "qualify" || mode == "matrix" || mode == "soak") keepStdoutForProtocol();
   try {
-    if (mode == "serve") return serve();
-    if (mode == "soak" && args.size() >= 2) return soak(args);
-    if (mode == "loopcheck" && args.size() >= 2) return loopcheck(args);
+#ifdef CORE_ENGINE_PLUGINS
+    // Plugins live on the JUCE message thread (this one): the protocol runs on its own thread and the
+    // message loop here, until stdin closes.
+    if (mode == "serve") {
+      core::plugins::Runtime juce;
+      EnginePlugins plugins;
+      return core::plugins::runWithMessageLoop([&] { return serve(&plugins); });
+    }
+    if (mode == "soak" && args.size() >= 2) {
+      core::plugins::Runtime juce;
+      EnginePlugins plugins;
+      return core::plugins::runWithMessageLoop([&] { return soak(&plugins, args); });
+    }
+    if (mode == "loopcheck" && args.size() >= 2) {
+      core::plugins::Runtime juce;
+      EnginePlugins plugins;
+      return core::plugins::runWithMessageLoop([&] { return loopcheck(&plugins, args); });
+    }
+    if (mode == "scan" && args.size() >= 2) {
+      core::plugins::Runtime juce;
+      emit(core::plugins::scanFile(args[1]).dump());
+      return 0;
+    }
+    if (mode == "qualify" && args.size() >= 2) {  // each plugin of the file plays on its own (see qualify.hpp)
+      core::plugins::Runtime juce;
+      const double sr = std::stod(option(args, "--sr", "48000"));
+      json results = json::array();
+      int status = 0;
+      core::plugins::runWithMessageLoop([&] {
+        core::plugins::JuceHost host;
+        for (const auto& p : core::plugins::scanFile(args[1])) {
+          json r = core::qualifyPlugin(host, p, sr);
+          r["id"] = p.value("id", "");
+          if (r["verdict"] != "ok") status = 3;
+          results.push_back(std::move(r));
+          host.releaseAll();
+        }
+        return 0;
+      });
+      emit(results.dump());
+      return status;
+    }
+    if (mode == "matrix" && args.size() >= 2) {
+      core::plugins::Runtime juce;
+      const double sr = std::stod(option(args, "--sr", "48000")), tail = std::stod(option(args, "--tail", "20"));
+      json results = json::array();
+      core::plugins::runWithMessageLoop([&] {
+        core::plugins::JuceHost host;
+        for (const auto& p : core::plugins::scanFile(args[1])) {
+          json r = core::pluginMatrix(host, p, sr, tail);
+          r["id"] = p.value("id", "");
+          results.push_back(std::move(r));
+          host.releaseAll();
+        }
+        return 0;
+      });
+      emit(results.dump());
+      return 0;
+    }
+#else
+    if (mode == "serve") return serve(nullptr);
+    if (mode == "soak" && args.size() >= 2) return soak(nullptr, args);
+    if (mode == "loopcheck" && args.size() >= 2) return loopcheck(nullptr, args);
+    if (mode == "scan" || mode == "qualify" || mode == "matrix") { emit("[]"); return 0; }  // no plugin support in this build
+#endif
     if (mode == "demo") { std::cout << demoProject(args.size() > 1 ? std::stod(args[1]) : 145).dump(2) << '\n'; return 0; }
     if (mode == "devices") { std::cout << makeMiniaudioOutput()->devices(json::object()).dump(2) << '\n'; return 0; }
     if (mode == "render" && args.size() >= 3) {
       std::ifstream in(args[1]);
       if (!in) throw std::runtime_error("Cannot read " + args[1]);
       json project = json::parse(in);
+#ifdef CORE_ENGINE_PLUGINS
+      core::plugins::Runtime juce;  // this thread is the message thread: plugins load here
+      EnginePlugins plugins;
+      Server server(nullptr, std::stod(option(args, "--sr", "48000")), &plugins);
+#else
       Server server(nullptr, std::stod(option(args, "--sr", "48000")));
+#endif
       json r = server.handle({{"cmd", "project.load"}, {"args", {{"project", project}}}});
       if (!r["ok"]) throw std::runtime_error(r["error"].get<std::string>());
-      // A render with a sample that did not load still renders (it is silent), but says so.
+      // A render with a plugin or a sample that did not load still renders (they are silent), but says so.
       const json loaded = r.value("result", json::object());
-      const json missingAssets = loaded.value("missingAssets", json::array());
+      const json missing = loaded.value("missing", json::array()), missingAssets = loaded.value("missingAssets", json::array());
+      for (const auto& m : missing) std::cerr << "missing plugin: " << m.dump() << '\n';
       for (const auto& m : missingAssets) std::cerr << "missing audio: " << m.dump() << '\n';
       json renderArgs = {{"path", args[2]}, {"stems", flag(args, "--stems")}, {"bits", std::stoi(option(args, "--bits", "24"))},
                          {"mono", flag(args, "--mono")}};
@@ -406,7 +508,7 @@ int main(int argc, char** argv) {
       if (const std::string e = option(args, "--end-tick", ""); !e.empty()) renderArgs["endTick"] = std::stoll(e);
       if (const std::string t = option(args, "--tail-ms", ""); !t.empty()) renderArgs["tailMs"] = std::stod(t);
       r = server.handle({{"cmd", "render"}, {"args", renderArgs}});
-      if (r["ok"] && r.contains("result") && r["result"].is_object()) r["result"]["missingAssets"] = missingAssets;
+      if (r["ok"] && r.contains("result") && r["result"].is_object()) { r["result"]["missing"] = missing; r["result"]["missingAssets"] = missingAssets; }
       std::cout << r.dump(2) << '\n';
       return r["ok"] ? 0 : 1;
     }
@@ -424,7 +526,7 @@ int main(int argc, char** argv) {
       std::cout << report.dump(2) << '\n';
       return 0;
     }
-    std::cerr << "usage: core-engine serve | render <project.json> <out.wav> [--stems] [--mono] [--start-tick N --end-tick N --tail-ms MS] | measure [--out dir] [--realtime] | demo [bpm] | devices | soak <project.json> [--minutes 120] | loopcheck <project.json> [--passes 4] [--bars 8] [--out wav]\n";
+    std::cerr << "usage: core-engine serve | render <project.json> <out.wav> [--stems] [--mono] [--start-tick N --end-tick N --tail-ms MS] | measure [--out dir] [--realtime] | demo [bpm] | devices | scan <file.vst3> | qualify <file.vst3> | matrix <file.vst3> | soak <project.json> [--minutes 120] | loopcheck <project.json> [--passes 4] [--bars 8] [--out wav]\n";
     return mode == "help" ? 0 : 2;
   } catch (const std::exception& e) {
     std::cerr << "error: " << e.what() << '\n';

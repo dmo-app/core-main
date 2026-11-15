@@ -49,7 +49,7 @@ struct EngineStats {
   std::atomic<uint64_t> auditionSteals{0};     // timed note-off slots all taken: the soonest one ended early
   std::atomic<uint64_t> droppedNotes{0};       // notes an instrument's queue could not hold in one block
   std::atomic<uint64_t> denseEventBlocks{0};   // extra event passes in blocks denser than one batch (all events played)
-  std::atomic<uint64_t> callbackErrors{0};     // an exception in the audio callback: that buffer was silence
+  std::atomic<uint64_t> callbackErrors{0};     // an exception in the audio callback (a plugin): that buffer was silence
   // M0b: the callback's load, render time / the time its buffer lasts, in millionths (1000000 = 100 %).
   std::atomic<uint64_t> totalBudgetNs{0};      // with totalRenderNs: the average load
   std::atomic<uint64_t> maxLoadPpm{0};         // the worst callback since the last reset
@@ -97,8 +97,8 @@ public:
   bool watchingEffect() const { return fxWatch_.key.load(std::memory_order_relaxed) != 0; }
   const MasterAnalyzer& effectAnalyzer() const { return fxWatch_.analyzer; }
   // silenceTails: what still rings (delay and reverb tails) is silenced too. The output fades out over
-  // kStopFadeMs and stays silent until unmuteAt()'s graph plays; meanwhile the caller
-  // publishes a graph that keeps no tail (Graph::keepTails = false). Without it the tails ring out.
+  // kStopFadeMs and stays silent until unmuteAt()'s graph plays; meanwhile the caller resets the plugins
+  // and publishes a graph that keeps no tail (Graph::keepTails = false). Without it the tails ring out.
   void stop(bool rewind, bool silenceTails = false);
   static constexpr double kStopFadeMs = 10;
   // True once the fade of the last stop() has reached silence.

@@ -94,7 +94,7 @@ Sound render(const Request& request, AssetStore& assets, const std::atomic<bool>
     for (size_t i = 0; i < project.tracks.size(); ++i)
       if (project.tracks[i].id == request.trackId) index = (int)i;
     if (index < 0) return out;
-    Graph graph(project, sampleRate, &assets, true);
+    Graph graph(project, sampleRate, &assets, nullptr, true);
     graph.setSolo(index, true);
     graph.preroll();
     const int64_t from = graph.sampleOfTick(request.leadInTicks), to = graph.sampleOfTick(request.leadInTicks + request.patternTicks);

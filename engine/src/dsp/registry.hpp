@@ -24,7 +24,7 @@ struct NativePluginDesc {
   std::string id;                 // the document name and the registry key ("kick", "eq")
   NativeKind kind;
   int version = 1;                // the current sound/DSP version (a song keeps the version it was saved with)
-  bool noParams = false;          // audio / bus: a track with no built-in instrument parameters
+  bool noParams = false;          // plugin / audio / bus: a track with no built-in instrument parameters
   std::vector<ParamSpec> params;  // ordered; the position is the runtime params[] slot
   // How to build it. makeInstrument is null for the sampler (the graph builds it, it needs the zones);
   // makeEffect takes (sampleRate, bpm, version). Only the matching one is set for a kind.

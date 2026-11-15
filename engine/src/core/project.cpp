@@ -280,6 +280,7 @@ json toJson(const Project& p) {
                   {"patternTicks", t.patternTicks}, {"lengthTicks", t.lengthTicks}, {"notes", json::array()}, {"envelopes", json::array()},
                   {"effects", t.effects}};
     if ((t.instrument == "wave" || t.instrument == "samplepath") && !t.synth.is_null()) track["synth"] = t.synth;
+    if (t.instrument == "plugin") { track["plugin"] = t.plugin; track.erase("params"); track.erase("instrumentVersion"); }
     for (const auto& n : t.notes) {
       json note = {{"tick", n.tick}, {"length", n.length}, {"pitch", n.pitch}, {"velocity", n.velocity}};
       if (n.roll.count > 1)
@@ -466,6 +467,20 @@ Project fromJson(const json& input) {
 }
 
 
+static json validatePlugin(const json& plugin) {
+  if (!plugin.is_object()) throw std::runtime_error("a plugin needs {format, id}.");
+  const std::string format = plugin.value("format", "");
+  if (format != "vst3" && format != "clap" && format != "core") throw std::runtime_error("plugin format must be vst3, clap or core.");
+  if (!plugin.contains("id") || !plugin["id"].is_string() || plugin["id"].get<std::string>().empty())
+    throw std::runtime_error("plugin id is required.");
+  if (plugin.contains("version") && !plugin["version"].is_string()) throw std::runtime_error("plugin version must be text.");
+  if (plugin.contains("state") && !plugin["state"].is_string()) throw std::runtime_error("plugin state must be base64 text.");
+  if (plugin.contains("stateId") && !plugin["stateId"].is_string()) throw std::runtime_error("plugin stateId must be text.");
+  json clean = plugin;
+  clean.erase("missing");  // decided by the engine when it loads, never saved
+  return clean;
+}
+
 // Notes of one pattern, checked against its length, sorted by tick.
 static std::vector<Note> parseNotes(const json& list, int64_t patternTicks) {
   if (!list.is_array()) throw std::runtime_error("notes must be a list.");
@@ -539,6 +554,14 @@ json effectsFromJson(const json& list) {
     if (id.size() > 40) throw std::runtime_error("effect id '" + id + "' is longer than 40 characters.");
     if (id.find(':') != std::string::npos) throw std::runtime_error("effect id '" + id + "' must not contain ':'.");
     if (!id.empty() && !effectIds.insert(id).second) throw std::runtime_error("effect id '" + id + "' is used twice in one chain.");
+    if (type == "plugin") {
+      json clean = fx;
+      clean["plugin"] = validatePlugin(fx.value("plugin", json()));
+      clean["bypass"] = bypass;
+      if (!id.empty()) clean["id"] = id;
+      out.push_back(clean);
+      continue;
+    }
     const std::string name = fx.contains("name") && fx["name"].is_string() ? fx["name"].get<std::string>() : std::string();
     const auto& specs = effectParams(name);
     // One version of each effect (2026-11-09, Diogo: "não existem versões agora, só 1"): an older one, or none
@@ -613,7 +636,9 @@ Track trackFromJson(const json& input) {
   }
   if (!hasNoInstrumentParams(t.instrument) && (t.instrumentVersion < 1 || t.instrumentVersion > currentInstrumentVersion(t.instrument)))
     throw std::runtime_error("instrument '" + t.instrument + "' version " + std::to_string(t.instrumentVersion) + " is newer than this engine.");
-  if (!hasNoInstrumentParams(t.instrument)) {
+  if (t.instrument == "plugin") {
+    t.plugin = validatePlugin(tv.value("plugin", json()));
+  } else if (!hasNoInstrumentParams(t.instrument)) {
     for (const auto& s : specs) t.params[s.name] = s.def;
   }
   if (tv.contains("effects") && !tv["effects"].is_null()) t.effects = effectsFromJson(tv["effects"]);
@@ -773,7 +798,7 @@ Track trackFromJson(const json& input) {
       const auto& shapes = modulatorShapes();
       if (std::find(shapes.begin(), shapes.end(), m.shape) == shapes.end()) throw std::runtime_error("modulator '" + m.id + "': unknown shape '" + m.shape + "'.");
       // FCore: a built-in insert effect's parameter, "fx:<id>:<param>". The effect must be one of the track's,
-      // built in, with that parameter.
+      // built in, with that parameter (a plugin's parameters are automated, never modulated).
       const ParamSpec* fxSpec = nullptr;
       if (m.param.rfind("fx:", 0) == 0) {
         const size_t colon = m.param.find(':', 3);
@@ -824,7 +849,8 @@ Track trackFromJson(const json& input) {
     }
   }
   t.envelopes = envelopesFromJson(tv.value("envelopes", json::array()), [&](const std::string& param) {
-    return isMixParam(param) || std::any_of(specs.begin(), specs.end(), [&](const ParamSpec& s) { return param == s.name; });
+    return isMixParam(param) || std::any_of(specs.begin(), specs.end(), [&](const ParamSpec& s) { return param == s.name; }) ||
+           (t.instrument == "plugin" && param.rfind("vst:", 0) == 0 && param.size() > 4);  // the plugin's own parameter, 0..1
   });
   return t;
 }

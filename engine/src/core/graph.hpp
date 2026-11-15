@@ -13,6 +13,7 @@
 #include <string_view>
 #include <vector>
 #include "assets.hpp"
+#include "plugins.hpp"
 #include "rt_workers.hpp"
 #include "workers.hpp"
 #include "project.hpp"
@@ -23,8 +24,14 @@
 
 namespace core {
 
+// Note-ons a plugin instrument could not play because one block held more events than its queue
+// (note-offs are never dropped). Grows for the life of the process; engine.stats reports it.
+uint64_t pluginNotesDropped();
+// Plugins that threw in process() (M3b), for the life of the process. Each is then silent; see
+// PluginProcessor::failed and Graph::plugins.
+uint64_t pluginFailures();
 // Built-in ("core") instruments and effects that produced non-finite or runaway audio and were silenced, for
-// the life of the process. See Effect::failed / Instrument::failed.
+// the life of the process: the same protection plugins get. See Effect::failed / Instrument::failed.
 uint64_t nativeFailures();
 // The built-in units that failed and went silent, as "track: unit" ("master: limiter"), since the last
 // clearFailedUnits() (the server clears it when a song is loaded: the new graph has fresh units that play
@@ -33,13 +40,13 @@ std::vector<std::string> failedUnits();
 void clearFailedUnits();
 
 // M0b: where the audio thread's time goes, per track (its instrument and audio clips) and per effect,
-// and on the master chain. The audio thread adds nanoseconds (relaxed atomics); the
+// built-in or plugin, and on the master chain. The audio thread adds nanoseconds (relaxed atomics); the
 // control thread reads them. Shared with the server, so it outlives the graph that wrote it.
 struct CpuMeter {
   struct Entry {
     std::string track;   // "" = the master chain
     std::string effect;  // "" = the track's instrument (and its audio clips)
-    std::string name;    // the instrument or effect ("wave", "reverb")
+    std::string name;    // the instrument or effect ("elastic", "reverb", a plugin's name)
   };
   std::vector<Entry> entries;
   std::unique_ptr<std::atomic<uint64_t>[]> ns;  // one per entry
@@ -57,8 +64,11 @@ struct SeqEvent {
 };
 
 struct Automation {
-  int slot;       // instrument param index, or -1 = gainDb, -2 = pan, -3 = an effect's parameter
+  int slot;       // instrument param index, or -1 = gainDb, -2 = pan, -3 = an effect's parameter, -4 = a plugin's
   int effect = -1, effectParam = -1;  // slot -3: which effect of the chain, which of its parameters
+  PluginProcessor* plugin = nullptr;  // slot -4: the plugin (owned by the track's instrument or effect) and
+  int pluginParam = -1;               //   its parameter index; values are 0..1
+  float sent = -1;                    // slot -4: the value last given to the plugin (-1: none yet)
   double min, max;
   std::vector<EnvelopePoint> points;
   double smooth = 0;                  // slot -3: the value as heard (glides ~15 ms, no zipper)
@@ -95,8 +105,15 @@ public:
   bool keepTails = true;
 
   // assets: where audio clips get their (converted) audio; without it audio clips are silent.
-  // offline: an export rather than real time.
-  Graph(const Project& project, double sampleRate, AssetStore* assets = nullptr, bool offline = false);
+  // plugins: where plugin tracks and plugin effects come from (without it they are silent); offline: an
+  // export (its own plugin instances) rather than real time (the live ones).
+  Graph(const Project& project, double sampleRate, AssetStore* assets = nullptr, PluginProvider* plugins = nullptr, bool offline = false);
+  // Plugins that could not be loaded: {key, plugin name, why}. Their tracks / effects are silent.
+  const std::vector<json>& missingPlugins() const { return missingPlugins_; }
+  const std::vector<std::string>& pluginKeys() const { return pluginKeys_; }  // the plugins this graph plays
+  // ref: the song's description of it ({format, id, name, vendor, version, ...}, without its state).
+  struct LoadedPlugin { std::string key, name; std::shared_ptr<PluginProcessor> processor; json ref; };
+  const std::vector<LoadedPlugin>& plugins() const { return plugins_; }  // the same ones, with their instances
   // Real time only (null for an export): the time each track and effect took, see CpuMeter.
   const std::shared_ptr<CpuMeter>& cpu() const { return cpu_; }
   // Audio files that could not be loaded, with the reason ("path: why"): those clips are silent.
@@ -150,13 +167,15 @@ public:
   bool liveWorkers() const { return live_ != nullptr; }
   // Moves the sounding state of matching tracks from the previous graph (real time edits).
   void adopt(Graph& previous);
-  // Effect latency (look-ahead, oversampling): every track comes out this many samples after the song position, the
+  // Plugin latency (lookahead): every track comes out this many samples after the song position, the
   // tracks with less latency delayed to line up with the latest one.
   int latency() const { return latency_; }
   int masterLatency() const { return masterLatency_; }
   // The master chain's deepest gain reduction since the last call (dB, its compressors and limiters added
   // up); audio thread.
-  float takeMasterReduction() { const float r = masterReduction_; masterReduction_ = 0; return r; }  // master effects (limiter, saturation 2)
+  float takeMasterReduction() { const float r = masterReduction_; masterReduction_ = 0; return r; }  // master effects (limiter 2, saturation 2, plugins)
+  // The plugins whose latency the alignment used, with that latency (the server rebuilds when one changes).
+  const std::vector<std::pair<std::shared_ptr<PluginProcessor>, int>>& pluginLatencies() const { return latencies_; }
   // Export: renders the latency and drops it, so the song starts on the file's first sample (call once, first).
   void preroll();
 
@@ -233,7 +252,8 @@ private:
     int64_t paramBlock = INT64_MIN;
     bool smoothInit = false;
     bool gainInit = false;
-    int latency = 0;                          // of its inserts that play (look-ahead, oversampling)
+    std::shared_ptr<PluginProcessor> plugin;  // a plugin track's instrument (its parameters can be automated)
+    int latency = 0;                          // of its plugins (instrument, inserts that play)
     std::vector<float> delayL, delayR;        // latency_ - latency samples: lines it up with the latest track
     size_t delayAt = 0;
     int cpuSlot = -1;  // CpuMeter: its instrument; its effects follow, in chain order
@@ -352,6 +372,7 @@ private:
   std::vector<Automation> masterAutomation_;  // master gain (slot -1) and master effects (slot -3)
   // An effect parameter's automation for "fx:<id>:<param>" in this chain; false if there is no such effect.
   static bool resolveEffectParam(const std::string& param, const std::vector<std::unique_ptr<Effect>>& chain, Automation& a);
+  void applyPluginAutomation(Automation& a, double tick, int64_t aligned);
   void applyEffectAutomation(Automation& a, std::vector<std::unique_ptr<Effect>>& chain, double tick, int64_t aligned);
   // The glide state of effect automation, from the previous graph (the same effect id and parameter).
   // Calls f(event) for each note-off event of t whose note is held at `position` (song samples): started
@@ -373,11 +394,15 @@ private:
   RtWorkerPool* live_ = nullptr;  // M5
   int liveMaxFrames_ = 0;
   std::vector<std::string> missingAssets_;
+  std::vector<json> missingPlugins_;
+  std::vector<std::string> pluginKeys_;
+  std::vector<LoadedPlugin> plugins_;
   std::shared_ptr<CpuMeter> cpu_;
   int masterCpuSlot_ = -1;  // CpuMeter: the master chain's first effect
   int latency_ = 0;
-  int masterLatency_ = 0;  // master effects (export preroll only; real time plays it late)
+  int masterLatency_ = 0;  // master effects, built-in and plugins (export preroll only; real time plays it late)
   int64_t shift_ = 0;  // preroll: how far ahead of the caller's position the song plays
+  std::vector<std::pair<std::shared_ptr<PluginProcessor>, int>> latencies_;
 };
 
 } // namespace core

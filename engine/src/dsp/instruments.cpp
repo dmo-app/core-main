@@ -1645,12 +1645,12 @@ public:
   }
 };
 
-// The "instrument" of an audio or a bus track: no notes of its own, silence (the clips and the inputs
-// are played by the graph).
-class Silent final : public Instrument {
+// Placeholder for a plugin track until hosting exists (and for a plugin that is not installed):
+// keeps the track, its notes and its mixer slot, and plays silence.
+class MissingPlugin final : public Instrument {
 public:
   using Instrument::Instrument;
-  const char* name() const override { return "silent"; }
+  const char* name() const override { return "plugin"; }
   void noteOn(int, double) override {}
   void noteOff(int) override {}
   void allNotesOff() override {}
@@ -1754,10 +1754,11 @@ void registerNativeInstruments(NativeRegistry& reg) {
             {"mix", 0.12, 0, 1, ""}, {"limiter", 1, 0, 1, ""}},
            [](double sr) { return std::make_unique<SamplePath>(sr); }, nullptr});
   // Tracks with no built-in instrument parameters. A placeholder spec keeps them "known" to validation, and
-  // the graph gives them a Silent instrument (an audio or a bus track).
+  // the graph gives them a silent MissingPlugin (a plugin that is not installed, an audio or a bus track).
   const std::vector<ParamSpec> none{{"_", 0, 0, 0, ""}};
   const std::function<std::unique_ptr<Instrument>(double)> missing =
-      [](double sr) { return std::make_unique<Silent>(sr); };
+      [](double sr) { return std::make_unique<MissingPlugin>(sr); };
+  reg.add({"plugin", NativeKind::Instrument, 1, true, none, missing, nullptr});
   reg.add({"audio", NativeKind::Instrument, 1, true, none, missing, nullptr});
   reg.add({"bus", NativeKind::Instrument, 1, true, none, missing, nullptr});
 }

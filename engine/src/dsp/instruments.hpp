@@ -28,7 +28,7 @@ public:
   // so editing the project while playing never cuts a note.
   virtual void adopt(const Instrument& previous) = 0;
   virtual const char* name() const = 0;
-  // A stereo instrument (W-Core, the sampler) renders once per block with its notes at their samples, instead of
+  // A stereo instrument (a plugin) renders once per block with its notes at their samples, instead of
   // render() between notes: queueNote, then renderStereo (which adds to left/right).
   virtual bool stereo() const { return false; }
   virtual void queueNote(int /*offset*/, bool /*on*/, int /*pitch*/, double /*velocity*/) {}
@@ -46,7 +46,7 @@ public:
   virtual void setPosition(double /*beat*/, double /*bpm*/) {}
   // A note caught already sounding (a seek or a loop jump into it) that started `age` samples ago. The
   // built-in instruments pick it up where it would be (envelope, sample position) with a 3 ms fade-in;
-  // by default the note starts now.
+  // a plugin cannot, so by default the note starts now.
   virtual void chaseNote(int pitch, double velocity, double /*age*/) {
     if (stereo()) queueNote(0, true, pitch, velocity);
     else noteOn(pitch, velocity);
@@ -55,7 +55,7 @@ public:
   // them to the engine's counters, so a drop is never silent.
   uint64_t takeDroppedNotes() { const uint64_t n = droppedNotes_; droppedNotes_ = 0; return n; }
   // A native instrument that produced non-finite or runaway audio is marked failed and silenced from then on
-  // (its track goes silent, the rest of the song plays on). Written on the
+  // (its track goes silent, the rest of the song plays on): the same protection a plugin gets. Written on the
   // audio thread, read by the control thread for reporting, so it is atomic. True the first time only.
   bool markFailed() { int none = 0; return failure_.compare_exchange_strong(none, 1, std::memory_order_acq_rel); }
   bool failed() const { return failure_.load(std::memory_order_acquire) != 0; }

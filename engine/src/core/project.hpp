@@ -4,7 +4,7 @@
 // Time is in ticks (PPQ = 960) so tempo changes never move notes off the grid.
 #pragma once
 #include "tempo_map.hpp"
-#include "../dsp/param_spec.hpp"  // core::ParamSpec: defined in the DSP layer, with the instruments and effects it describes
+#include "../dsp/param_spec.hpp"  // core::ParamSpec: defined in the DSP layer, with the plugins it describes
 #include <cstdint>
 #include <map>
 #include <string>
@@ -130,10 +130,10 @@ const std::vector<std::string>& modulatorShapes();
 struct Track {
   std::string id;
   std::string name;
-  std::string instrument;               // "kick" | "wave" (W-Core) | "hats" | "drums" (kick 36 + hats 42/44/46, ride 51, shaker 70) | "sampler" | "audio" | "bus"
+  std::string instrument;               // "kick" | "wave" (W-Core) | "hats" | "drums" (kick 36 + hats 42/44/46, ride 51, shaker 70) | "sampler" | "plugin" (VST3, for A/B checks) | "audio" | "bus"
   std::map<std::string, double> params; // instrument parameters (unknown keys rejected)
   // Version of the built-in instrument's sound. An update that changes the sound gets a new number and
-  // keeps the old one playable, so old songs never change silently.
+  // keeps the old one playable, so old songs never change silently. (Same rule as plugin.version.)
   int instrumentVersion = 1;
   double gainDb = 0.0;
   double pan = 0.0;
@@ -148,7 +148,13 @@ struct Track {
   std::vector<Clip> clips;
   std::vector<AudioClip> audioClips;    // instrument == "audio"; overlapping clips add up
   std::vector<SampleZone> samples;      // instrument == "sampler": the first zone that holds the key plays
-  // Insert effects, in order (pre-fader): {type: "builtin", name, version, params: {...}, bypass}.
+  // instrument == "plugin": which plugin plays this track and its saved state. Kept as data, so a
+  // project opens even when the plugin is not installed ("missing instrument"): notes stay, sound is silent.
+  // {format: "vst3" | "clap" | "core", id: "<class id>", name, vendor, version: "<x.y.z used when saved>",
+  //  state: "<base64 chunk>", bypass}. Opening with another installed version is reported, never silent.
+  json plugin;
+  // Insert effects, in order (pre-fader): {type: "builtin", name, version, params: {...}, bypass} or
+  // {type: "plugin", plugin: {...same as above}, bypass}. Built-in ones play (M4); plugins are kept as data.
   json effects = json::array();
   // M7a routing. Where the track's signal goes after its fader: "" = the master, or a bus track's id. An
   // instrument "bus" plays what its inputs (outputs and sends of other tracks) give it, through its own
@@ -189,11 +195,11 @@ int currentInstrumentVersion(const std::string& instrument);  // built-in DSP ve
 const std::vector<ParamSpec>& effectParams(const std::string& effect);
 int currentEffectVersion(const std::string& effect);
 std::vector<std::string> effectNames();
-// One effect chain validated: known built-in names, parameters filled and clamped.
+// One effect chain validated: known built-in names, parameters filled and clamped, plugins checked.
 json effectsFromJson(const json& value);
 bool isMixParam(const std::string& param); // gainDb, pan
 std::vector<std::string> instrumentNames();
-// Audio and bus tracks have no built-in instrument parameters.
+// Plugin, audio and bus tracks have no built-in instrument parameters.
 bool hasNoInstrumentParams(const std::string& instrument);
 // M7a: every output and send goes to a bus of this project, never to itself, and nothing loops. Throws.
 void validateRouting(const Project& project);

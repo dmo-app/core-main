@@ -30,7 +30,7 @@ public:
   bool bypass = false;  // kept in the chain (its place and its tail stay), but not processed
   // Knob moves (a parameter edited, not automated): the graph glides params toward knob[] once per aligned
   // sub-block (~15 ms, as automation does), so a cutoff jump on a resonant filter does not click. Set by
-  // the graph: knobCount, the knobs that jump (a mode switch) in stepped.
+  // the graph: knobCount (0 for plugins), the knobs that jump (a mode switch) in steppedMask.
   double knob[kMaxEffectParams] = {};
   double glide[kMaxEffectParams] = {};
   int knobCount = 0;
@@ -57,7 +57,7 @@ public:
   // The deepest gain reduction of its last process() call, dB (>= 0): compressor and limiter; 0 for others.
   float reductionDb = 0;
   // A native effect that produced non-finite or runaway audio is marked failed and taken out of the chain
-  // from then on (the track plays on without it). Atomic: written
+  // from then on (the track plays on without it): the same protection a plugin effect gets. Atomic: written
   // on the audio thread, read by the control thread for reporting. True the first time only.
   bool markFailed() { int none = 0; return failure_.compare_exchange_strong(none, 1, std::memory_order_acq_rel); }
   bool failed() const { return failure_.load(std::memory_order_acquire) != 0; }
