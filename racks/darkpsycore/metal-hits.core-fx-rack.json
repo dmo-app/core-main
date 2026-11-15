@@ -1,0 +1,21 @@
+{
+ "description": "Percussion and accents ring a metal note tuned to the song (F#1 by default), with ring mod grain and bursts of crush.",
+ "format": "core-fx-rack",
+ "id": "darkpsycore/metal-hits",
+ "kind": "effects",
+ "name": "Tuned metal",
+ "native": [
+  {
+   "kind": "effect",
+   "name": "metal",
+   "preset": "Key hits"
+  }
+ ],
+ "role": "perc and accents",
+ "status": "hypothesis",
+ "styles": [
+  "darkpsycore",
+  "hitech"
+ ],
+ "version": 1
+}

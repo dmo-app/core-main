@@ -1,0 +1,120 @@
+{
+ "format": "core-pattern",
+ "version": 1,
+ "id": "lead/arp-minor-down",
+ "name": "Arp: minor, down",
+ "role": "lead",
+ "styles": [
+  "darkpsycore",
+  "hitech",
+  "slambient",
+  "psytrance"
+ ],
+ "tags": [
+  "arp",
+  "down"
+ ],
+ "status": "hypothesis",
+ "description": "A minor-chord arpeggio in 1/16 (root, minor third, fifth, octave).",
+ "source": "AICORE docs/knowledge (KBBB-E-ELASTIC-BASS.md, bass-variation-examples.json, ESTILOS-MUSICAIS-E-PRODUCAO.md)",
+ "lengthTicks": 3840,
+ "root": 57,
+ "notes": [
+  {
+   "tick": 0,
+   "length": 180,
+   "pitch": 69,
+   "velocity": 0.8
+  },
+  {
+   "tick": 240,
+   "length": 180,
+   "pitch": 64,
+   "velocity": 0.65
+  },
+  {
+   "tick": 480,
+   "length": 180,
+   "pitch": 60,
+   "velocity": 0.65
+  },
+  {
+   "tick": 720,
+   "length": 180,
+   "pitch": 57,
+   "velocity": 0.65
+  },
+  {
+   "tick": 960,
+   "length": 180,
+   "pitch": 69,
+   "velocity": 0.8
+  },
+  {
+   "tick": 1200,
+   "length": 180,
+   "pitch": 64,
+   "velocity": 0.65
+  },
+  {
+   "tick": 1440,
+   "length": 180,
+   "pitch": 60,
+   "velocity": 0.65
+  },
+  {
+   "tick": 1680,
+   "length": 180,
+   "pitch": 57,
+   "velocity": 0.65
+  },
+  {
+   "tick": 1920,
+   "length": 180,
+   "pitch": 69,
+   "velocity": 0.8
+  },
+  {
+   "tick": 2160,
+   "length": 180,
+   "pitch": 64,
+   "velocity": 0.65
+  },
+  {
+   "tick": 2400,
+   "length": 180,
+   "pitch": 60,
+   "velocity": 0.65
+  },
+  {
+   "tick": 2640,
+   "length": 180,
+   "pitch": 57,
+   "velocity": 0.65
+  },
+  {
+   "tick": 2880,
+   "length": 180,
+   "pitch": 69,
+   "velocity": 0.8
+  },
+  {
+   "tick": 3120,
+   "length": 180,
+   "pitch": 64,
+   "velocity": 0.65
+  },
+  {
+   "tick": 3360,
+   "length": 180,
+   "pitch": 60,
+   "velocity": 0.65
+  },
+  {
+   "tick": 3600,
+   "length": 180,
+   "pitch": 57,
+   "velocity": 0.65
+  }
+ ]
+}

@@ -1,0 +1,338 @@
+{
+ "format": "core-pattern",
+ "version": 1,
+ "id": "build/snare-roll-4-gap",
+ "name": "Build-up: roll, 4 bars, one beat of silence",
+ "role": "build",
+ "styles": [
+  "darkpsycore",
+  "hitech",
+  "slambient",
+  "psytrance"
+ ],
+ "tags": [
+  "build",
+  "roll",
+  "drop",
+  "gap"
+ ],
+ "status": "hypothesis",
+ "description": "As the 4-bar roll, but the last beat stays empty: the gap before the drop.",
+ "source": "AICORE docs/knowledge (KBBB-E-ELASTIC-BASS.md, bass-variation-examples.json, ESTILOS-MUSICAIS-E-PRODUCAO.md)",
+ "lengthTicks": 15360,
+ "root": -1,
+ "notes": [
+  {
+   "tick": 0,
+   "length": 720,
+   "pitch": 38,
+   "velocity": 0.35
+  },
+  {
+   "tick": 960,
+   "length": 720,
+   "pitch": 38,
+   "velocity": 0.39
+  },
+  {
+   "tick": 1920,
+   "length": 720,
+   "pitch": 38,
+   "velocity": 0.43
+  },
+  {
+   "tick": 2880,
+   "length": 720,
+   "pitch": 38,
+   "velocity": 0.47
+  },
+  {
+   "tick": 3840,
+   "length": 360,
+   "pitch": 38,
+   "velocity": 0.51
+  },
+  {
+   "tick": 4320,
+   "length": 360,
+   "pitch": 38,
+   "velocity": 0.53
+  },
+  {
+   "tick": 4800,
+   "length": 360,
+   "pitch": 38,
+   "velocity": 0.55
+  },
+  {
+   "tick": 5280,
+   "length": 360,
+   "pitch": 38,
+   "velocity": 0.57
+  },
+  {
+   "tick": 5760,
+   "length": 360,
+   "pitch": 38,
+   "velocity": 0.59
+  },
+  {
+   "tick": 6240,
+   "length": 360,
+   "pitch": 38,
+   "velocity": 0.61
+  },
+  {
+   "tick": 6720,
+   "length": 360,
+   "pitch": 38,
+   "velocity": 0.63
+  },
+  {
+   "tick": 7200,
+   "length": 360,
+   "pitch": 38,
+   "velocity": 0.65
+  },
+  {
+   "tick": 7680,
+   "length": 180,
+   "pitch": 38,
+   "velocity": 0.68
+  },
+  {
+   "tick": 7920,
+   "length": 180,
+   "pitch": 38,
+   "velocity": 0.69
+  },
+  {
+   "tick": 8160,
+   "length": 180,
+   "pitch": 38,
+   "velocity": 0.7
+  },
+  {
+   "tick": 8400,
+   "length": 180,
+   "pitch": 38,
+   "velocity": 0.71
+  },
+  {
+   "tick": 8640,
+   "length": 180,
+   "pitch": 38,
+   "velocity": 0.72
+  },
+  {
+   "tick": 8880,
+   "length": 180,
+   "pitch": 38,
+   "velocity": 0.73
+  },
+  {
+   "tick": 9120,
+   "length": 180,
+   "pitch": 38,
+   "velocity": 0.74
+  },
+  {
+   "tick": 9360,
+   "length": 180,
+   "pitch": 38,
+   "velocity": 0.75
+  },
+  {
+   "tick": 9600,
+   "length": 180,
+   "pitch": 38,
+   "velocity": 0.76
+  },
+  {
+   "tick": 9840,
+   "length": 180,
+   "pitch": 38,
+   "velocity": 0.77
+  },
+  {
+   "tick": 10080,
+   "length": 180,
+   "pitch": 38,
+   "velocity": 0.78
+  },
+  {
+   "tick": 10320,
+   "length": 180,
+   "pitch": 38,
+   "velocity": 0.79
+  },
+  {
+   "tick": 10560,
+   "length": 180,
+   "pitch": 38,
+   "velocity": 0.8
+  },
+  {
+   "tick": 10800,
+   "length": 180,
+   "pitch": 38,
+   "velocity": 0.81
+  },
+  {
+   "tick": 11040,
+   "length": 180,
+   "pitch": 38,
+   "velocity": 0.82
+  },
+  {
+   "tick": 11280,
+   "length": 180,
+   "pitch": 38,
+   "velocity": 0.83
+  },
+  {
+   "tick": 11520,
+   "length": 90,
+   "pitch": 38,
+   "velocity": 0.84
+  },
+  {
+   "tick": 11640,
+   "length": 90,
+   "pitch": 38,
+   "velocity": 0.84
+  },
+  {
+   "tick": 11760,
+   "length": 90,
+   "pitch": 38,
+   "velocity": 0.85
+  },
+  {
+   "tick": 11880,
+   "length": 90,
+   "pitch": 38,
+   "velocity": 0.85
+  },
+  {
+   "tick": 12000,
+   "length": 90,
+   "pitch": 38,
+   "velocity": 0.86
+  },
+  {
+   "tick": 12120,
+   "length": 90,
+   "pitch": 38,
+   "velocity": 0.86
+  },
+  {
+   "tick": 12240,
+   "length": 90,
+   "pitch": 38,
+   "velocity": 0.87
+  },
+  {
+   "tick": 12360,
+   "length": 90,
+   "pitch": 38,
+   "velocity": 0.87
+  },
+  {
+   "tick": 12480,
+   "length": 90,
+   "pitch": 38,
+   "velocity": 0.88
+  },
+  {
+   "tick": 12600,
+   "length": 90,
+   "pitch": 38,
+   "velocity": 0.88
+  },
+  {
+   "tick": 12720,
+   "length": 90,
+   "pitch": 38,
+   "velocity": 0.89
+  },
+  {
+   "tick": 12840,
+   "length": 90,
+   "pitch": 38,
+   "velocity": 0.89
+  },
+  {
+   "tick": 12960,
+   "length": 90,
+   "pitch": 38,
+   "velocity": 0.9
+  },
+  {
+   "tick": 13080,
+   "length": 90,
+   "pitch": 38,
+   "velocity": 0.9
+  },
+  {
+   "tick": 13200,
+   "length": 90,
+   "pitch": 38,
+   "velocity": 0.91
+  },
+  {
+   "tick": 13320,
+   "length": 90,
+   "pitch": 38,
+   "velocity": 0.91
+  },
+  {
+   "tick": 13440,
+   "length": 90,
+   "pitch": 38,
+   "velocity": 0.92
+  },
+  {
+   "tick": 13560,
+   "length": 90,
+   "pitch": 38,
+   "velocity": 0.92
+  },
+  {
+   "tick": 13680,
+   "length": 90,
+   "pitch": 38,
+   "velocity": 0.93
+  },
+  {
+   "tick": 13800,
+   "length": 90,
+   "pitch": 38,
+   "velocity": 0.93
+  },
+  {
+   "tick": 13920,
+   "length": 90,
+   "pitch": 38,
+   "velocity": 0.94
+  },
+  {
+   "tick": 14040,
+   "length": 90,
+   "pitch": 38,
+   "velocity": 0.94
+  },
+  {
+   "tick": 14160,
+   "length": 90,
+   "pitch": 38,
+   "velocity": 0.95
+  },
+  {
+   "tick": 14280,
+   "length": 90,
+   "pitch": 38,
+   "velocity": 0.95
+  }
+ ]
+}

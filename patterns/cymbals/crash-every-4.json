@@ -1,0 +1,30 @@
+{
+ "format": "core-pattern",
+ "version": 1,
+ "id": "cymbals/crash-every-4",
+ "name": "Crash: every 4 bars",
+ "role": "cymbals",
+ "styles": [
+  "darkpsycore",
+  "hitech",
+  "slambient",
+  "psytrance"
+ ],
+ "tags": [
+  "crash",
+  "phrase"
+ ],
+ "status": "hypothesis",
+ "description": "A crash on the first beat of a 4-bar phrase.",
+ "source": "AICORE docs/knowledge (KBBB-E-ELASTIC-BASS.md, bass-variation-examples.json, ESTILOS-MUSICAIS-E-PRODUCAO.md)",
+ "lengthTicks": 15360,
+ "root": -1,
+ "notes": [
+  {
+   "tick": 0,
+   "length": 1920,
+   "pitch": 49,
+   "velocity": 0.9
+  }
+ ]
+}

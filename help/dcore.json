@@ -1,0 +1,52 @@
+{
+  "format": "core-plugin-help",
+  "version": 1,
+  "id": "dcore",
+  "title": "Delay Core (D-Core)",
+  "summary": "One echo shared by many tracks, louder or softer in each part of the song.",
+  "steps": [
+    "Select the tracks that should share the echo.",
+    "Effects > Delay: choose a place for your style.",
+    "Core makes one echo track and sends each track to it.",
+    "The echo is held down in the drops and opens up in the breaks."
+  ],
+  "examples": [
+    {
+      "title": "Acid echoes on all the leads",
+      "text": "Dotted eighths ducked under the notes.",
+      "preset": "Acid 3/16"
+    },
+    {
+      "title": "Throws for vocals and FX",
+      "text": "Quarter-note throws at the end of phrases.",
+      "preset": "Throw 1/4"
+    },
+    {
+      "title": "Fast motion",
+      "text": "Sixteenths held down in the drops.",
+      "preset": "Motion 1/16"
+    }
+  ],
+  "styles": [
+    {
+      "id": "psytrance",
+      "why": "3/16 and 1/8."
+    },
+    {
+      "id": "hitech",
+      "why": "Fast 1/16."
+    },
+    {
+      "id": "darkpsycore",
+      "why": "Long dark trails."
+    },
+    {
+      "id": "slambient",
+      "why": "Slow halves far away."
+    }
+  ],
+  "sampleRoles": [
+    "vox",
+    "fx"
+  ]
+}

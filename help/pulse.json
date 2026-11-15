@@ -1,0 +1,51 @@
+{
+  "format": "core-plugin-help",
+  "version": 1,
+  "id": "pulse",
+  "title": "PULSE",
+  "summary": "Cuts the sound on and off in a rhythm: a gate that pumps with the beat.",
+  "steps": [
+    "Add PULSE to a pad, a bass or a lead.",
+    "Pattern says the rhythm.",
+    "Depth is how deep it cuts; Smooth makes the cuts softer.",
+    "Swing pushes every second step late."
+  ],
+  "examples": [
+    {
+      "title": "A pumping pad",
+      "text": "The pad pumps with the kick.",
+      "preset": "KBBB pump"
+    },
+    {
+      "title": "A gate before the drop",
+      "text": "A hard gate that builds tension.",
+      "preset": "Pre-drop gate"
+    },
+    {
+      "title": "A slow breath",
+      "text": "Slow, soft pulses.",
+      "preset": "Slow breath"
+    }
+  ],
+  "styles": [
+    {
+      "id": "psytrance",
+      "why": "Pumps and off-beats."
+    },
+    {
+      "id": "hitech",
+      "why": "Hard gates and gallops."
+    },
+    {
+      "id": "darkpsycore",
+      "why": "Chops."
+    },
+    {
+      "id": "slambient",
+      "why": "Slow breaths."
+    }
+  ],
+  "sampleRoles": [
+    "pad"
+  ]
+}

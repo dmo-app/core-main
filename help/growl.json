@@ -1,0 +1,51 @@
+{
+  "format": "core-plugin-help",
+  "version": 1,
+  "id": "growl",
+  "title": "GROWL",
+  "summary": "Makes a bass or lead talk: a vowel that moves, like a voice.",
+  "steps": [
+    "Add GROWL to a bass or a lead.",
+    "Vowel says which sound it makes (oo, ah, ee...).",
+    "Talk is how fast the vowel moves.",
+    "Grit adds dirt; the deep bass below the Body knob stays clean."
+  ],
+  "examples": [
+    {
+      "title": "A talking bass",
+      "text": "Fast vowels on the bass top.",
+      "preset": "KBBB talk"
+    },
+    {
+      "title": "A snarl",
+      "text": "Fast and dirty for hi-tech basses.",
+      "preset": "Snarl"
+    },
+    {
+      "title": "A slow moan",
+      "text": "A dark vowel for drones.",
+      "preset": "Low moan"
+    }
+  ],
+  "styles": [
+    {
+      "id": "darkpsycore",
+      "why": "Talking basses at night."
+    },
+    {
+      "id": "psytrance",
+      "why": "Soft vowels on twilight leads."
+    },
+    {
+      "id": "hitech",
+      "why": "Fast, dirty snarls."
+    },
+    {
+      "id": "slambient",
+      "why": "Slow moans."
+    }
+  ],
+  "sampleRoles": [
+    "bass"
+  ]
+}

@@ -1,0 +1,98 @@
+{
+ "format": "core-pattern",
+ "version": 1,
+ "id": "break/dnb-halftime",
+ "name": "Break: DnB half-time",
+ "role": "perc",
+ "styles": [
+  "hitech",
+  "darkpsycore",
+  "slambient"
+ ],
+ "tags": [
+  "break",
+  "dnb",
+  "hitech",
+  "fast",
+  "halftime"
+ ],
+ "status": "hypothesis",
+ "description": "One snare on beat 3 over the two-step kicks: the same speed feels half as fast (a breather in a break).",
+ "source": "DnB shapes from MusicRadar 'How to program 6 different jungle and drum n bass grooves' (two-step: kick 1 and 11, snare 5 and 13; neurofunk: second kick on 8; half-time: snare on 9) and FaderPro '5 kick and snare patterns' (Amen: extra kick on 3 in bar 2, a flurry in bar 4); the doubled kicks, 1/32 and cymbals: Diogo's ask",
+ "lengthTicks": 3840,
+ "root": -1,
+ "notes": [
+  {
+   "tick": 0,
+   "length": 180,
+   "pitch": 36,
+   "velocity": 1.0
+  },
+  {
+   "tick": 0,
+   "length": 180,
+   "pitch": 49,
+   "velocity": 0.9
+  },
+  {
+   "tick": 0,
+   "length": 180,
+   "pitch": 51,
+   "velocity": 0.5
+  },
+  {
+   "tick": 480,
+   "length": 180,
+   "pitch": 51,
+   "velocity": 0.5
+  },
+  {
+   "tick": 960,
+   "length": 180,
+   "pitch": 51,
+   "velocity": 0.5
+  },
+  {
+   "tick": 1440,
+   "length": 180,
+   "pitch": 51,
+   "velocity": 0.5
+  },
+  {
+   "tick": 1920,
+   "length": 180,
+   "pitch": 38,
+   "velocity": 1.0
+  },
+  {
+   "tick": 1920,
+   "length": 180,
+   "pitch": 51,
+   "velocity": 0.5
+  },
+  {
+   "tick": 2400,
+   "length": 180,
+   "pitch": 36,
+   "velocity": 0.9
+  },
+  {
+   "tick": 2400,
+   "length": 180,
+   "pitch": 51,
+   "velocity": 0.5
+  },
+  {
+   "tick": 2880,
+   "length": 180,
+   "pitch": 51,
+   "velocity": 0.5
+  },
+  {
+   "tick": 3360,
+   "length": 180,
+   "pitch": 51,
+   "velocity": 0.5
+  }
+ ]
+}

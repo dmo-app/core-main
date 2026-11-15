@@ -1,0 +1,47 @@
+{
+ "format": "core-pattern",
+ "version": 1,
+ "id": "drums/kick-four",
+ "name": "Kick: four on the floor",
+ "role": "kick",
+ "styles": [
+  "darkpsycore",
+  "hitech",
+  "slambient",
+  "psytrance"
+ ],
+ "tags": [
+  "kick"
+ ],
+ "status": "hypothesis",
+ "description": "A kick on every beat.",
+ "source": "AICORE docs/knowledge (KBBB-E-ELASTIC-BASS.md, bass-variation-examples.json, ESTILOS-MUSICAIS-E-PRODUCAO.md)",
+ "lengthTicks": 3840,
+ "root": -1,
+ "notes": [
+  {
+   "tick": 0,
+   "length": 216,
+   "pitch": 36,
+   "velocity": 1.0
+  },
+  {
+   "tick": 960,
+   "length": 216,
+   "pitch": 36,
+   "velocity": 1.0
+  },
+  {
+   "tick": 1920,
+   "length": 216,
+   "pitch": 36,
+   "velocity": 1.0
+  },
+  {
+   "tick": 2880,
+   "length": 216,
+   "pitch": 36,
+   "velocity": 1.0
+  }
+ ]
+}

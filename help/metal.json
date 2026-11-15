@@ -1,0 +1,52 @@
+{
+  "format": "core-plugin-help",
+  "version": 1,
+  "id": "metal",
+  "title": "METAL",
+  "summary": "Makes hits ring like metal, tuned to the key of your bass.",
+  "steps": [
+    "Add METAL to percussion or accents.",
+    "A preset sets Note to the key of your bass by itself.",
+    "Decay is how long it rings; Crush makes it broken and digital.",
+    "Mix is how much metal you hear against the hit."
+  ],
+  "examples": [
+    {
+      "title": "Metal hits in key",
+      "text": "Every hit rings a short low note in your key.",
+      "preset": "Key hits"
+    },
+    {
+      "title": "Rusty accents",
+      "text": "Dirtier and longer, broken metal.",
+      "preset": "Rust"
+    },
+    {
+      "title": "Glass bells",
+      "text": "High, clean bells on short hits.",
+      "preset": "Glass bells"
+    }
+  ],
+  "styles": [
+    {
+      "id": "darkpsycore",
+      "why": "Low metal rings and rust."
+    },
+    {
+      "id": "psytrance",
+      "why": "Short tuned rings."
+    },
+    {
+      "id": "hitech",
+      "why": "High bells."
+    },
+    {
+      "id": "slambient",
+      "why": "Long iron drones."
+    }
+  ],
+  "sampleRoles": [
+    "perc",
+    "accent"
+  ]
+}

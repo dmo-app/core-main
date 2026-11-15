@@ -1,0 +1,27 @@
+{
+ "description": "A roll that speeds up: the track repeats in 1/8, then 1/16, then 1/32, with feedback and a gate, while the low end lifts. One move drives all of it.",
+ "format": "core-fx-rack",
+ "id": "buildup/roll",
+ "kind": "effects",
+ "name": "Build-up: roll",
+ "native": [
+  {
+   "kind": "effect",
+   "name": "pulse",
+   "preset": "Pre-drop gate"
+  },
+  {
+   "kind": "call",
+   "name": "fcore:build-up"
+  }
+ ],
+ "role": "build-up",
+ "status": "hypothesis",
+ "styles": [
+  "darkpsycore",
+  "hitech",
+  "slambient",
+  "psytrance"
+ ],
+ "version": 1
+}

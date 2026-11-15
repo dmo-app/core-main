@@ -1,0 +1,257 @@
+{
+ "format": "core-pattern",
+ "version": 1,
+ "id": "break/hitech-hats-thin-out",
+ "name": "Break: hats thinning out, 4 bars",
+ "role": "hats",
+ "styles": [
+  "hitech",
+  "darkpsycore"
+ ],
+ "tags": [
+  "break",
+  "hitech",
+  "hats"
+ ],
+ "status": "hypothesis",
+ "description": "1/16 hats that lose notes bar by bar (16, 12, 8, 3): the energy drains before a build-up.",
+ "source": "AICORE docs/knowledge (KBBB-E-ELASTIC-BASS.md, bass-variation-examples.json, ESTILOS-MUSICAIS-E-PRODUCAO.md)",
+ "lengthTicks": 15360,
+ "root": -1,
+ "notes": [
+  {
+   "tick": 0,
+   "length": 120,
+   "pitch": 42,
+   "velocity": 0.55
+  },
+  {
+   "tick": 240,
+   "length": 120,
+   "pitch": 42,
+   "velocity": 0.55
+  },
+  {
+   "tick": 480,
+   "length": 120,
+   "pitch": 42,
+   "velocity": 0.75
+  },
+  {
+   "tick": 720,
+   "length": 120,
+   "pitch": 42,
+   "velocity": 0.55
+  },
+  {
+   "tick": 960,
+   "length": 120,
+   "pitch": 42,
+   "velocity": 0.55
+  },
+  {
+   "tick": 1200,
+   "length": 120,
+   "pitch": 42,
+   "velocity": 0.55
+  },
+  {
+   "tick": 1440,
+   "length": 120,
+   "pitch": 42,
+   "velocity": 0.75
+  },
+  {
+   "tick": 1680,
+   "length": 120,
+   "pitch": 42,
+   "velocity": 0.55
+  },
+  {
+   "tick": 1920,
+   "length": 120,
+   "pitch": 42,
+   "velocity": 0.55
+  },
+  {
+   "tick": 2160,
+   "length": 120,
+   "pitch": 42,
+   "velocity": 0.55
+  },
+  {
+   "tick": 2400,
+   "length": 120,
+   "pitch": 42,
+   "velocity": 0.75
+  },
+  {
+   "tick": 2640,
+   "length": 120,
+   "pitch": 42,
+   "velocity": 0.55
+  },
+  {
+   "tick": 2880,
+   "length": 120,
+   "pitch": 42,
+   "velocity": 0.55
+  },
+  {
+   "tick": 3120,
+   "length": 120,
+   "pitch": 42,
+   "velocity": 0.55
+  },
+  {
+   "tick": 3360,
+   "length": 120,
+   "pitch": 42,
+   "velocity": 0.75
+  },
+  {
+   "tick": 3600,
+   "length": 120,
+   "pitch": 42,
+   "velocity": 0.55
+  },
+  {
+   "tick": 3840,
+   "length": 120,
+   "pitch": 42,
+   "velocity": 0.55
+  },
+  {
+   "tick": 4320,
+   "length": 120,
+   "pitch": 42,
+   "velocity": 0.75
+  },
+  {
+   "tick": 4560,
+   "length": 120,
+   "pitch": 42,
+   "velocity": 0.55
+  },
+  {
+   "tick": 4800,
+   "length": 120,
+   "pitch": 42,
+   "velocity": 0.55
+  },
+  {
+   "tick": 5280,
+   "length": 120,
+   "pitch": 42,
+   "velocity": 0.75
+  },
+  {
+   "tick": 5520,
+   "length": 120,
+   "pitch": 42,
+   "velocity": 0.55
+  },
+  {
+   "tick": 5760,
+   "length": 120,
+   "pitch": 42,
+   "velocity": 0.55
+  },
+  {
+   "tick": 6240,
+   "length": 120,
+   "pitch": 42,
+   "velocity": 0.75
+  },
+  {
+   "tick": 6480,
+   "length": 120,
+   "pitch": 42,
+   "velocity": 0.55
+  },
+  {
+   "tick": 6720,
+   "length": 120,
+   "pitch": 42,
+   "velocity": 0.55
+  },
+  {
+   "tick": 7200,
+   "length": 120,
+   "pitch": 42,
+   "velocity": 0.75
+  },
+  {
+   "tick": 7440,
+   "length": 120,
+   "pitch": 42,
+   "velocity": 0.55
+  },
+  {
+   "tick": 7680,
+   "length": 120,
+   "pitch": 42,
+   "velocity": 0.55
+  },
+  {
+   "tick": 8160,
+   "length": 120,
+   "pitch": 42,
+   "velocity": 0.75
+  },
+  {
+   "tick": 8640,
+   "length": 120,
+   "pitch": 42,
+   "velocity": 0.55
+  },
+  {
+   "tick": 9120,
+   "length": 120,
+   "pitch": 42,
+   "velocity": 0.75
+  },
+  {
+   "tick": 9600,
+   "length": 120,
+   "pitch": 42,
+   "velocity": 0.55
+  },
+  {
+   "tick": 10080,
+   "length": 120,
+   "pitch": 42,
+   "velocity": 0.75
+  },
+  {
+   "tick": 10560,
+   "length": 120,
+   "pitch": 42,
+   "velocity": 0.55
+  },
+  {
+   "tick": 11040,
+   "length": 120,
+   "pitch": 42,
+   "velocity": 0.75
+  },
+  {
+   "tick": 11520,
+   "length": 120,
+   "pitch": 42,
+   "velocity": 0.55
+  },
+  {
+   "tick": 12480,
+   "length": 120,
+   "pitch": 42,
+   "velocity": 0.55
+  },
+  {
+   "tick": 13440,
+   "length": 120,
+   "pitch": 42,
+   "velocity": 0.55
+  }
+ ]
+}

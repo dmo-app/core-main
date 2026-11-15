@@ -1,0 +1,34 @@
+{
+ "description": "Haunting, eerie and strange: a wide Flux ensemble, Spiral's drifting beats, Body's width and R-Core's endless Haunted place. For drones, pads, voices and textures.",
+ "format": "core-fx-rack",
+ "id": "slambient/haunted",
+ "kind": "effects",
+ "name": "Haunted",
+ "native": [
+  {
+   "kind": "effect",
+   "name": "corefx",
+   "preset": "Haunted ensemble"
+  },
+  {
+   "kind": "effect",
+   "name": "corefx",
+   "preset": "Haunted beats"
+  },
+  {
+   "kind": "effect",
+   "name": "body",
+   "preset": "Haunted width"
+  },
+  {
+   "kind": "rcore",
+   "preset": "Haunted"
+  }
+ ],
+ "role": "atmos and drones",
+ "status": "hypothesis",
+ "styles": [
+  "slambient"
+ ],
+ "version": 1
+}

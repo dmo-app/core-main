@@ -1,0 +1,205 @@
+{
+ "format": "core-pattern",
+ "version": 1,
+ "id": "build/snare-roll-2",
+ "name": "Build-up: snare roll, 2 bars",
+ "role": "build",
+ "styles": [
+  "darkpsycore",
+  "hitech",
+  "slambient",
+  "psytrance"
+ ],
+ "tags": [
+  "build",
+  "roll",
+  "drop"
+ ],
+ "status": "hypothesis",
+ "description": "1/4, 1/8, 1/16, then a 1/32 roll in the last quarter, louder all the way into the drop.",
+ "source": "AICORE docs/knowledge (KBBB-E-ELASTIC-BASS.md, bass-variation-examples.json, ESTILOS-MUSICAIS-E-PRODUCAO.md)",
+ "lengthTicks": 7680,
+ "root": -1,
+ "notes": [
+  {
+   "tick": 0,
+   "length": 720,
+   "pitch": 38,
+   "velocity": 0.35
+  },
+  {
+   "tick": 960,
+   "length": 720,
+   "pitch": 38,
+   "velocity": 0.43
+  },
+  {
+   "tick": 1920,
+   "length": 360,
+   "pitch": 38,
+   "velocity": 0.51
+  },
+  {
+   "tick": 2400,
+   "length": 360,
+   "pitch": 38,
+   "velocity": 0.55
+  },
+  {
+   "tick": 2880,
+   "length": 360,
+   "pitch": 38,
+   "velocity": 0.59
+  },
+  {
+   "tick": 3360,
+   "length": 360,
+   "pitch": 38,
+   "velocity": 0.63
+  },
+  {
+   "tick": 3840,
+   "length": 180,
+   "pitch": 38,
+   "velocity": 0.68
+  },
+  {
+   "tick": 4080,
+   "length": 180,
+   "pitch": 38,
+   "velocity": 0.7
+  },
+  {
+   "tick": 4320,
+   "length": 180,
+   "pitch": 38,
+   "velocity": 0.72
+  },
+  {
+   "tick": 4560,
+   "length": 180,
+   "pitch": 38,
+   "velocity": 0.74
+  },
+  {
+   "tick": 4800,
+   "length": 180,
+   "pitch": 38,
+   "velocity": 0.76
+  },
+  {
+   "tick": 5040,
+   "length": 180,
+   "pitch": 38,
+   "velocity": 0.78
+  },
+  {
+   "tick": 5280,
+   "length": 180,
+   "pitch": 38,
+   "velocity": 0.8
+  },
+  {
+   "tick": 5520,
+   "length": 180,
+   "pitch": 38,
+   "velocity": 0.82
+  },
+  {
+   "tick": 5760,
+   "length": 90,
+   "pitch": 38,
+   "velocity": 0.84
+  },
+  {
+   "tick": 5880,
+   "length": 90,
+   "pitch": 38,
+   "velocity": 0.85
+  },
+  {
+   "tick": 6000,
+   "length": 90,
+   "pitch": 38,
+   "velocity": 0.86
+  },
+  {
+   "tick": 6120,
+   "length": 90,
+   "pitch": 38,
+   "velocity": 0.87
+  },
+  {
+   "tick": 6240,
+   "length": 90,
+   "pitch": 38,
+   "velocity": 0.88
+  },
+  {
+   "tick": 6360,
+   "length": 90,
+   "pitch": 38,
+   "velocity": 0.89
+  },
+  {
+   "tick": 6480,
+   "length": 90,
+   "pitch": 38,
+   "velocity": 0.9
+  },
+  {
+   "tick": 6600,
+   "length": 90,
+   "pitch": 38,
+   "velocity": 0.91
+  },
+  {
+   "tick": 6720,
+   "length": 90,
+   "pitch": 38,
+   "velocity": 0.92
+  },
+  {
+   "tick": 6840,
+   "length": 90,
+   "pitch": 38,
+   "velocity": 0.93
+  },
+  {
+   "tick": 6960,
+   "length": 90,
+   "pitch": 38,
+   "velocity": 0.94
+  },
+  {
+   "tick": 7080,
+   "length": 90,
+   "pitch": 38,
+   "velocity": 0.95
+  },
+  {
+   "tick": 7200,
+   "length": 90,
+   "pitch": 38,
+   "velocity": 0.96
+  },
+  {
+   "tick": 7320,
+   "length": 90,
+   "pitch": 38,
+   "velocity": 0.97
+  },
+  {
+   "tick": 7440,
+   "length": 90,
+   "pitch": 38,
+   "velocity": 0.98
+  },
+  {
+   "tick": 7560,
+   "length": 90,
+   "pitch": 38,
+   "velocity": 0.99
+  }
+ ]
+}

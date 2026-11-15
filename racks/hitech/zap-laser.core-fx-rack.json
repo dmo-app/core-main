@@ -1,0 +1,21 @@
+{
+ "description": "Accents and short synths turn into lasers and zaps: phase dispersion, a swept comb and digital crush.",
+ "format": "core-fx-rack",
+ "id": "hitech/zap-laser",
+ "kind": "effects",
+ "name": "Zap laser",
+ "native": [
+  {
+   "kind": "effect",
+   "name": "zap",
+   "preset": "Laser"
+  }
+ ],
+ "role": "fx and accents",
+ "status": "hypothesis",
+ "styles": [
+  "hitech",
+  "darkpsycore"
+ ],
+ "version": 1
+}

@@ -1,0 +1,58 @@
+{
+ "format": "core-pattern",
+ "version": 1,
+ "id": "drop/hitech-slam",
+ "name": "Drop: hi-tech slam, crash then one bar of kicks",
+ "role": "kick",
+ "styles": [
+  "hitech",
+  "darkpsycore"
+ ],
+ "tags": [
+  "drop",
+  "hitech"
+ ],
+ "status": "hypothesis",
+ "description": "Crash and four kicks for one bar, a zap at the start of the next: the hit that opens the drop.",
+ "source": "AICORE docs/knowledge (KBBB-E-ELASTIC-BASS.md, bass-variation-examples.json, ESTILOS-MUSICAIS-E-PRODUCAO.md)",
+ "lengthTicks": 7680,
+ "root": -1,
+ "notes": [
+  {
+   "tick": 0,
+   "length": 240,
+   "pitch": 36,
+   "velocity": 1.0
+  },
+  {
+   "tick": 0,
+   "length": 3840,
+   "pitch": 49,
+   "velocity": 1.0
+  },
+  {
+   "tick": 960,
+   "length": 240,
+   "pitch": 36,
+   "velocity": 1.0
+  },
+  {
+   "tick": 1920,
+   "length": 240,
+   "pitch": 36,
+   "velocity": 1.0
+  },
+  {
+   "tick": 2880,
+   "length": 240,
+   "pitch": 36,
+   "velocity": 1.0
+  },
+  {
+   "tick": 3840,
+   "length": 120,
+   "pitch": 76,
+   "velocity": 0.9
+  }
+ ]
+}

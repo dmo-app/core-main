@@ -1,0 +1,35 @@
+{
+ "format": "core-pattern",
+ "version": 1,
+ "id": "perc/clap-two-four",
+ "name": "Clap: on 2 and 4",
+ "role": "perc",
+ "styles": [
+  "darkpsycore",
+  "hitech",
+  "slambient",
+  "psytrance"
+ ],
+ "tags": [
+  "clap"
+ ],
+ "status": "hypothesis",
+ "description": "A clap on beats 2 and 4.",
+ "source": "AICORE docs/knowledge (KBBB-E-ELASTIC-BASS.md, bass-variation-examples.json, ESTILOS-MUSICAIS-E-PRODUCAO.md)",
+ "lengthTicks": 3840,
+ "root": -1,
+ "notes": [
+  {
+   "tick": 960,
+   "length": 240,
+   "pitch": 39,
+   "velocity": 0.85
+  },
+  {
+   "tick": 2880,
+   "length": 240,
+   "pitch": 39,
+   "velocity": 0.85
+  }
+ ]
+}

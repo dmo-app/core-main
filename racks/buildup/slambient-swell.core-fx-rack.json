@@ -1,0 +1,19 @@
+{
+ "description": "Slambient swell: the track is pulled backwards into an endless space that keeps growing until the impact.",
+ "format": "core-fx-rack",
+ "id": "buildup/slambient-swell",
+ "kind": "effects",
+ "name": "Build-up: haunted swell",
+ "native": [
+  {
+   "kind": "call",
+   "name": "fcore:build-up"
+  }
+ ],
+ "role": "build-up",
+ "status": "hypothesis",
+ "styles": [
+  "slambient"
+ ],
+ "version": 1
+}

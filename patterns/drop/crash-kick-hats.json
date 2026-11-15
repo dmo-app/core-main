@@ -1,0 +1,125 @@
+{
+ "format": "core-pattern",
+ "version": 1,
+ "id": "drop/crash-kick-hats",
+ "name": "Drop: crash, kick and off-beat hats, 2 bars",
+ "role": "kick",
+ "styles": [
+  "darkpsycore",
+  "hitech",
+  "slambient",
+  "psytrance"
+ ],
+ "tags": [
+  "drop"
+ ],
+ "status": "hypothesis",
+ "description": "The drop's first two bars: a crash on the one, four on the floor, open hats off the beat.",
+ "source": "AICORE docs/knowledge (KBBB-E-ELASTIC-BASS.md, bass-variation-examples.json, ESTILOS-MUSICAIS-E-PRODUCAO.md)",
+ "lengthTicks": 7680,
+ "root": -1,
+ "notes": [
+  {
+   "tick": 0,
+   "length": 240,
+   "pitch": 36,
+   "velocity": 1.0
+  },
+  {
+   "tick": 0,
+   "length": 3840,
+   "pitch": 49,
+   "velocity": 1.0
+  },
+  {
+   "tick": 480,
+   "length": 216,
+   "pitch": 46,
+   "velocity": 0.65
+  },
+  {
+   "tick": 960,
+   "length": 240,
+   "pitch": 36,
+   "velocity": 1.0
+  },
+  {
+   "tick": 1440,
+   "length": 216,
+   "pitch": 46,
+   "velocity": 0.65
+  },
+  {
+   "tick": 1920,
+   "length": 240,
+   "pitch": 36,
+   "velocity": 1.0
+  },
+  {
+   "tick": 2400,
+   "length": 216,
+   "pitch": 46,
+   "velocity": 0.65
+  },
+  {
+   "tick": 2880,
+   "length": 240,
+   "pitch": 36,
+   "velocity": 1.0
+  },
+  {
+   "tick": 3360,
+   "length": 216,
+   "pitch": 46,
+   "velocity": 0.65
+  },
+  {
+   "tick": 3840,
+   "length": 240,
+   "pitch": 36,
+   "velocity": 1.0
+  },
+  {
+   "tick": 4320,
+   "length": 216,
+   "pitch": 46,
+   "velocity": 0.65
+  },
+  {
+   "tick": 4800,
+   "length": 240,
+   "pitch": 36,
+   "velocity": 1.0
+  },
+  {
+   "tick": 5280,
+   "length": 216,
+   "pitch": 46,
+   "velocity": 0.65
+  },
+  {
+   "tick": 5760,
+   "length": 240,
+   "pitch": 36,
+   "velocity": 1.0
+  },
+  {
+   "tick": 6240,
+   "length": 216,
+   "pitch": 46,
+   "velocity": 0.65
+  },
+  {
+   "tick": 6720,
+   "length": 240,
+   "pitch": 36,
+   "velocity": 1.0
+  },
+  {
+   "tick": 7200,
+   "length": 216,
+   "pitch": 46,
+   "velocity": 0.65
+  }
+ ]
+}

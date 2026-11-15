@@ -1,0 +1,27 @@
+{
+  "format": "core-plugin-help",
+  "version": 1,
+  "id": "eq",
+  "title": "CORE EQ",
+  "summary": "Core's EQ in its own window: up to eight bands drawn as hills over what comes in, each a bell, a shelf, a cut or a notch, on both sides, one side, the middle or the sides, and able to move with the level.",
+  "steps": [
+    "Add CORE EQ to a track from the Effects menu, then Open. Play the song: the grey shape behind the curves is what comes into the EQ.",
+    "Each band has its own blue, from light to dark. Drag a point: left-right is the frequency, up-down the gain. The wheel over a point changes its Q. Double-click an empty place to add a bell there; double-click a point to turn its band off.",
+    "Right-click a point, or use its card, for the shape (bell, low or high shelf, low or high cut, notch), the slope of a cut (12, 24 or 48 dB per octave) and the channel (stereo, left, right, mid or side).",
+    "Dynamic: the band's gain moves by up to Range when that band is louder than Threshold. A dynamic cut of -4 dB at 3 kHz only cuts when the lead gets harsh. The dashed curve shows where it goes.",
+    "Auto Gain takes back the EQ's average boost or cut, so a louder sound does not fool you. A and B compare two settings; the LFOs move a band's frequency, gain or Q with the tempo."
+  ],
+  "examples": [
+    {"title": "Clean the low end of a lead", "text": "Band 1, a low cut at 200-300 Hz, 24 dB/oct: the lead leaves the room under it to the kick and the bass."},
+    {"title": "Tame a harsh lead", "text": "A dynamic bell at 3 kHz, Q 1.4, Range -6 dB, Threshold about -30 dB: it only cuts on the loud notes."},
+    {"title": "Wider top, mono bottom", "text": "A high shelf of +2 dB at 8 kHz on Side, and a low cut at 150 Hz on Side: the top opens out, the low end stays in the middle."},
+    {"title": "Take out a ringing note", "text": "A notch on the ring (find it by sweeping a narrow +12 dB bell, then change it to a notch)."}
+  ],
+  "styles": [
+    {"id": "hitech", "why": "Tight low cuts on everything but the kick and the bass; dynamic bells on the leads keep them bright without hurting."},
+    {"id": "darkpsycore", "why": "Cut the boxy 200-400 Hz on the bass tops and the mids of the pads, so the dark sounds stay clear."},
+    {"id": "psytrance", "why": "A clean low end: a low cut on every track that is not the kick or the bass."},
+    {"id": "slambient", "why": "Gentle shelves: darker tops and a soft low end, the space stays wide on the sides."}
+  ],
+  "sampleRoles": ["synth", "pad", "bass", "fx"]
+}

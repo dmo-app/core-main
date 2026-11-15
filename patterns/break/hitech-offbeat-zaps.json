@@ -1,0 +1,178 @@
+{
+ "format": "core-pattern",
+ "version": 1,
+ "id": "break/hitech-offbeat-zaps",
+ "name": "Break: hi-tech, off-beat hats and zaps",
+ "role": "perc",
+ "styles": [
+  "hitech",
+  "darkpsycore"
+ ],
+ "tags": [
+  "break",
+  "hitech"
+ ],
+ "status": "hypothesis",
+ "description": "4 bars without kick or bass: open hats off the beat, clap on 4, a zap answer every 2 bars.",
+ "source": "AICORE docs/knowledge (KBBB-E-ELASTIC-BASS.md, bass-variation-examples.json, ESTILOS-MUSICAIS-E-PRODUCAO.md)",
+ "lengthTicks": 15360,
+ "root": -1,
+ "notes": [
+  {
+   "tick": 480,
+   "length": 360,
+   "pitch": 46,
+   "velocity": 0.8
+  },
+  {
+   "tick": 1440,
+   "length": 360,
+   "pitch": 46,
+   "velocity": 0.8
+  },
+  {
+   "tick": 2400,
+   "length": 360,
+   "pitch": 46,
+   "velocity": 0.8
+  },
+  {
+   "tick": 2880,
+   "length": 240,
+   "pitch": 39,
+   "velocity": 0.7
+  },
+  {
+   "tick": 3360,
+   "length": 360,
+   "pitch": 46,
+   "velocity": 0.8
+  },
+  {
+   "tick": 4320,
+   "length": 360,
+   "pitch": 46,
+   "velocity": 0.8
+  },
+  {
+   "tick": 5280,
+   "length": 360,
+   "pitch": 46,
+   "velocity": 0.8
+  },
+  {
+   "tick": 6240,
+   "length": 360,
+   "pitch": 46,
+   "velocity": 0.8
+  },
+  {
+   "tick": 6720,
+   "length": 240,
+   "pitch": 39,
+   "velocity": 0.7
+  },
+  {
+   "tick": 6960,
+   "length": 120,
+   "pitch": 76,
+   "velocity": 0.75
+  },
+  {
+   "tick": 7200,
+   "length": 360,
+   "pitch": 46,
+   "velocity": 0.8
+  },
+  {
+   "tick": 7200,
+   "length": 120,
+   "pitch": 76,
+   "velocity": 0.75
+  },
+  {
+   "tick": 7440,
+   "length": 120,
+   "pitch": 76,
+   "velocity": 0.75
+  },
+  {
+   "tick": 8160,
+   "length": 360,
+   "pitch": 46,
+   "velocity": 0.8
+  },
+  {
+   "tick": 9120,
+   "length": 360,
+   "pitch": 46,
+   "velocity": 0.8
+  },
+  {
+   "tick": 10080,
+   "length": 360,
+   "pitch": 46,
+   "velocity": 0.8
+  },
+  {
+   "tick": 10560,
+   "length": 240,
+   "pitch": 39,
+   "velocity": 0.7
+  },
+  {
+   "tick": 11040,
+   "length": 360,
+   "pitch": 46,
+   "velocity": 0.8
+  },
+  {
+   "tick": 12000,
+   "length": 360,
+   "pitch": 46,
+   "velocity": 0.8
+  },
+  {
+   "tick": 12960,
+   "length": 360,
+   "pitch": 46,
+   "velocity": 0.8
+  },
+  {
+   "tick": 13920,
+   "length": 360,
+   "pitch": 46,
+   "velocity": 0.8
+  },
+  {
+   "tick": 14400,
+   "length": 240,
+   "pitch": 39,
+   "velocity": 0.7
+  },
+  {
+   "tick": 14640,
+   "length": 120,
+   "pitch": 76,
+   "velocity": 0.75
+  },
+  {
+   "tick": 14880,
+   "length": 360,
+   "pitch": 46,
+   "velocity": 0.8
+  },
+  {
+   "tick": 14880,
+   "length": 120,
+   "pitch": 76,
+   "velocity": 0.75
+  },
+  {
+   "tick": 15120,
+   "length": 120,
+   "pitch": 76,
+   "velocity": 0.75
+  }
+ ]
+}

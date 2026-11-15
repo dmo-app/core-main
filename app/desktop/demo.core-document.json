@@ -1,0 +1,355 @@
+{
+  "format": "core-document",
+  "lengthTicks": 30720,
+  "master": {
+    "gainDb": -8
+  },
+  "name": "Psy demo",
+  "schemaVersion": 2,
+  "sections": [],
+  "tracks": [
+    {
+      "automation": [],
+      "clips": [
+        {
+          "id": "c1",
+          "lengthTicks": 30720,
+          "patternId": "p1",
+          "startTick": 0
+        }
+      ],
+      "effects": [],
+      "id": "kick",
+      "instrument": {
+        "kind": "builtin",
+        "name": "kick",
+        "params": {
+          "ampDecay": 170
+        },
+        "version": 1
+      },
+      "mix": {
+        "gainDb": 0,
+        "mute": false,
+        "pan": 0,
+        "solo": false
+      },
+      "name": "Kick",
+      "patterns": [
+        {
+          "id": "p1",
+          "lengthTicks": 15360,
+          "name": "1",
+          "notes": [
+            {
+              "id": "n1",
+              "length": 240,
+              "pitch": 36,
+              "tick": 0,
+              "velocity": 0.95
+            },
+            {
+              "id": "n2",
+              "length": 240,
+              "pitch": 36,
+              "tick": 960,
+              "velocity": 0.95
+            },
+            {
+              "id": "n3",
+              "length": 240,
+              "pitch": 36,
+              "tick": 1920,
+              "velocity": 0.95
+            },
+            {
+              "id": "n4",
+              "length": 240,
+              "pitch": 36,
+              "tick": 2880,
+              "velocity": 0.95
+            },
+            {
+              "id": "n5",
+              "length": 240,
+              "pitch": 36,
+              "tick": 3840,
+              "velocity": 0.95
+            },
+            {
+              "id": "n6",
+              "length": 240,
+              "pitch": 36,
+              "tick": 4800,
+              "velocity": 0.95
+            },
+            {
+              "id": "n7",
+              "length": 240,
+              "pitch": 36,
+              "tick": 5760,
+              "velocity": 0.95
+            },
+            {
+              "id": "n8",
+              "length": 240,
+              "pitch": 36,
+              "tick": 6720,
+              "velocity": 0.95
+            },
+            {
+              "id": "n9",
+              "length": 240,
+              "pitch": 36,
+              "tick": 7680,
+              "velocity": 0.95
+            },
+            {
+              "id": "n10",
+              "length": 240,
+              "pitch": 36,
+              "tick": 8640,
+              "velocity": 0.95
+            },
+            {
+              "id": "n11",
+              "length": 240,
+              "pitch": 36,
+              "tick": 9600,
+              "velocity": 0.95
+            },
+            {
+              "id": "n12",
+              "length": 240,
+              "pitch": 36,
+              "tick": 10560,
+              "velocity": 0.95
+            },
+            {
+              "id": "n13",
+              "length": 240,
+              "pitch": 36,
+              "tick": 11520,
+              "velocity": 0.95
+            },
+            {
+              "id": "n14",
+              "length": 240,
+              "pitch": 36,
+              "tick": 12480,
+              "velocity": 0.95
+            },
+            {
+              "id": "n15",
+              "length": 240,
+              "pitch": 36,
+              "tick": 13440,
+              "velocity": 0.95
+            },
+            {
+              "id": "n16",
+              "length": 240,
+              "pitch": 36,
+              "tick": 14400,
+              "velocity": 0.9
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "automation": [],
+      "clips": [
+        {
+          "id": "c1",
+          "lengthTicks": 30720,
+          "patternId": "p1",
+          "startTick": 0
+        }
+      ],
+      "effects": [],
+      "id": "bass",
+      "instrument": {
+        "kind": "builtin",
+        "name": "bass",
+        "params": {
+          "cutoff": 480,
+          "decay": 70,
+          "release": 12,
+          "sustain": 0.1
+        },
+        "version": 1
+      },
+      "mix": {
+        "gainDb": 0,
+        "mute": false,
+        "pan": 0,
+        "solo": false
+      },
+      "name": "Bass",
+      "patterns": [
+        {
+          "id": "p1",
+          "lengthTicks": 3840,
+          "name": "1",
+          "notes": [
+            {
+              "id": "n1",
+              "length": 200,
+              "pitch": 33,
+              "tick": 240,
+              "velocity": 0.8
+            },
+            {
+              "id": "n2",
+              "length": 200,
+              "pitch": 33,
+              "tick": 480,
+              "velocity": 0.8
+            },
+            {
+              "id": "n3",
+              "length": 200,
+              "pitch": 33,
+              "tick": 720,
+              "velocity": 0.8
+            },
+            {
+              "id": "n4",
+              "length": 200,
+              "pitch": 33,
+              "tick": 1200,
+              "velocity": 0.8
+            },
+            {
+              "id": "n5",
+              "length": 200,
+              "pitch": 33,
+              "tick": 1440,
+              "velocity": 0.8
+            },
+            {
+              "id": "n6",
+              "length": 200,
+              "pitch": 33,
+              "tick": 1680,
+              "velocity": 0.8
+            },
+            {
+              "id": "n7",
+              "length": 200,
+              "pitch": 33,
+              "tick": 2160,
+              "velocity": 0.8
+            },
+            {
+              "id": "n8",
+              "length": 200,
+              "pitch": 33,
+              "tick": 2400,
+              "velocity": 0.8
+            },
+            {
+              "id": "n9",
+              "length": 200,
+              "pitch": 33,
+              "tick": 2640,
+              "velocity": 0.8
+            },
+            {
+              "id": "n10",
+              "length": 200,
+              "pitch": 33,
+              "tick": 3120,
+              "velocity": 0.8
+            },
+            {
+              "id": "n11",
+              "length": 200,
+              "pitch": 33,
+              "tick": 3360,
+              "velocity": 0.8
+            },
+            {
+              "id": "n12",
+              "length": 200,
+              "pitch": 33,
+              "tick": 3600,
+              "velocity": 0.8
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "automation": [],
+      "clips": [
+        {
+          "id": "c1",
+          "lengthTicks": 30720,
+          "patternId": "p1",
+          "startTick": 0
+        }
+      ],
+      "effects": [],
+      "id": "hats",
+      "instrument": {
+        "kind": "builtin",
+        "name": "hats",
+        "params": {},
+        "version": 1
+      },
+      "mix": {
+        "gainDb": -4,
+        "mute": false,
+        "pan": 0,
+        "solo": false
+      },
+      "name": "Hats",
+      "patterns": [
+        {
+          "id": "p1",
+          "lengthTicks": 960,
+          "name": "1",
+          "notes": [
+            {
+              "id": "n1",
+              "length": 60,
+              "pitch": 42,
+              "tick": 240,
+              "velocity": 0.5
+            },
+            {
+              "id": "n2",
+              "length": 120,
+              "pitch": 46,
+              "tick": 480,
+              "velocity": 0.8
+            },
+            {
+              "id": "n3",
+              "length": 60,
+              "pitch": 42,
+              "tick": 720,
+              "velocity": 0.5
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "transport": {
+    "bpm": 190,
+    "loop": {
+      "enabled": false,
+      "endTick": 15360,
+      "startTick": 0
+    },
+    "ppq": 960,
+    "timeSignature": [
+      4,
+      4
+    ]
+  },
+  "ui": {}
+}

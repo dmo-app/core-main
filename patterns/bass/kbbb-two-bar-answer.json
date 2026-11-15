@@ -1,0 +1,162 @@
+{
+ "format": "core-pattern",
+ "version": 1,
+ "id": "bass/kbbb-two-bar-answer",
+ "name": "KBBB: two-bar answer",
+ "role": "bass",
+ "styles": [
+  "darkpsycore",
+  "hitech",
+  "slambient",
+  "psytrance"
+ ],
+ "tags": [
+  "kbbb",
+  "elastic"
+ ],
+ "status": "hypothesis",
+ "description": "Bar 1 the anchor, bar 2 a small answer.",
+ "source": "AICORE docs/knowledge/bass-variation-examples.json (kbbb-two-bar-answer)",
+ "lengthTicks": 7680,
+ "root": 33,
+ "notes": [
+  {
+   "tick": 240,
+   "length": 120,
+   "pitch": 33,
+   "velocity": 0.64
+  },
+  {
+   "tick": 480,
+   "length": 120,
+   "pitch": 33,
+   "velocity": 0.64
+  },
+  {
+   "tick": 720,
+   "length": 120,
+   "pitch": 33,
+   "velocity": 0.64
+  },
+  {
+   "tick": 1200,
+   "length": 120,
+   "pitch": 33,
+   "velocity": 0.64
+  },
+  {
+   "tick": 1440,
+   "length": 120,
+   "pitch": 33,
+   "velocity": 0.64
+  },
+  {
+   "tick": 1680,
+   "length": 120,
+   "pitch": 33,
+   "velocity": 0.64
+  },
+  {
+   "tick": 2160,
+   "length": 120,
+   "pitch": 33,
+   "velocity": 0.64
+  },
+  {
+   "tick": 2400,
+   "length": 120,
+   "pitch": 33,
+   "velocity": 0.64
+  },
+  {
+   "tick": 2640,
+   "length": 120,
+   "pitch": 33,
+   "velocity": 0.64
+  },
+  {
+   "tick": 3120,
+   "length": 120,
+   "pitch": 33,
+   "velocity": 0.64
+  },
+  {
+   "tick": 3360,
+   "length": 120,
+   "pitch": 33,
+   "velocity": 0.64
+  },
+  {
+   "tick": 3600,
+   "length": 120,
+   "pitch": 33,
+   "velocity": 0.64
+  },
+  {
+   "tick": 4080,
+   "length": 120,
+   "pitch": 33,
+   "velocity": 0.64
+  },
+  {
+   "tick": 4320,
+   "length": 120,
+   "pitch": 33,
+   "velocity": 0.64
+  },
+  {
+   "tick": 4560,
+   "length": 120,
+   "pitch": 33,
+   "velocity": 0.64
+  },
+  {
+   "tick": 5040,
+   "length": 120,
+   "pitch": 33,
+   "velocity": 0.64
+  },
+  {
+   "tick": 5280,
+   "length": 120,
+   "pitch": 33,
+   "velocity": 0.64
+  },
+  {
+   "tick": 5520,
+   "length": 120,
+   "pitch": 33,
+   "velocity": 0.64
+  },
+  {
+   "tick": 6000,
+   "length": 120,
+   "pitch": 33,
+   "velocity": 0.64
+  },
+  {
+   "tick": 6240,
+   "length": 120,
+   "pitch": 33,
+   "velocity": 0.64
+  },
+  {
+   "tick": 6480,
+   "length": 120,
+   "pitch": 33,
+   "velocity": 0.64
+  },
+  {
+   "tick": 6960,
+   "length": 120,
+   "pitch": 33,
+   "velocity": 0.64
+  },
+  {
+   "tick": 7200,
+   "length": 120,
+   "pitch": 40,
+   "velocity": 0.64
+  }
+ ]
+}

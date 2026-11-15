@@ -1,0 +1,72 @@
+{
+ "format": "core-pattern",
+ "version": 1,
+ "id": "bass/kb-b-syncopated",
+ "name": "KB-B: syncopated",
+ "role": "bass",
+ "styles": [
+  "darkpsycore",
+  "hitech",
+  "slambient",
+  "psytrance"
+ ],
+ "tags": [
+  "kbbb",
+  "elastic"
+ ],
+ "status": "hypothesis",
+ "description": "First and third bass steps only: a hole in the middle.",
+ "source": "AICORE docs/knowledge/bass-variation-examples.json (kb-b-syncopated)",
+ "lengthTicks": 3840,
+ "root": 33,
+ "notes": [
+  {
+   "tick": 240,
+   "length": 120,
+   "pitch": 33,
+   "velocity": 0.64
+  },
+  {
+   "tick": 720,
+   "length": 120,
+   "pitch": 33,
+   "velocity": 0.64
+  },
+  {
+   "tick": 1200,
+   "length": 120,
+   "pitch": 33,
+   "velocity": 0.64
+  },
+  {
+   "tick": 1680,
+   "length": 120,
+   "pitch": 33,
+   "velocity": 0.64
+  },
+  {
+   "tick": 2160,
+   "length": 120,
+   "pitch": 33,
+   "velocity": 0.64
+  },
+  {
+   "tick": 2640,
+   "length": 120,
+   "pitch": 33,
+   "velocity": 0.64
+  },
+  {
+   "tick": 3120,
+   "length": 120,
+   "pitch": 33,
+   "velocity": 0.64
+  },
+  {
+   "tick": 3600,
+   "length": 120,
+   "pitch": 33,
+   "velocity": 0.64
+  }
+ ]
+}

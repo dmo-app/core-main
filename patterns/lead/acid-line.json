@@ -1,0 +1,81 @@
+{
+ "format": "core-pattern",
+ "version": 1,
+ "id": "lead/acid-line",
+ "name": "Acid: rolling 1/16 line",
+ "role": "lead",
+ "styles": [
+  "psytrance",
+  "darkpsycore"
+ ],
+ "tags": [
+  "acid"
+ ],
+ "status": "hypothesis",
+ "description": "A 1/16 acid line around the root, octave jumps and a minor seventh (full-on, twilight).",
+ "source": "AICORE docs/knowledge (KBBB-E-ELASTIC-BASS.md, bass-variation-examples.json, ESTILOS-MUSICAIS-E-PRODUCAO.md)",
+ "lengthTicks": 3840,
+ "root": 45,
+ "notes": [
+  {
+   "tick": 0,
+   "length": 180,
+   "pitch": 45,
+   "velocity": 0.9
+  },
+  {
+   "tick": 480,
+   "length": 180,
+   "pitch": 57,
+   "velocity": 0.7
+  },
+  {
+   "tick": 720,
+   "length": 180,
+   "pitch": 45,
+   "velocity": 0.7
+  },
+  {
+   "tick": 1200,
+   "length": 180,
+   "pitch": 45,
+   "velocity": 0.7
+  },
+  {
+   "tick": 1680,
+   "length": 180,
+   "pitch": 52,
+   "velocity": 0.7
+  },
+  {
+   "tick": 1920,
+   "length": 180,
+   "pitch": 45,
+   "velocity": 0.9
+  },
+  {
+   "tick": 2400,
+   "length": 180,
+   "pitch": 57,
+   "velocity": 0.7
+  },
+  {
+   "tick": 2880,
+   "length": 180,
+   "pitch": 45,
+   "velocity": 0.9
+  },
+  {
+   "tick": 3120,
+   "length": 180,
+   "pitch": 55,
+   "velocity": 0.7
+  },
+  {
+   "tick": 3360,
+   "length": 180,
+   "pitch": 57,
+   "velocity": 0.7
+  }
+ ]
+}

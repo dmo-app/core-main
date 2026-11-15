@@ -1,0 +1,2 @@
+# The AICORE knowledge pack is checked by SHA-256 (manifest.json): never convert its line endings.
+knowledge/aicore/** -text

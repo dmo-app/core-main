@@ -1,0 +1,88 @@
+{
+ "format": "core-pattern",
+ "version": 1,
+ "id": "hats/hitech-gallop",
+ "name": "Hats: hi-tech gallop",
+ "role": "hats",
+ "styles": [
+  "hitech",
+  "darkpsycore"
+ ],
+ "tags": [
+  "hats",
+  "gallop"
+ ],
+ "status": "hypothesis",
+ "description": "Two 1/16 and a rest (x x .) across the bar: a running, galloping top.",
+ "source": "AICORE docs/knowledge (KBBB-E-ELASTIC-BASS.md, bass-variation-examples.json, ESTILOS-MUSICAIS-E-PRODUCAO.md)",
+ "lengthTicks": 3840,
+ "root": -1,
+ "notes": [
+  {
+   "tick": 0,
+   "length": 120,
+   "pitch": 42,
+   "velocity": 0.85
+  },
+  {
+   "tick": 240,
+   "length": 120,
+   "pitch": 42,
+   "velocity": 0.6
+  },
+  {
+   "tick": 720,
+   "length": 120,
+   "pitch": 42,
+   "velocity": 0.85
+  },
+  {
+   "tick": 960,
+   "length": 120,
+   "pitch": 42,
+   "velocity": 0.6
+  },
+  {
+   "tick": 1440,
+   "length": 120,
+   "pitch": 42,
+   "velocity": 0.85
+  },
+  {
+   "tick": 1680,
+   "length": 120,
+   "pitch": 42,
+   "velocity": 0.6
+  },
+  {
+   "tick": 2160,
+   "length": 120,
+   "pitch": 42,
+   "velocity": 0.85
+  },
+  {
+   "tick": 2400,
+   "length": 120,
+   "pitch": 42,
+   "velocity": 0.6
+  },
+  {
+   "tick": 2880,
+   "length": 120,
+   "pitch": 42,
+   "velocity": 0.85
+  },
+  {
+   "tick": 3120,
+   "length": 120,
+   "pitch": 42,
+   "velocity": 0.6
+  },
+  {
+   "tick": 3600,
+   "length": 120,
+   "pitch": 42,
+   "velocity": 0.85
+  }
+ ]
+}

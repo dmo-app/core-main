@@ -1,0 +1,52 @@
+{
+  "format": "core-plugin-help",
+  "version": 1,
+  "id": "zap",
+  "title": "ZAP",
+  "summary": "Turns hits into lasers: a fast pitch sweep at the start of each sound.",
+  "steps": [
+    "Add ZAP to a lead, an FX or percussion.",
+    "Pitch and Amount say how high the laser starts; Sweep and Length say how fast it falls.",
+    "Sync makes the zaps follow the beat.",
+    "The deep bass is never touched."
+  ],
+  "examples": [
+    {
+      "title": "A laser",
+      "text": "A classic hi-tech laser.",
+      "preset": "Laser"
+    },
+    {
+      "title": "Lasers on the beat",
+      "text": "Zaps that follow 1/16 notes.",
+      "preset": "Laser 1/16"
+    },
+    {
+      "title": "A falling laser",
+      "text": "A dark laser that falls.",
+      "preset": "Down laser"
+    }
+  ],
+  "styles": [
+    {
+      "id": "hitech",
+      "why": "Fast lasers and clicks."
+    },
+    {
+      "id": "darkpsycore",
+      "why": "Dark falling lasers."
+    },
+    {
+      "id": "psytrance",
+      "why": "Psy zaps."
+    },
+    {
+      "id": "slambient",
+      "why": "Slow chirps."
+    }
+  ],
+  "sampleRoles": [
+    "fx",
+    "perc"
+  ]
+}

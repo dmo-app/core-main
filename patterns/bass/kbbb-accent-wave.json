@@ -1,0 +1,96 @@
+{
+ "format": "core-pattern",
+ "version": 1,
+ "id": "bass/kbbb-accent-wave",
+ "name": "KBBB: accent wave",
+ "role": "bass",
+ "styles": [
+  "darkpsycore",
+  "hitech",
+  "slambient",
+  "psytrance"
+ ],
+ "tags": [
+  "kbbb",
+  "elastic"
+ ],
+ "status": "hypothesis",
+ "description": "Same notes, velocity 0.72 / 0.52 / 0.64 in every beat: bounce from accents.",
+ "source": "AICORE docs/knowledge/bass-variation-examples.json (kbbb-accent-wave)",
+ "lengthTicks": 3840,
+ "root": 33,
+ "notes": [
+  {
+   "tick": 240,
+   "length": 120,
+   "pitch": 33,
+   "velocity": 0.72
+  },
+  {
+   "tick": 480,
+   "length": 120,
+   "pitch": 33,
+   "velocity": 0.52
+  },
+  {
+   "tick": 720,
+   "length": 120,
+   "pitch": 33,
+   "velocity": 0.64
+  },
+  {
+   "tick": 1200,
+   "length": 120,
+   "pitch": 33,
+   "velocity": 0.72
+  },
+  {
+   "tick": 1440,
+   "length": 120,
+   "pitch": 33,
+   "velocity": 0.52
+  },
+  {
+   "tick": 1680,
+   "length": 120,
+   "pitch": 33,
+   "velocity": 0.64
+  },
+  {
+   "tick": 2160,
+   "length": 120,
+   "pitch": 33,
+   "velocity": 0.72
+  },
+  {
+   "tick": 2400,
+   "length": 120,
+   "pitch": 33,
+   "velocity": 0.52
+  },
+  {
+   "tick": 2640,
+   "length": 120,
+   "pitch": 33,
+   "velocity": 0.64
+  },
+  {
+   "tick": 3120,
+   "length": 120,
+   "pitch": 33,
+   "velocity": 0.72
+  },
+  {
+   "tick": 3360,
+   "length": 120,
+   "pitch": 33,
+   "velocity": 0.52
+  },
+  {
+   "tick": 3600,
+   "length": 120,
+   "pitch": 33,
+   "velocity": 0.64
+  }
+ ]
+}

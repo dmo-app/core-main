@@ -1,0 +1,53 @@
+{
+  "format": "core-plugin-help",
+  "version": 1,
+  "id": "rcore",
+  "title": "Reverb Core (R-Core)",
+  "summary": "One reverb shared by many tracks, louder or softer in each part of the song.",
+  "steps": [
+    "Select the tracks that should share the space.",
+    "Effects > Reverb: choose a place for your style.",
+    "Core makes one reverb track and sends each track to it.",
+    "The reverb gets quieter in the drops and opens up in the intro, breaks and build-ups. You can see and change it in the song."
+  ],
+  "examples": [
+    {
+      "title": "A dark room for the bass top, hats and FX",
+      "text": "Short and dark; drier in the drops.",
+      "preset": "Dark room"
+    },
+    {
+      "title": "A hall behind leads and pads",
+      "text": "A soft hall, a little less in the drops.",
+      "preset": "Progressive space"
+    },
+    {
+      "title": "An endless background",
+      "text": "The same huge space all song long.",
+      "preset": "Huge space"
+    }
+  ],
+  "styles": [
+    {
+      "id": "darkpsycore",
+      "why": "Short, dark and drier in the drops."
+    },
+    {
+      "id": "psytrance",
+      "why": "A soft hall."
+    },
+    {
+      "id": "hitech",
+      "why": "Almost dry, only to glue."
+    },
+    {
+      "id": "slambient",
+      "why": "Huge, all song long."
+    }
+  ],
+  "sampleRoles": [
+    "pad",
+    "vox",
+    "fx"
+  ]
+}

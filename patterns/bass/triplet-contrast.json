@@ -1,0 +1,72 @@
+{
+ "format": "core-pattern",
+ "version": 1,
+ "id": "bass/triplet-contrast",
+ "name": "Bass: triplets",
+ "role": "bass",
+ "styles": [
+  "darkpsycore",
+  "hitech",
+  "slambient",
+  "psytrance"
+ ],
+ "tags": [
+  "kbbb",
+  "elastic"
+ ],
+ "status": "hypothesis",
+ "description": "Bass at 1/3 and 2/3 of the beat: ternary, not KBBB.",
+ "source": "AICORE docs/knowledge/bass-variation-examples.json (triplet-contrast)",
+ "lengthTicks": 3840,
+ "root": 33,
+ "notes": [
+  {
+   "tick": 320,
+   "length": 140,
+   "pitch": 33,
+   "velocity": 0.64
+  },
+  {
+   "tick": 640,
+   "length": 140,
+   "pitch": 33,
+   "velocity": 0.64
+  },
+  {
+   "tick": 1280,
+   "length": 140,
+   "pitch": 33,
+   "velocity": 0.64
+  },
+  {
+   "tick": 1600,
+   "length": 140,
+   "pitch": 33,
+   "velocity": 0.64
+  },
+  {
+   "tick": 2240,
+   "length": 140,
+   "pitch": 33,
+   "velocity": 0.64
+  },
+  {
+   "tick": 2560,
+   "length": 140,
+   "pitch": 33,
+   "velocity": 0.64
+  },
+  {
+   "tick": 3200,
+   "length": 140,
+   "pitch": 33,
+   "velocity": 0.64
+  },
+  {
+   "tick": 3520,
+   "length": 140,
+   "pitch": 33,
+   "velocity": 0.64
+  }
+ ]
+}

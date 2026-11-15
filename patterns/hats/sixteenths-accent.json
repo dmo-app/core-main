@@ -1,0 +1,120 @@
+{
+ "format": "core-pattern",
+ "version": 1,
+ "id": "hats/sixteenths-accent",
+ "name": "Hats: 1/16 with accents",
+ "role": "hats",
+ "styles": [
+  "darkpsycore",
+  "hitech",
+  "slambient",
+  "psytrance"
+ ],
+ "tags": [
+  "hats",
+  "sixteenths"
+ ],
+ "status": "hypothesis",
+ "description": "Closed hats on every 1/16, the off-beat loudest (driving, for full-on and hi-tech).",
+ "source": "AICORE docs/knowledge (KBBB-E-ELASTIC-BASS.md, bass-variation-examples.json, ESTILOS-MUSICAIS-E-PRODUCAO.md)",
+ "lengthTicks": 3840,
+ "root": -1,
+ "notes": [
+  {
+   "tick": 0,
+   "length": 120,
+   "pitch": 42,
+   "velocity": 0.36
+  },
+  {
+   "tick": 240,
+   "length": 120,
+   "pitch": 42,
+   "velocity": 0.48
+  },
+  {
+   "tick": 480,
+   "length": 120,
+   "pitch": 42,
+   "velocity": 0.8
+  },
+  {
+   "tick": 720,
+   "length": 120,
+   "pitch": 42,
+   "velocity": 0.48
+  },
+  {
+   "tick": 960,
+   "length": 120,
+   "pitch": 42,
+   "velocity": 0.36
+  },
+  {
+   "tick": 1200,
+   "length": 120,
+   "pitch": 42,
+   "velocity": 0.48
+  },
+  {
+   "tick": 1440,
+   "length": 120,
+   "pitch": 42,
+   "velocity": 0.8
+  },
+  {
+   "tick": 1680,
+   "length": 120,
+   "pitch": 42,
+   "velocity": 0.48
+  },
+  {
+   "tick": 1920,
+   "length": 120,
+   "pitch": 42,
+   "velocity": 0.36
+  },
+  {
+   "tick": 2160,
+   "length": 120,
+   "pitch": 42,
+   "velocity": 0.48
+  },
+  {
+   "tick": 2400,
+   "length": 120,
+   "pitch": 42,
+   "velocity": 0.8
+  },
+  {
+   "tick": 2640,
+   "length": 120,
+   "pitch": 42,
+   "velocity": 0.48
+  },
+  {
+   "tick": 2880,
+   "length": 120,
+   "pitch": 42,
+   "velocity": 0.36
+  },
+  {
+   "tick": 3120,
+   "length": 120,
+   "pitch": 42,
+   "velocity": 0.48
+  },
+  {
+   "tick": 3360,
+   "length": 120,
+   "pitch": 42,
+   "velocity": 0.8
+  },
+  {
+   "tick": 3600,
+   "length": 120,
+   "pitch": 42,
+   "velocity": 0.48
+  }
+ ]
+}

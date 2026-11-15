@@ -1,0 +1,72 @@
+{
+ "format": "core-pattern",
+ "version": 1,
+ "id": "bass/kbb-spaced",
+ "name": "KBB: spaced",
+ "role": "bass",
+ "styles": [
+  "darkpsycore",
+  "hitech",
+  "slambient",
+  "psytrance"
+ ],
+ "tags": [
+  "kbbb",
+  "elastic"
+ ],
+ "status": "hypothesis",
+ "description": "Two bass notes per beat, space at the end of the beat.",
+ "source": "AICORE docs/knowledge/bass-variation-examples.json (kbb-spaced)",
+ "lengthTicks": 3840,
+ "root": 33,
+ "notes": [
+  {
+   "tick": 240,
+   "length": 120,
+   "pitch": 33,
+   "velocity": 0.64
+  },
+  {
+   "tick": 480,
+   "length": 120,
+   "pitch": 33,
+   "velocity": 0.64
+  },
+  {
+   "tick": 1200,
+   "length": 120,
+   "pitch": 33,
+   "velocity": 0.64
+  },
+  {
+   "tick": 1440,
+   "length": 120,
+   "pitch": 33,
+   "velocity": 0.64
+  },
+  {
+   "tick": 2160,
+   "length": 120,
+   "pitch": 33,
+   "velocity": 0.64
+  },
+  {
+   "tick": 2400,
+   "length": 120,
+   "pitch": 33,
+   "velocity": 0.64
+  },
+  {
+   "tick": 3120,
+   "length": 120,
+   "pitch": 33,
+   "velocity": 0.64
+  },
+  {
+   "tick": 3360,
+   "length": 120,
+   "pitch": 33,
+   "velocity": 0.64
+  }
+ ]
+}

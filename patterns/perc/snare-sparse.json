@@ -1,0 +1,35 @@
+{
+ "format": "core-pattern",
+ "version": 1,
+ "id": "perc/snare-sparse",
+ "name": "Snare: sparse psy accent",
+ "role": "perc",
+ "styles": [
+  "darkpsycore",
+  "hitech",
+  "slambient",
+  "psytrance"
+ ],
+ "tags": [
+  "snare"
+ ],
+ "status": "hypothesis",
+ "description": "A snare on beat 4 and a ghost before it: space for the bass.",
+ "source": "AICORE docs/knowledge (KBBB-E-ELASTIC-BASS.md, bass-variation-examples.json, ESTILOS-MUSICAIS-E-PRODUCAO.md)",
+ "lengthTicks": 3840,
+ "root": -1,
+ "notes": [
+  {
+   "tick": 2640,
+   "length": 120,
+   "pitch": 38,
+   "velocity": 0.35
+  },
+  {
+   "tick": 2880,
+   "length": 240,
+   "pitch": 38,
+   "velocity": 0.85
+  }
+ ]
+}

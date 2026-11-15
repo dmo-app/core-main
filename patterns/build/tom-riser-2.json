@@ -1,0 +1,131 @@
+{
+ "format": "core-pattern",
+ "version": 1,
+ "id": "build/tom-riser-2",
+ "name": "Build-up: toms walking up, 2 bars",
+ "role": "build",
+ "styles": [
+  "hitech",
+  "darkpsycore",
+  "slambient"
+ ],
+ "tags": [
+  "build",
+  "toms"
+ ],
+ "status": "hypothesis",
+ "description": "1/8 toms from low to high, louder, ending in four 1/16 hits: a short tribal build.",
+ "source": "AICORE docs/knowledge (KBBB-E-ELASTIC-BASS.md, bass-variation-examples.json, ESTILOS-MUSICAIS-E-PRODUCAO.md)",
+ "lengthTicks": 7680,
+ "root": -1,
+ "notes": [
+  {
+   "tick": 0,
+   "length": 240,
+   "pitch": 45,
+   "velocity": 0.4
+  },
+  {
+   "tick": 480,
+   "length": 240,
+   "pitch": 45,
+   "velocity": 0.44
+  },
+  {
+   "tick": 960,
+   "length": 240,
+   "pitch": 45,
+   "velocity": 0.47
+  },
+  {
+   "tick": 1440,
+   "length": 240,
+   "pitch": 45,
+   "velocity": 0.51
+  },
+  {
+   "tick": 1920,
+   "length": 240,
+   "pitch": 45,
+   "velocity": 0.54
+  },
+  {
+   "tick": 2400,
+   "length": 240,
+   "pitch": 47,
+   "velocity": 0.58
+  },
+  {
+   "tick": 2880,
+   "length": 240,
+   "pitch": 47,
+   "velocity": 0.61
+  },
+  {
+   "tick": 3360,
+   "length": 240,
+   "pitch": 47,
+   "velocity": 0.65
+  },
+  {
+   "tick": 3840,
+   "length": 240,
+   "pitch": 47,
+   "velocity": 0.69
+  },
+  {
+   "tick": 4320,
+   "length": 240,
+   "pitch": 47,
+   "velocity": 0.72
+  },
+  {
+   "tick": 4800,
+   "length": 240,
+   "pitch": 50,
+   "velocity": 0.76
+  },
+  {
+   "tick": 5280,
+   "length": 240,
+   "pitch": 50,
+   "velocity": 0.79
+  },
+  {
+   "tick": 5760,
+   "length": 240,
+   "pitch": 50,
+   "velocity": 0.83
+  },
+  {
+   "tick": 6240,
+   "length": 240,
+   "pitch": 50,
+   "velocity": 0.86
+  },
+  {
+   "tick": 6720,
+   "length": 180,
+   "pitch": 50,
+   "velocity": 0.9
+  },
+  {
+   "tick": 6960,
+   "length": 180,
+   "pitch": 50,
+   "velocity": 0.93
+  },
+  {
+   "tick": 7200,
+   "length": 180,
+   "pitch": 50,
+   "velocity": 0.95
+  },
+  {
+   "tick": 7440,
+   "length": 180,
+   "pitch": 50,
+   "velocity": 0.98
+  }
+ ]
+}

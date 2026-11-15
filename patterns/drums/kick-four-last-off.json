@@ -1,0 +1,114 @@
+{
+ "format": "core-pattern",
+ "version": 1,
+ "id": "drums/kick-four-last-off",
+ "name": "Kick: four, last beat off at bar 4",
+ "role": "kick",
+ "styles": [
+  "darkpsycore",
+  "hitech",
+  "slambient",
+  "psytrance"
+ ],
+ "tags": [
+  "kick",
+  "fill"
+ ],
+ "status": "hypothesis",
+ "description": "Four on the floor for three bars, the last beat of bar 4 left out (room for a fill).",
+ "source": "AICORE docs/knowledge (KBBB-E-ELASTIC-BASS.md, bass-variation-examples.json, ESTILOS-MUSICAIS-E-PRODUCAO.md)",
+ "lengthTicks": 15360,
+ "root": -1,
+ "notes": [
+  {
+   "tick": 0,
+   "length": 216,
+   "pitch": 36,
+   "velocity": 1.0
+  },
+  {
+   "tick": 960,
+   "length": 216,
+   "pitch": 36,
+   "velocity": 1.0
+  },
+  {
+   "tick": 1920,
+   "length": 216,
+   "pitch": 36,
+   "velocity": 1.0
+  },
+  {
+   "tick": 2880,
+   "length": 216,
+   "pitch": 36,
+   "velocity": 1.0
+  },
+  {
+   "tick": 3840,
+   "length": 216,
+   "pitch": 36,
+   "velocity": 1.0
+  },
+  {
+   "tick": 4800,
+   "length": 216,
+   "pitch": 36,
+   "velocity": 1.0
+  },
+  {
+   "tick": 5760,
+   "length": 216,
+   "pitch": 36,
+   "velocity": 1.0
+  },
+  {
+   "tick": 6720,
+   "length": 216,
+   "pitch": 36,
+   "velocity": 1.0
+  },
+  {
+   "tick": 7680,
+   "length": 216,
+   "pitch": 36,
+   "velocity": 1.0
+  },
+  {
+   "tick": 8640,
+   "length": 216,
+   "pitch": 36,
+   "velocity": 1.0
+  },
+  {
+   "tick": 9600,
+   "length": 216,
+   "pitch": 36,
+   "velocity": 1.0
+  },
+  {
+   "tick": 10560,
+   "length": 216,
+   "pitch": 36,
+   "velocity": 1.0
+  },
+  {
+   "tick": 11520,
+   "length": 216,
+   "pitch": 36,
+   "velocity": 1.0
+  },
+  {
+   "tick": 12480,
+   "length": 216,
+   "pitch": 36,
+   "velocity": 1.0
+  },
+  {
+   "tick": 13440,
+   "length": 216,
+   "pitch": 36,
+   "velocity": 1.0
+  }
+ ]
+}

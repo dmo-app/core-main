@@ -1,0 +1,57 @@
+{
+  "format": "core-plugin-help",
+  "version": 1,
+  "id": "fcore",
+  "title": "FX Core (F-Core)",
+  "summary": "Effects by intent: say what a sound is for (a build-up, an intro, an impact) and FCore does the rest.",
+  "steps": [
+    "Choose the intent: what the sound is for in the song.",
+    "Choose the style: it changes how the intent is done, never what you can pick.",
+    "Turn the four knobs: Amount (how much), Length (how long it moves), Tone (dark or bright), Space (dry or huge).",
+    "Switch off a part you do not want (the small switches): the sentence on top says what is left.",
+    "On a sampler, the movement starts at every note; as an effect, it runs over the regions you mark.",
+    "On a build-up, + Add step has three extras for the end: Darker before the drop, Reverb before the drop, and Freeze at the end (everything stays where it got to, the note held, so you can put more effects after it)."
+  ],
+  "examples": [
+    {
+      "title": "A build-up before the drop",
+      "text": "Intent Build-up, Length 32 beats: the sound opens and rises for 8 bars, then drops back."
+    },
+    {
+      "title": "A soft intro",
+      "text": "Intent Intro, Tone low and Space high: far away and dark, it comes closer."
+    },
+    {
+      "title": "One big hit",
+      "text": "Intent Impact on a crash or an impact sample: a short, wide hit at the start of a section."
+    },
+    {
+      "title": "Freeze into the drop",
+      "text": "Preset Freeze into the drop: it rises, gets darker with a big reverb in the last bars, and holds there until the drop. Add SPACE or any effect after it.",
+      "preset": "frozen"
+    }
+  ],
+  "styles": [
+    {
+      "id": "darkpsycore",
+      "why": "Darker, rougher movements."
+    },
+    {
+      "id": "psytrance",
+      "why": "Clean rises and wide spaces."
+    },
+    {
+      "id": "hitech",
+      "why": "Short, fast movements that keep up with the tempo."
+    },
+    {
+      "id": "slambient",
+      "why": "Slow, long movements and big spaces."
+    }
+  ],
+  "sampleRoles": [
+    "riser",
+    "impact",
+    "fx"
+  ]
+}

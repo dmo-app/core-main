@@ -1,0 +1,96 @@
+{
+ "format": "core-pattern",
+ "version": 1,
+ "id": "bass/kbbb-gate-wave",
+ "name": "KBBB: gate wave",
+ "role": "bass",
+ "styles": [
+  "darkpsycore",
+  "hitech",
+  "slambient",
+  "psytrance"
+ ],
+ "tags": [
+  "kbbb",
+  "elastic"
+ ],
+ "status": "hypothesis",
+ "description": "Same notes, gates 90 / 150 / 110 ticks: elasticity from articulation.",
+ "source": "AICORE docs/knowledge/bass-variation-examples.json (kbbb-gate-wave)",
+ "lengthTicks": 3840,
+ "root": 33,
+ "notes": [
+  {
+   "tick": 240,
+   "length": 90,
+   "pitch": 33,
+   "velocity": 0.64
+  },
+  {
+   "tick": 480,
+   "length": 150,
+   "pitch": 33,
+   "velocity": 0.64
+  },
+  {
+   "tick": 720,
+   "length": 110,
+   "pitch": 33,
+   "velocity": 0.64
+  },
+  {
+   "tick": 1200,
+   "length": 90,
+   "pitch": 33,
+   "velocity": 0.64
+  },
+  {
+   "tick": 1440,
+   "length": 150,
+   "pitch": 33,
+   "velocity": 0.64
+  },
+  {
+   "tick": 1680,
+   "length": 110,
+   "pitch": 33,
+   "velocity": 0.64
+  },
+  {
+   "tick": 2160,
+   "length": 90,
+   "pitch": 33,
+   "velocity": 0.64
+  },
+  {
+   "tick": 2400,
+   "length": 150,
+   "pitch": 33,
+   "velocity": 0.64
+  },
+  {
+   "tick": 2640,
+   "length": 110,
+   "pitch": 33,
+   "velocity": 0.64
+  },
+  {
+   "tick": 3120,
+   "length": 90,
+   "pitch": 33,
+   "velocity": 0.64
+  },
+  {
+   "tick": 3360,
+   "length": 150,
+   "pitch": 33,
+   "velocity": 0.64
+  },
+  {
+   "tick": 3600,
+   "length": 110,
+   "pitch": 33,
+   "velocity": 0.64
+  }
+ ]
+}

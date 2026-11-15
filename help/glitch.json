@@ -1,0 +1,52 @@
+{
+  "format": "core-plugin-help",
+  "version": 1,
+  "id": "glitch",
+  "title": "GLITCH",
+  "summary": "Repeats small pieces of the sound in time: stutters, fills and machine-gun rolls.",
+  "steps": [
+    "Add GLITCH to drums, a lead or the whole bus.",
+    "Rate says how small the pieces are (1/16, 1/32...).",
+    "Chance says how often it happens.",
+    "Reverse plays some pieces backwards."
+  ],
+  "examples": [
+    {
+      "title": "A stutter",
+      "text": "Short 1/32 stutters on a hi-tech lead.",
+      "preset": "Stutter 1/32"
+    },
+    {
+      "title": "A fill before a section",
+      "text": "1/16 repeats at the end of a phrase.",
+      "preset": "Fill 1/16"
+    },
+    {
+      "title": "A backspin",
+      "text": "Pieces played backwards, like a DJ spin.",
+      "preset": "Backspin 1/16"
+    }
+  ],
+  "styles": [
+    {
+      "id": "hitech",
+      "why": "Fast stutters and machine guns."
+    },
+    {
+      "id": "darkpsycore",
+      "why": "Broken fills and backspins."
+    },
+    {
+      "id": "psytrance",
+      "why": "Light fills."
+    },
+    {
+      "id": "slambient",
+      "why": "Slow far-away echoes and reverse fills."
+    }
+  ],
+  "sampleRoles": [
+    "perc",
+    "fx"
+  ]
+}

@@ -1,0 +1,26 @@
+{
+ "description": "A hi-tech lead or stab moves: a 1/16 Echo and Flux's space motion.",
+ "format": "core-fx-rack",
+ "id": "hitech/lead-motion",
+ "kind": "effects",
+ "name": "Lead motion",
+ "native": [
+  {
+   "kind": "effect",
+   "name": "corefx",
+   "preset": "Motion 1/16"
+  },
+  {
+   "kind": "effect",
+   "name": "corefx",
+   "preset": "Space motion"
+  }
+ ],
+ "role": "lead",
+ "status": "hypothesis",
+ "styles": [
+  "hitech",
+  "psytrance"
+ ],
+ "version": 1
+}

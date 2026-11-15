@@ -1,0 +1,48 @@
+{
+ "format": "core-pattern",
+ "version": 1,
+ "id": "hats/offbeat-open",
+ "name": "Hats: open on the off-beat",
+ "role": "hats",
+ "styles": [
+  "darkpsycore",
+  "hitech",
+  "slambient",
+  "psytrance"
+ ],
+ "tags": [
+  "hats",
+  "offbeat"
+ ],
+ "status": "hypothesis",
+ "description": "The classic psy off-beat open hat.",
+ "source": "AICORE docs/knowledge (KBBB-E-ELASTIC-BASS.md, bass-variation-examples.json, ESTILOS-MUSICAIS-E-PRODUCAO.md)",
+ "lengthTicks": 3840,
+ "root": -1,
+ "notes": [
+  {
+   "tick": 480,
+   "length": 240,
+   "pitch": 46,
+   "velocity": 0.75
+  },
+  {
+   "tick": 1440,
+   "length": 240,
+   "pitch": 46,
+   "velocity": 0.75
+  },
+  {
+   "tick": 2400,
+   "length": 240,
+   "pitch": 46,
+   "velocity": 0.75
+  },
+  {
+   "tick": 3360,
+   "length": 240,
+   "pitch": 46,
+   "velocity": 0.75
+  }
+ ]
+}
