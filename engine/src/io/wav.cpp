@@ -1,5 +1,6 @@
 #include "wav.hpp"
 #include <algorithm>
+#include <cerrno>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -14,13 +15,36 @@ void put32(unsigned char* p, uint32_t v) { for (int i = 0; i < 4; ++i) p[i] = (u
 void put16(unsigned char* p, uint16_t v) { p[0] = (unsigned char)v; p[1] = (unsigned char)(v >> 8); }
 
 // Paths are UTF-8 (names with accents work on Windows too).
+std::filesystem::path widePath(const std::string& path) {
+#ifdef _WIN32
+  return std::filesystem::path(std::u8string(reinterpret_cast<const char8_t*>(path.data()), path.size()));
+#else
+  return std::filesystem::path(path);
+#endif
+}
+
+std::string utf8(const std::filesystem::path& p) {
+  const std::u8string s = p.u8string();
+  return std::string(reinterpret_cast<const char*>(s.data()), s.size());
+}
+
 FILE* openForWriting(const std::string& path) {
 #ifdef _WIN32
-  const std::filesystem::path p(std::u8string(reinterpret_cast<const char8_t*>(path.data()), path.size()));
-  return _wfopen(p.c_str(), L"wb");
+  return _wfopen(widePath(path).c_str(), L"wb");
 #else
   return std::fopen(path.c_str(), "wb");
 #endif
+}
+
+// The destination folder is created when missing: an export points at where the file should end up,
+// not at a folder the caller had to make first.
+void ensureParentDir(const std::string& path) {
+  const std::filesystem::path dir = widePath(path).parent_path();
+  std::error_code ec;
+  if (dir.empty() || std::filesystem::is_directory(dir, ec)) return;
+  std::filesystem::create_directories(dir, ec);
+  // ec.message() is the OS's own language in the system code page; the engine's messages are UTF-8.
+  if (ec) throw std::runtime_error("Cannot create the output folder " + utf8(dir) + " (error " + std::to_string(ec.value()) + ").");
 }
 
 void header(unsigned char* h, int sampleRate, int bits, uint64_t frames, uint16_t channels) {
@@ -40,8 +64,11 @@ uint64_t WavWriter::maxFrames(int bits, int channels) {
 WavWriter::WavWriter(const std::string& path, int sampleRate, int bits, int channels) : bits_(bits), channels_(channels) {
   if (bits != 24 && bits != 32) throw std::runtime_error("WAV bits must be 24 or 32.");
   if (channels != 1 && channels != 2) throw std::runtime_error("WAV channels must be 1 or 2.");
+  ensureParentDir(path);
   file_ = openForWriting(path);
-  if (!file_) throw std::runtime_error("Cannot write " + path);
+  // The reason is part of the message: "cannot write" alone does not tell a blocked folder from a
+  // full disk or a name that is not a file.
+  if (!file_) throw std::runtime_error("Cannot write " + path + " (" + std::strerror(errno) + ").");
   unsigned char h[44];
   header(h, sampleRate, bits, 0, (uint16_t)channels_);  // sizes are filled in by finish()
   sampleRate_ = sampleRate;
