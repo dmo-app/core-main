@@ -26,6 +26,7 @@ Cada teste tem um nível (`merge` ou `desktop`) e, quando se aplica, uma área (
 | Teste | Labels | O que cobre |
 |---|---|---|
 | `engine_tests` | merge | WAV, tempo, JSON do projeto, render (blocos, determinismo, ficheiros em falta), loop |
+| `motor_tests` | merge | o motor com muitos plugins: 128 pistas x 17 plugins (render e ao vivo com workers), limites, e plugins que falham de propósito (exceção, NaN, Inf, nível descontrolado, não carrega) sem derrubar nada (T28, T29) |
 | `domain_tests` | merge | documento, templates, guardar/reabrir, undo/redo, "modificado" |
 | `role_tests` | merge, ai | papéis, macros, SUCK, PUM, build-up, pistas mudas, bus partilhado, F-Core, ROLL, catálogo das tools |
 | `midi_tests` | merge | MIDI exportar e importar |
