@@ -7379,7 +7379,8 @@ void MainComponent::selfTestStep() {
         if (!l.enabled || l.startTick != 8 * kBar || l.endTick != 16 * kBar) return finish(false, "loop section key");
         undo();
         selectClip("bass", c3);
-        const int64_t before = history_.current().findTrack("bass")->clips.back().startTick;
+        int64_t before = -1;
+        for (const auto& c : history_.current().findTrack("bass")->clips) if (c.id == c3) before = c.startTick;
         keyPressed(juce::KeyPress(juce::KeyPress::rightKey, juce::ModifierKeys::altModifier, 0));
         int64_t after = -1;
         for (const auto& c : history_.current().findTrack("bass")->clips) if (c.id == c3) after = c.startTick;
