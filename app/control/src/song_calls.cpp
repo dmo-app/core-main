@@ -159,7 +159,7 @@ void addFunctions(std::vector<CoreFunction>& out, const doc::PCoreCatalog* pcore
     f.family = "track";
     f.name = "New track";
     f.description = "a new track for notes, for a part of the song (\"part\"); \"name\" is shown (else the part's name). Its plugin is "
-                    "chosen by hand; later calls of the same proposal name it by its name";
+                    "chosen by hand; later calls of the same proposal name it by its name. A build-up track is the part riser";
     f.tags = {"track", "new", "add", "pista", "nova"};
     f.options["part"] = doc::scoreParts();
     out.push_back(std::move(f));
@@ -272,7 +272,14 @@ bool validate(const json& c, const CoreFunction& f, const doc::Document& song, c
     return false;
   };
   if (f.family == "track") {
-    if (!takeText(c, f, "part", true, call, problems)) return false;
+    // A build-up track is the riser part: the models ask for "build" (benches of 16/11), so the word is taken.
+    json withPart = c;
+    if (withPart.contains("part") && withPart["part"].is_string()) {
+      std::string p = withPart["part"].get<std::string>();
+      for (auto& ch : p) ch = (char)std::tolower((unsigned char)ch);
+      if (p == "build" || p == "buildup" || p == "build-up" || p == "build up" || p == "rise") withPart["part"] = "riser";
+    }
+    if (!takeText(withPart, f, "part", true, call, problems)) return false;
     std::string name = str(c, "name");
     if (name.empty()) name = doc::scorePartName(call.texts["part"]);
     std::string unique = name;
