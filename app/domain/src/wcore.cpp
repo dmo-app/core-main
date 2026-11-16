@@ -6,6 +6,7 @@
 #include <cmath>
 #include "edit.hpp"
 #include "fx_racks.hpp"
+#include "fcore.hpp"
 #include "../../../engine/src/dsp/wave_legacy.hpp"
 #include "../../../engine/src/dsp/wave_mod.hpp"
 
@@ -440,6 +441,9 @@ void switchToBuiltinInstrument(Document& doc, const std::string& trackId, const 
   Track& t = trackById(doc, trackId);
   if (!playsPatterns(t)) throw DocumentError(what, t.name + " plays no notes (an audio track or a bus)");
   if (t.instrument.kind == "builtin" && t.instrument.name == name) return;
+  // F-Core goes first, while the old instrument is still there to get its own values back: kept, its sampler steps
+  // would write sampler knobs onto the new instrument and the engine refuses the song (sweep 2026-11-14 PL3).
+  if (fcoreOf(t)) removeFCore(doc, trackId);
   dropInstrumentMoods(doc, trackId);  // the old instrument's mood effects go with it (audit 2026-11-07, 8)
   Track& tt = trackById(doc, trackId);
   tt.instrument = Instrument{};

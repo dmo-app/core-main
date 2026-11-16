@@ -1,6 +1,7 @@
 #include "edit.hpp"
 #include "glitch.hpp"
 #include "wcore.hpp"
+#include "fcore.hpp"
 #include "corefx_legacy.hpp"
 #include <algorithm>
 #include <cctype>
@@ -702,7 +703,9 @@ std::string addSection(Document& doc, const std::string& name, int64_t startTick
   for (const auto& s : doc.sections)
     if (startTick < s.startTick + s.lengthTicks && s.startTick < startTick + lengthTicks)
       throw DocumentError("sections", "overlaps the section '" + s.name + "'");
-  Section s{nextId(doc.sections, "s"), name.substr(0, 40), startTick, lengthTicks, json::object()};
+  size_t cut = std::min<size_t>(name.size(), 40);  // on a character boundary (sweep D6: a cut "ç" is not UTF-8)
+  if (cut < name.size()) while (cut > 0 && ((unsigned char)name[cut] & 0xC0) == 0x80) --cut;
+  Section s{nextId(doc.sections, "s"), name.substr(0, cut), startTick, lengthTicks, json::object()};
   doc.sections.push_back(s);
   sortSections(doc);
   return s.id;
@@ -1476,9 +1479,10 @@ void replaceInstrument(Document& doc, const std::string& trackId, const std::str
   next.name = builtin;
   // The newest version, as a new track gets it: a kick put in at version 1 would be migrated (and its knobs
   // cleared) the next time the song is opened, so the saved song would not be the one on screen.
-  if (builtin == "sampler") next.version = 3;
+  if (builtin == "sampler") next.version = kSamplerVersion;  // was 3: the save read-back made it 4 and refused (sweep D2)
   if (builtin == "kick") next.version = 2;
   if (builtin == kGlitchInstrument) next.synth = freshGlitchSynth();
+  if (fcoreOf(t)) removeFCore(doc, trackId);  // before the change: it puts the old instrument back as it was (sweep PL3)
   dropInstrumentMoods(doc, trackId);
   trackById(doc, trackId).instrument = next;  // (the old kind's unknown fields would not fit the new one: they go too)
   Track& t2 = trackById(doc, trackId);

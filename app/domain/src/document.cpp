@@ -625,8 +625,10 @@ Document parseDocument(const json& input, int* migratedFrom) {
     Reader lr(loop, "transport.loop");
     d.loop.enabled = lr.boolean("enabled", false);
     d.loop.startTick = lr.integer("startTick", 0, 0, kMaxSongTicks - 1);
-    d.loop.endTick = lr.integer("endTick", 4 * 4 * kPpq, 1, kMaxSongTicks);
-    if (d.loop.endTick <= d.loop.startTick) throw DocumentError("transport.loop.endTick", "must be after startTick");
+    // "Remove loop" writes {enabled false, 0, 0} and deleting bars can fold a loop to nothing: an empty loop that is off
+    // is a song without a loop and must save and open (sweep 2026-11-14 D1: Save and autosave refused it).
+    d.loop.endTick = lr.integer("endTick", 4 * 4 * kPpq, 0, kMaxSongTicks);
+    if (d.loop.enabled && d.loop.endTick <= d.loop.startTick) throw DocumentError("transport.loop.endTick", "must be after startTick");
     d.loop.extra = lr.rest();
   }
   const json tempo = tr.array("tempoMap", kMaxTempoPoints);

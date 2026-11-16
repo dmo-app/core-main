@@ -139,7 +139,9 @@ private:
   std::vector<const PluginProcessor*> logged_;                               // instances already written there
   std::shared_ptr<CpuMeter> cpu_;                                            // of the last graph built
   uint64_t cpuBuiltNs_ = 0;                                                  // when it was built
-  const CpuMeter* cpuRead_ = nullptr;                                        // the meter engine.cpu last read,
+  // Which build engine.cpu last read: a count, not the meter's address (a new meter can land on a freed one's
+  // address and the old counters were then read against it, past the end; sweep 2026-11-14 E1).
+  uint64_t cpuBuilt_ = 0, cpuRead_ = 0;
   std::vector<uint64_t> cpuPrev_;                                            //   what it read
   uint64_t cpuReadNs_ = 0, cpuRenderNs_ = 0, cpuBudgetNs_ = 0;               //   and when, with the callback totals
   int64_t revision_ = -1;      // revision of the current project (-1 = edited without one)

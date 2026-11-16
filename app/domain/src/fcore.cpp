@@ -621,6 +621,10 @@ void render(Document& doc, Track& t, FCoreInstance& f) {
   clearWritten(t);
   const int free = kMaxEffectsPerChain - (int)t.effects.size();
   if ((int)plan.effects.size() > free) fail("effects", "F-Core needs " + std::to_string(plan.effects.size()) + " places on the chain, it has " + std::to_string(free));
+  // Its moves are modulators: past 16 the song saves but never opens again (sweep 2026-11-14 PL1).
+  if (f.mode == "note" && findFCoreIntent(f.intent)->moves && t.modulators.size() + plan.moves.size() > (size_t)kMaxModulators)
+    fail("modulators", "F-Core needs " + std::to_string(plan.moves.size()) + " movements, the track has room for " +
+                           std::to_string(std::max(0, kMaxModulators - (int)t.modulators.size())));
   f.effects.clear();
   for (const auto& e : plan.effects) {
     const EffectInfo* info = findEffect(e.name);

@@ -77,7 +77,7 @@ json coreFxFrom(const std::string& name, const json& given, double bpm, bool mix
   const double mix = std::clamp(num(v, "mix", 1), 0.0, 1.0);
   if (mixMoves) {  // a lane or an attachment moves the mix: Amount follows it, the dry sound stays
     out["amount"] = mix;
-    out["fxOnly"] = mix >= 0.999 ? 1 : 0;
+    out["fxOnly"] = 0;  // the dry stays whole: fxOnly never moves, so 1 here silenced the track wherever Amount is 0 (sweep PL2)
   } else {
     // The old effect's own mix law, exactly: dry * D + effect * W. Core FX plays Output * (dry + Amount * Return *
     // effect), so Output = D and Amount * Return = W / D (Return up to +6 dB); no dry at all is FX Only.

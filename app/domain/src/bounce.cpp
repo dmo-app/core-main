@@ -30,8 +30,12 @@ Printed place(Document& doc, const std::filesystem::path& file, const std::files
 }
 
 void label(Document& doc, const std::string& assetId, const std::string& what) {
+  // Cut at 80 bytes on a character boundary: cut inside a "ç" the text is not UTF-8 and Save and autosave throw
+  // (sweep 2026-11-14 D4).
+  size_t n = std::min<size_t>(what.size(), 80);
+  if (n < what.size()) while (n > 0 && ((unsigned char)what[n] & 0xC0) == 0x80) --n;
   for (auto& a : doc.assets)  // the same audio printed before keeps its first label
-    if (a.id == assetId && a.made.empty() && a.madeFrom.empty()) a.made = what.substr(0, 80);
+    if (a.id == assetId && a.made.empty() && a.madeFrom.empty()) a.made = what.substr(0, n);
 }
 
 } // namespace

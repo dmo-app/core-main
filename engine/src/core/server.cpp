@@ -206,6 +206,7 @@ void Server::rebuild(bool keepTails) {
   loadedPlugins_ = graph->plugins();
   cpu_ = graph->cpu();
   cpuBuiltNs_ = nowNs();
+  ++cpuBuilt_;
   trackLatency_ = graph->latency();
   masterLatency_ = graph->masterLatency();
   if (plugins_) plugins_->keepOnly(graph->pluginKeys());  // plugins no longer in the song are released
@@ -780,8 +781,8 @@ json Server::cpu() {
   json out = {{"load", {{"avgPct", avgPct}, {"maxPct", maxPct}, {"marginPct", std::max(0.0, 100.0 - maxPct)}}}};
   if (!cpu_) { out["intervalMs"] = 0; out["totalPct"] = 0; out["tracks"] = json::array(); out["master"] = {{"cpuPct", 0}, {"effects", json::array()}}; return out; }
   const auto& entries = cpu_->entries;
-  if (cpuRead_ != cpu_.get()) {  // another graph since the last call: its time counts from when it was built
-    cpuRead_ = cpu_.get();
+  if (cpuRead_ != cpuBuilt_ || cpuPrev_.size() != entries.size()) {  // another graph since the last call: from when it was built
+    cpuRead_ = cpuBuilt_;
     cpuPrev_.assign(entries.size(), 0);
     cpuReadNs_ = cpuBuiltNs_;
   }

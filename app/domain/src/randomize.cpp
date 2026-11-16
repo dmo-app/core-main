@@ -482,7 +482,8 @@ std::vector<std::string> randomizeStyle(Document& doc, const RandomizeOptions& o
           const int pitch = notes.empty() ? 36 : notes.front().pitch;
           bool has15 = false;
           for (const auto& n : notes) has15 |= n.tick % BAR == 15 * S16;
-          if (!has15) for (int64_t bar = 0; bar < src.lengthTicks; bar += BAR) notes.push_back(note(bar + 15 * S16, std::min(len, S16), pitch, 0.45));
+          // Only ghosts inside the pattern: a 1.5-bar kick put one past its end and the song never opened again (sweep P1).
+          if (!has15) for (int64_t bar = 0; bar + 15 * S16 < src.lengthTicks; bar += BAR) notes.push_back(note(bar + 15 * S16, std::min(len, S16), pitch, 0.45));
           groove = newPattern(*kick, src.name + " + ghost", src.lengthTicks, notes);
           did.push_back("ghost kick");
         }
