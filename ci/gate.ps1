@@ -43,8 +43,12 @@ ctest --test-dir "$Build" $label --output-on-failure --timeout 600 || exit /b 1
 "@ | Set-Content -Encoding ASCII $bat
 
 $t0 = Get-Date
-cmd /c "`"$bat`"" *>&1 | Tee-Object -FilePath $log
+# O stderr junta-se ao stdout dentro do cmd: no PowerShell 5.1, com "Stop", um aviso do cmake no stderr redirigido
+# pelo PowerShell (*>&1) virava erro fatal e o gate morria a meio do configure (medido no PC, 2026-11-16).
+$ErrorActionPreference = "Continue"
+cmd /c "`"$bat`" 2>&1" | Tee-Object -FilePath $log
 $rc = $LASTEXITCODE
+$ErrorActionPreference = "Stop"
 $secs = [int]((Get-Date) - $t0).TotalSeconds
 $commit = (git -C $src rev-parse --short HEAD 2>$null)
 $dirty = if (git -C $src status --porcelain 2>$null) { " (com alteracoes por commitar)" } else { "" }
