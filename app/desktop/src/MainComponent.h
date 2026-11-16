@@ -171,7 +171,9 @@ private:
   void pollBridge();          // the timer: the state written when it changed, the inbox read when it changed
   void showProposals();       // the AI button
   void openAiChat();          // AI > AI chat: Core's own AI (AiPanel), docked in this window
-  std::vector<std::string> applyAiProposal(const nlohmann::json& proposal);  // one undo step; throws when refused
+  // A proposal of the AI process: checked whole by Core (ai_admit.hpp, with the zone Core sent), then one undo step;
+  // throws when refused (nothing changed then).
+  std::vector<std::string> applyAiProposal(const nlohmann::json& proposal, const control::Zone& zone);
   void applyProposal(int index, juce::Component* button);
   void finishProposal(int index, const std::string& status, const json& result);
   int indexOf(const std::string& proposalId) const;
@@ -274,7 +276,6 @@ private:
   bool showPlugins_ = false;
   void openPatterns();
   std::unique_ptr<PatternsWindow> patternsWindow_;
-  std::unique_ptr<ai::Knowledge> aiKnowledge_;  // the AI's style knowledge base (ai/ beside Core.exe), opened with the chat
   // Core's own AI chat (AI > AI chat, or the "AI" button at the bottom right), docked at the right side or the bottom.
   std::unique_ptr<AiPanel> aiPanel_;
   juce::TextButton aiChatButton_{"AI"};

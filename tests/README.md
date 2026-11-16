@@ -27,7 +27,7 @@ Cada teste tem um nível (`merge` ou `desktop`) e, quando se aplica, uma área (
 |---|---|---|
 | `engine_tests` | merge | WAV, tempo, JSON do projeto, render (blocos, determinismo, ficheiros em falta), loop |
 | `domain_tests` | merge | documento, templates, guardar/reabrir, undo/redo, "modificado" |
-| `ai_tests` | merge, ai | a AI dentro do Core: chamadas da música, chat (respostas fixas, sem rede), base de conhecimento, provedores |
+| `ai_tests` | merge, ai | a AI (core_ai, só no processo core-ai desde a Fase 4): chamadas da música, chat (respostas fixas, sem rede), base de conhecimento, provedores |
 | `ai_contract_tests` | merge, ai | rede de segurança da AI (T05–T08): modelo falso sem rede, um contrato por ação do catálogo (meta-teste), undo único exato, âmbito de cada ação; cada verificador com um caso negativo |
 | `aifx_tests` | merge, ai | Core AI Gate: som, papel, toolGate e a chamada "gate" da AI |
 | `role_tests` | merge, ai | papéis, macros, SUCK, PUM, build-up, pistas mudas, bus partilhado, F-Core, ROLL, catálogo das tools |
@@ -38,6 +38,9 @@ Cada teste tem um nível (`merge` ou `desktop`) e, quando se aplica, uma área (
 | `audit2_tests` | merge | auditoria externa 2 |
 | `hunt_tests` | merge | caça profunda (P01–P08, IPC, traduções) |
 | `round3_tests` | merge, ai | ronda 3 (R3-A–R3-G): tools e cartões |
+| `ai_link_tests` | merge, ai | Fase 4, a fronteira Core↔AI sem processo: protocolo (frames, limites, profundidade, cada campo), âmbito fechado de criação musical, propostas adversariais recusadas inteiras, zona do Core, idempotência (um Undo cada), fuzz com semente fixa |
+| `ai_process_tests` | merge, ai | Fase 4, o processo `core-ai` de verdade (modelo falso / guiões maus): matar a meio de uma proposta, meio frame, lixo, frame gigante, sem hello, fora do âmbito, sem executável, bye |
+| `ai_boundary_static` | merge, ai | Fase 4, nas fontes: Core.exe sem `core_ai`/SQLite nem cabeçalhos da AI, motor sem AI, painel só por pipes, pacote e instalador do Core sem nada da AI, AI só com `CORE_BUILD_AI` |
 | `time_range_tests`, `pattern_rack_tests`, `song_notes_tests`, `quick_tools_tests` | merge | QoL das outras DAWs: régua/seleção de tempo, rack de patterns, notas da música, ferramentas rápidas (marcadores, Double, nudge, Freeze) |
 | `cli_version`, `cli_demo_render`, `cli_measure`, `cli_unicode` | merge | a linha de comandos do `core-engine` |
 | `gate_static` | merge | o `ci/gate.ps1` lido sem PowerShell: `.bat` com nome por corrida, nenhuma variável com o nome de um parâmetro, `JUCE_BUILDNUMBER` |

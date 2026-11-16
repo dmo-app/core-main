@@ -381,12 +381,6 @@ std::string problemKind(const std::string& why) {
   return "other";
 }
 
-std::string changedSince(const json& proposal, const control::Proposal& now) {
-  const size_t asked = proposal.is_object() && proposal.contains("calls") && proposal["calls"].is_array() ? proposal["calls"].size() : 0;
-  if (now.calls.size() >= asked) return "";
-  return "the song changed since the proposal: " + std::to_string(asked - now.calls.size()) + " of its calls no longer fit (" +
-         (now.problems.empty() ? std::string("ask again") : now.problems.front()) + "); nothing was applied";
-}
 
 bool Chat::overBudget() {
   if (config_.maxUsdPerMessage <= 0 || cost(usage_) < config_.maxUsdPerMessage) return false;

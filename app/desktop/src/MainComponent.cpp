@@ -30,6 +30,7 @@
 #include "midi.hpp"
 #include "bitwig.hpp"
 #include "roles.hpp"
+#include "ai_admit.hpp"
 #include "synth_roles.hpp"
 #include "sfz_kit.hpp"
 #include "core_plugins.hpp"
@@ -3774,16 +3775,11 @@ void MainComponent::openAiChat() {
     AiPanel::Host h;
     h.song = [this]() -> const doc::Document& { return history_.current(); };
     h.functions = [this] { return callableFunctions(); };
-    h.pcore = pcoreCatalog_ ? &*pcoreCatalog_ : nullptr;
-    if (!aiKnowledge_) {  // ai/core-ai-knowledge.sqlite beside Core.exe (the AI package's), opened once
-      const juce::File db = juce::File::getSpecialLocation(juce::File::currentExecutableFile).getParentDirectory().getChildFile("ai").getChildFile("core-ai-knowledge.sqlite");
-      std::string why;
-      aiKnowledge_ = ai::Knowledge::open(pathOf(db), &why);
-      logLine(aiKnowledge_ ? "AI: knowledge base " + u8(aiKnowledge_->from()) + " (" + juce::String(aiKnowledge_->size()) + " chunks)" : "AI: " + u8(why));
-    }
-    h.knowledge = aiKnowledge_.get();
+    // The AI is its own process (core-ai, the "Core AI" package): the panel starts it and gives it the AI folder and
+    // P-Core's styles; its knowledge base, memory and chats are its own.
+    h.pcoreStyles = juce::File::getSpecialLocation(juce::File::currentExecutableFile).getParentDirectory().getChildFile("pcore").getChildFile("styles.json");
     h.keyFolder = bridgeFolder();
-    h.apply = [this](const json& proposal) { return applyAiProposal(proposal); };
+    h.apply = [this](const json& proposal, const control::Zone& zone) { return applyAiProposal(proposal, zone); };
     h.zone = [this] { return aiZoneNow(); };
     h.instruments = [this] {  // the AI's plugins are instruments (Vital, sfizz) and effects (Dragonfly, Airwindows, the gate)
       auto all = plugins_->instruments();
@@ -3811,61 +3807,6 @@ void MainComponent::openAiChat() {
         repaint();
         if (done) done(found, failed);
       });
-    };
-    // ler_kick_bass: the kick and the bass alone, with their plugins, rendered by core-engine (a separate process,
-    // as the export does) into a temp folder; the other tracks are muted, the two are 12 dB down so their sum never
-    // stops the render at 0 dBFS (given back when read).
-    h.listen = [this](const std::string& kickId, const std::string& bassId, int64_t start, int64_t end, std::vector<float>& kick,
-                      std::vector<float>& bass, double& sampleRate) -> std::string {
-      constexpr double kDown = -12.0;
-      doc::Document d = history_.current();
-      for (auto& t : d.tracks) {
-        const bool heard = t.id == kickId || t.id == bassId;
-        t.mix.solo = false;
-        if (heard) {
-          t.mix.mute = false;
-          t.mix.gainDb += kDown;
-        } else if (t.instrument.kind != "bus") {
-          t.mix.mute = true;
-        }
-      }
-      const juce::File engine = juce::File::getSpecialLocation(juce::File::currentExecutableFile).getSiblingFile("core-engine.exe");
-      if (!engine.existsAsFile()) return "core-engine.exe is not beside Core";
-      const juce::File dir = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("Core-ai-listen");
-      dir.deleteRecursively();
-      dir.createDirectory();
-      const juce::File project = dir.getChildFile("listen.json"), out = dir.getChildFile("listen.wav");
-      if (!project.replaceWithText(juce::String::fromUTF8(doc::toProjection(d, projectDir()).dump().c_str()))) return "the temp folder cannot be written";
-      juce::ChildProcess child;
-      const juce::StringArray args{engine.getFullPathName(), "render", project.getFullPathName(), out.getFullPathName(), "--stems", "--mono",
-                                   "--bits", "32", "--sr", "48000", "--start-tick", juce::String((juce::int64)start), "--end-tick",
-                                   juce::String((juce::int64)end), "--tail-ms", "0"};
-      if (!child.start(args, juce::ChildProcess::wantStdOut | juce::ChildProcess::wantStdErr)) return "the engine could not be started";
-      juce::String said;
-      std::thread reader([&] { said = child.readAllProcessOutput(); });
-      const bool finished = child.waitForProcessToFinish(60000);
-      if (!finished) child.kill();
-      reader.join();
-      if (!finished) return "the render took more than 60 s";
-      juce::AudioFormatManager formats;
-      formats.registerBasicFormats();
-      auto read = [&](const std::string& id, std::vector<float>& into) -> bool {
-        const juce::File f = dir.getChildFile("listen-" + juce::String::fromUTF8(id.c_str()) + ".wav");
-        std::unique_ptr<juce::AudioFormatReader> r(formats.createReaderFor(f));
-        if (!r || r->lengthInSamples <= 0) return false;
-        juce::AudioBuffer<float> buf((int)r->numChannels, (int)r->lengthInSamples);
-        r->read(&buf, 0, (int)r->lengthInSamples, 0, true, true);
-        const float back = juce::Decibels::decibelsToGain((float)-kDown);
-        into.assign((size_t)buf.getNumSamples(), 0.0f);
-        for (int c = 0; c < buf.getNumChannels(); ++c)
-          for (int i = 0; i < buf.getNumSamples(); ++i) into[(size_t)i] += buf.getSample(c, i) * back / (float)buf.getNumChannels();
-        sampleRate = r->sampleRate;
-        return true;
-      };
-      const bool ok = read(kickId, kick) && read(bassId, bass);
-      if (!ok) logLine("AI: ler_kick_bass render: " + said.trim().getLastCharacters(400));
-      dir.deleteRecursively();
-      return ok ? std::string() : std::string("the render failed (") + said.trim().getLastCharacters(160).toStdString() + ")";
     };
     aiPanel_ = std::make_unique<AiPanel>(std::move(h));
     aiPanel_->onLayoutChange = [this] { resized(); repaint(); };
@@ -3905,13 +3846,21 @@ control::Zone MainComponent::aiZoneNow() const {
   return z.active() ? z : control::Zone{};
 }
 
-std::vector<std::string> MainComponent::applyAiProposal(const json& proposal) {
+std::vector<std::string> MainComponent::applyAiProposal(const json& proposal, const control::Zone& zone) {
   const doc::SampleIndex* samples = hasSampleIndex_ ? &sampleIndex_ : nullptr;
-  const control::Proposal p = control::validateProposal(proposal, callableFunctions(), history_.current(), samples);
-  if (p.calls.empty()) throw doc::DocumentError("calls", "nothing in the proposal can be applied");
-  // Checked again against the song as it is now: if it changed since and a call no longer fits, nothing is applied
-  // (never a part of what was shown). Ask the AI again.
-  if (const std::string why = ai::changedSince(proposal, p); !why.empty()) throw doc::DocumentError("calls", why);
+  // The AI is another process and Core trusts nothing it sends: the proposal is admitted whole or refused whole
+  // (only music creation, Core's permissions and zone, every call fitting the song as it is NOW).
+  const std::vector<control::CoreFunction> functions = callableFunctions();  // outlives p: its calls point into it
+  std::vector<std::string> problems;
+  const juce::File settings = bridgeFolder().getChildFile("ai-settings.json");
+  const json j = settings.existsAsFile() ? json::parse(settings.loadFileAsString().toStdString(), nullptr, false) : json();
+  const ai::Permissions permissions = ai::permissionsFrom(j.is_object() ? j : json(), &problems);
+  const ai::Admission admitted = ai::admitProposal(proposal, functions, history_.current(), samples, permissions, zone);
+  if (!admitted.ok) {
+    logLine("AI: proposal refused: " + u8(admitted.why));
+    throw doc::DocumentError("calls", admitted.why + "; nothing was applied");
+  }
+  const control::Proposal& p = admitted.proposal;
   const std::string target = selectedTrack_.empty() ? editor_.track() : selectedTrack_;  // calls without a track
   if (p.needsTrack() && !history_.current().findTrack(target)) throw doc::DocumentError("calls", "select a track first: some calls name none");
   const doc::RoleMap roles = PluginCatalog::roles();  // the gate's plugin (Settings > Roles)

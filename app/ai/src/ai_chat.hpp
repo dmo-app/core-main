@@ -11,6 +11,7 @@
 #include <string>
 #include <vector>
 #include "calls.hpp"
+#include "ai_admit.hpp"
 #include "catalog.hpp"
 #include "knowledge.hpp"
 #include "memory.hpp"
@@ -60,9 +61,6 @@ std::string zoneBlock(const doc::Document& song, const control::Zone& zone);
 // With the permission mode: readonly and trusted add a sentence that says so.
 json systemFor(const doc::Document& song, const doc::PCoreCatalog* pcore, const std::string& mode = "ask", bool gateway = false);
 
-// Apply checks a proposal again against the song as it is then (it may have changed since the AI made it). Every call
-// must still fit: "" when they do, else why nothing should be applied (never only a part of what was shown).
-std::string changedSince(const json& proposal, const control::Proposal& now);
 
 // The kind of a call Core left out, from its reason (for the bench and the logs): "name" (a name or option that
 // does not exist), "section", "range" (a number outside its range), "missing" (a value not given), "dependency"

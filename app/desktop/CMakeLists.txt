@@ -23,7 +23,7 @@ target_compile_definitions(CoreApp PRIVATE
   JUCE_APPLICATION_NAME_STRING="$<TARGET_PROPERTY:CoreApp,JUCE_PRODUCT_NAME>"
   JUCE_APPLICATION_VERSION_STRING="$<TARGET_PROPERTY:CoreApp,JUCE_VERSION>")
 target_link_libraries(CoreApp
-  PRIVATE juce::juce_gui_basics juce::juce_audio_devices juce::juce_audio_formats core_engine_client core_domain core_previews core_version core_control core_ai core_sampling
+  PRIVATE juce::juce_gui_basics juce::juce_audio_devices juce::juce_audio_formats core_engine_client core_domain core_previews core_version core_control core_ai_link core_sampling
           $<$<PLATFORM_ID:Windows>:dbghelp>
   PUBLIC juce::juce_recommended_config_flags)
 
@@ -53,11 +53,8 @@ add_custom_command(TARGET CoreApp POST_BUILD
   # Patterns of the Library's Patterns tab (KBBB, hats, cymbals, build-ups...); Diogo's own go to %APPDATA%\Core\Patterns.
   COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/../../patterns $<TARGET_FILE_DIR:CoreApp>/patterns
   # PCore: styles, parts, shapes and scales (docs/contracts/core-pcore.md).
-  COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/../../pcore $<TARGET_FILE_DIR:CoreApp>/pcore
-  # The AI's style knowledge base (built from ai/knowledge by core_ai_knowledge); the AI package installs it the same way.
-  COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:CoreApp>/ai
-  COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CORE_AI_KNOWLEDGE_DB} $<TARGET_FILE_DIR:CoreApp>/ai/core-ai-knowledge.sqlite)
-add_dependencies(CoreApp core_ai_knowledge)
+  COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/../../pcore $<TARGET_FILE_DIR:CoreApp>/pcore)
+# Nothing of the AI here (Fase 4): Core talks to the AI process (core-ai, its own package) through core_ai_link.
 
 
 # Development package (M1c): a zip with Core.exe, core-engine.exe and the demo, runnable on a Windows
@@ -72,7 +69,6 @@ add_custom_target(core-package
   COMMAND ${CMAKE_COMMAND} -E copy_directory $<TARGET_FILE_DIR:CoreApp>/lang ${CMAKE_BINARY_DIR}/package/Core/lang
   COMMAND ${CMAKE_COMMAND} -E copy_directory $<TARGET_FILE_DIR:CoreApp>/patterns ${CMAKE_BINARY_DIR}/package/Core/patterns
   COMMAND ${CMAKE_COMMAND} -E copy_directory $<TARGET_FILE_DIR:CoreApp>/pcore ${CMAKE_BINARY_DIR}/package/Core/pcore
-  COMMAND ${CMAKE_COMMAND} -E copy_directory $<TARGET_FILE_DIR:CoreApp>/ai ${CMAKE_BINARY_DIR}/package/Core/ai
   COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_BINARY_DIR}/package
           ${CMAKE_COMMAND} -E tar cf ${CMAKE_BINARY_DIR}/Core-windows-x64.zip --format=zip Core
   DEPENDS CoreApp
