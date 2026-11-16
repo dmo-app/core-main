@@ -30,6 +30,8 @@ struct RenderOutput {
   int track = -1;       // index in project.tracks, -1 = the mix
   bool withoutMasterGain = false;  // a stem for a bounce: no master gain (Graph::setSolo)
   bool mono = false;    // one channel, (L + R) / 2: a song or passage exported as an example for the AI
+  // Last, so the brace lists written before it keep their meaning.
+  bool preFader = false;           // F1 Freeze: the track before its fader, pan, sends and buses (Graph::setSolo)
 };
 
 // Shared publication for background exports and the synchronous CLI. Call after every

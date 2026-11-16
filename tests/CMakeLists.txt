@@ -85,6 +85,18 @@ target_link_libraries(round3_tests PRIVATE core_domain core_engine_lib)
 target_compile_definitions(round3_tests PRIVATE CORE_LANG_DIR="${CMAKE_SOURCE_DIR}/lang")
 add_test(NAME round3_tests COMMAND round3_tests)
 
+# F1 Freeze (Diogo 2026-11-16): render pré-fader no motor (null test, PDC, cauda) e o freeze no documento.
+add_executable(freeze_tests freeze_tests.cpp)
+target_include_directories(freeze_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/engine/src)
+target_link_libraries(freeze_tests PRIVATE core_domain core_engine_lib)
+add_test(NAME freeze_tests COMMAND freeze_tests)
+
+# #78 MMCSS: os workers do tempo real registam-se e devolvem o registo no teardown (init/exit simétricos, fallback).
+add_executable(rt_tests rt_tests.cpp)
+target_include_directories(rt_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/engine/src)
+target_link_libraries(rt_tests PRIVATE core_engine_lib)
+add_test(NAME rt_tests COMMAND rt_tests)
+
 # The command line: what the app and the scripts call.
 add_test(NAME cli_version COMMAND core-engine --version)
 set_tests_properties(cli_version PROPERTIES PASS_REGULAR_EXPRESSION "core-engine ${CORE_VERSION}")
@@ -105,7 +117,7 @@ add_test(NAME quick_tools_tests COMMAND quick_tools_tests)
 # O ci/gate.ps1 sem PowerShell: .bat com nome por corrida, nenhuma variavel com o nome de um parametro, JUCE_BUILDNUMBER.
 add_test(NAME gate_static COMMAND ${CMAKE_COMMAND} -DGATE=${CMAKE_SOURCE_DIR}/ci/gate.ps1 -P ${CMAKE_CURRENT_SOURCE_DIR}/gate_static.cmake)
 
-set_tests_properties(engine_tests domain_tests role_tests midi_tests bug_tests audit_tests audit2_tests hunt_tests round3_tests bitwig_tests time_range_tests pattern_rack_tests song_notes_tests quick_tools_tests cli_version cli_demo_render cli_measure cli_unicode gate_static
+set_tests_properties(engine_tests domain_tests role_tests midi_tests bug_tests audit_tests audit2_tests hunt_tests round3_tests bitwig_tests time_range_tests pattern_rack_tests song_notes_tests quick_tools_tests freeze_tests rt_tests cli_version cli_demo_render cli_measure cli_unicode gate_static
                      PROPERTIES LABELS merge TIMEOUT 300)
 # Labels por area (2026-11-16, plano de testes T03), alem do nivel. ci/testes.txt e a lista que o gate confere.
 #   ai      o que a AI chama (tools, catalogo, propostas)

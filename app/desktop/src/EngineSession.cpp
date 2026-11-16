@@ -197,6 +197,7 @@ void EngineSession::exportFiles(const std::vector<ExportFile>& files, int64_t st
     json one = {{"path", f.pathUtf8}};
     if (!f.trackId.empty()) one["track"] = f.trackId;
     if (!f.trackId.empty() && f.withoutMasterGain) one["withoutMasterGain"] = true;
+    if (!f.trackId.empty() && f.preFader) one["preFader"] = true;
     if (f.mono) one["mono"] = true;
     list.push_back(std::move(one));
   }

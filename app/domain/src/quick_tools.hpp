@@ -55,17 +55,28 @@ int nudgeNotes(Pattern& pattern, const std::set<std::string>& noteIds, int64_t d
 std::string frozenInto(const Track& track);
 bool isFrozen(const Track& track);
 // Why a track cannot be frozen ("" = it can): not there, already frozen, an audio track or a bus, nothing loaded
-// to save, or one of the reasons a bounce is refused.
+// to save, the key of another track's sidechain (its plugins unloaded, that key would go silent and change the
+// other track's sound), or one of the reasons a bounce is refused.
 std::string cannotFreeze(const Document& doc, const std::string& trackId);
-// The render (a stem of the track, as for a bounce) goes on a new audio track right below, named "<name> (frozen)";
-// the source is muted and marked frozen: the engine gets it without its instrument and effects, so its plugins are
-// unloaded. Its notes, plugins and their state stay in the song.
+// F1 (Diogo 2026-11-16). The render is the track's pre-fader sound (the engine's render.start with preFader: its
+// instrument and inserts, before fader, pan, sends and buses, as a sidechain key hears it). It goes on a new audio
+// track right below, named "<name> (frozen)", which takes the source's mixer: fader, pan, mute/solo, output, sends
+// and the "gainDb"/"pan" automation, so the mixer stays live and only the plugins are baked. The source is muted and
+// marked frozen with a fingerprint of what the render heard: the engine gets it without its instrument and effects,
+// so its plugins are unloaded. Its notes, plugins and their state stay in the song.
 Printed freezeTrack(Document& doc, const std::string& trackId, const std::filesystem::path& file,
                     const std::filesystem::path& projectDir);
 // The render started from `start` still fits `now` (a freeze finishing after an edit would put old audio in): the
-// track sounds the same (its notes, instrument, effects, mix) and the song is as long.
+// track sounds the same (its notes, instrument, effects, their automation, the keys of its sidechains, the tempo)
+// and the song is as long. The mixer does not count: it is not in the render.
 bool freezeStillMatches(const Document& start, const Document& now, const std::string& trackId);
-// The frozen audio track goes (its file too when nothing else uses it, at the next save), the source plays again.
+// The frozen audio track goes (its file too when nothing else uses it, at the next save), the source plays again
+// with the mixer the audio track had (fader, pan, sends, mute, mixer automation): the state is the one before the
+// freeze plus what was done to the mixer meanwhile.
 void unfreezeTrack(Document& doc, const std::string& trackId);
+// F1: "editing the MIDI invalidates the freeze, explicitly". Every frozen track whose render no longer matches the
+// song (its notes, plugins, effects, the tempo or the length changed) is unfrozen here; returns their names. The
+// History calls it on every change, so the change and the unfreeze are one Undo step.
+std::vector<std::string> unfreezeStale(Document& doc);
 
 } // namespace core::doc

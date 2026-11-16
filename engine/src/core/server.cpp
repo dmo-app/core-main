@@ -47,7 +47,7 @@ const char* kCommands[][2] = {
   {"note.off", "{trackId, pitch}"},
   {"note.audition", "{trackId, pitch, velocity, durationMs?}"},
   {"render", "{path, bits?: 24|32, stems?, tailMs?, startTick?, endTick?} -> {path, stems, seconds, peak, renderMs, realtimeFactor, denseEventBlocks} (blocks until done)"},
-  {"render.start", "{path | files: [{path, track?: id (none = the mix), withoutMasterGain?: bool (a stem for a bounce)}], startTick?, endTick?, bits?: 24|32, tailMs?, sampleRate?, revision?} -> job status; runs in the background, sends job events. Stems are taken before the master chain; a region plays the song before it (not written) and cuts it at endTick, tails ring out"},
+  {"render.start", "{path | files: [{path, track?: id (none = the mix), withoutMasterGain?: bool (a stem for a bounce), preFader?: bool (a freeze: the track before its fader, pan, sends and buses)}], startTick?, endTick?, bits?: 24|32, tailMs?, sampleRate?, revision?} -> job status; runs in the background, sends job events. Stems are taken before the master chain; a region plays the song before it (not written) and cuts it at endTick, tails ring out"},
   {"render.status", "{jobId} -> {jobId, state: queued|running|cancelling|succeeded|cancelled|failed, progress, ...}"},
   {"render.cancel", "{jobId}: stops the job and leaves the target file as it was (cancelRefused if the file is already being put in place)"},
   {"plugins.missing", "Plugin tracks/effects that are not loaded -> [{key, plugin, why}] (UI: 'Missing instrument')"},
@@ -386,6 +386,8 @@ json Server::execute(const std::string& cmd, const json& args) {
             {"pluginFailures", pluginFailures()}, {"nativeFailures", nativeFailures()}, {"failedUnits", failedUnits()}, {"failedPlugins", failedPlugins()},
             {"liveThreads", engine_->liveThreads()}, {"liveFallback", engine_->liveFallback()},
             {"liveStalls", s.liveStalls.load()}, {"liveStallBlocks", s.liveStallBlocks.load()},
+            {"liveMmcss", engine_->livePool() ? engine_->livePool()->registered() - engine_->livePool()->registrationFailures() : 0},
+            {"liveMmcssFailures", engine_->livePool() ? engine_->livePool()->registrationFailures() : 0},
             {"device", outputInfo_}, {"latency", latencyJson()}};
   }
   if (cmd == "project.get") return toJson(project_);
@@ -586,6 +588,7 @@ json Server::execute(const std::string& cmd, const json& args) {
           for (size_t i = 0; i < project_.tracks.size(); ++i) if (project_.tracks[i].id == id) out.track = (int)i;
           if (out.track < 0) throw std::runtime_error("No track '" + id + "' to export.");
           out.withoutMasterGain = f.value("withoutMasterGain", false);
+          out.preFader = f.value("preFader", false);
         }
         out.mono = f.value("mono", false);
         request.outputs.push_back(std::move(out));

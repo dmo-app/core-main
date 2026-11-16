@@ -16,6 +16,8 @@ time_range_tests    merge
 pattern_rack_tests  merge
 song_notes_tests    merge
 quick_tools_tests   merge
+freeze_tests        merge
+rt_tests            merge
 cli_version         merge
 cli_demo_render     merge
 cli_measure         merge

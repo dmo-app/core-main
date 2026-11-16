@@ -2,6 +2,7 @@
 // Steps are whole-document snapshots, limited by memory. Assets (audio) will be shared by reference
 // when they exist, never copied per step.
 #pragma once
+#include <vector>
 #include <cstddef>
 #include <deque>
 #include <string>
@@ -19,7 +20,10 @@ public:
   unsigned long long revision() const { return revision_; }
 
   // One finished change (a button, a typed value). A change that alters nothing adds no step.
+  // F1: a frozen track whose render the change made stale is unfrozen in the same step (unfreezeStale), so one
+  // Undo brings back both; unfrozenByLastChange() names them for the notice.
   void commit(const Document& next, const std::string& label);
+  const std::vector<std::string>& unfrozenByLastChange() const { return unfrozen_; }
   // A continuous change (dragging a slider): the document follows every update, the history gets
   // one step at the end, and only if something really changed.
   void beginGesture(const std::string& label);
@@ -58,6 +62,7 @@ private:
   void trim();
 
   Document current_;
+  std::vector<std::string> unfrozen_;
   std::deque<Step> undo_, redo_;
   bool gesture_ = false;
   Document gestureStart_;

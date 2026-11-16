@@ -178,7 +178,7 @@ void checkExportLevel(const ExportLevel& level, const RenderOutput& output) {
   const std::string name = slash == std::string::npos ? full : full.substr(slash + 1);
   if (level.broken)
     throw std::runtime_error("The export of " + name + " has broken samples (NaN or Inf). Nothing was written; an effect or an instrument is unstable.");
-  if (!output.withoutMasterGain && level.peak > 1.0f) {
+  if (!output.withoutMasterGain && !output.preFader && level.peak > 1.0f) {
     char db[32];
     std::snprintf(db, sizeof db, "%+.1f", 20 * std::log10((double)level.peak));
     throw std::runtime_error("The export of " + name + " goes over 0 dBFS (peak " + db + " dBFS), so it would clip. Nothing was written: lower the master, or end it with a limiter.");
@@ -288,7 +288,7 @@ void RenderJobs::run(std::shared_ptr<Job> job) {
     for (size_t f = 0; f < count && !job->cancel.load(); ++f) {
       job->file = (int)f;
       Graph graph(r.project, r.sampleRate, r.assets.get(), r.plugins, true);  // the job's own instruments and plugins; audio buffers are read-only
-      graph.setSolo(r.outputs[f].track, r.outputs[f].withoutMasterGain);
+      graph.setSolo(r.outputs[f].track, r.outputs[f].withoutMasterGain, r.outputs[f].preFader);
       // Audio the song needs and cannot be read (moved, deleted, unreadable since the song was loaded): the job
       // fails before any file is written, so an export with holes never replaces the previous one (audit of main
       // fa3b428, F01).
