@@ -453,4 +453,43 @@ json songToolCatalogJson() {
   return out;
 }
 
+RoleToolResult toolGate(Document& doc, const std::string& trackId, const RoleMap& map, int64_t start, int64_t end,
+                        const aifx::Settings& gate, const std::string& name) {
+  checkSpan(doc, start, end);
+  trackById(doc, trackId);
+  const RoleBinding* b = map.find("gate");
+  if (!b) throw DocumentError("gate", whyNot(map, "gate", "depth"));
+  // What to write: plain value per parameter (gate.hpp), then normalized.
+  std::vector<std::pair<int, double>> knobs;
+  for (int i = 0; i < aifx::kSteps; ++i) knobs.push_back({aifx::kStep1 + i, (double)gate.steps[(size_t)i]});
+  knobs.push_back({aifx::kRate, (double)gate.rate});
+  knobs.push_back({aifx::kDepth, gate.depth});
+  knobs.push_back({aifx::kLength, gate.length});
+  knobs.push_back({aifx::kSmooth, gate.smoothMs});
+  knobs.push_back({aifx::kDuck, gate.duck});
+  if (gate.duck > 0) {
+    knobs.push_back({aifx::kDuckLength, gate.duckLength});
+    knobs.push_back({aifx::kDuckCurve, gate.duckCurve});
+  }
+  knobs.push_back({aifx::kMix, gate.mix});
+  std::vector<std::pair<std::string, double>> writes;
+  for (const auto& [p, plain] : knobs) {
+    const std::string macro = aifx::params()[(size_t)p].id;
+    const double v = aifx::toNormalized(p, plain);
+    const double rest = roleRest(*b, "gate", macro);
+    // Depth and duck always (they turn the gate on); the rest only when they differ from where they sit.
+    if (p != aifx::kDepth && p != aifx::kDuck && std::abs(v - rest) < 1e-6) continue;
+    if (p == aifx::kDuck && gate.duck <= 0 && std::abs(v - rest) < 1e-6) continue;
+    if (!hasMacro(map, "gate", macro)) throw DocumentError("gate", whyNot(map, "gate", macro));
+    writes.push_back({macro, v});
+  }
+  RoleToolResult r;
+  r.roles.push_back("gate");
+  for (const auto& [macro, v] : writes) r.keys.push_back(writeRoleSweep(doc, trackId, map, "gate", macro, start, end, v, v));
+  r.sentence = "Gate" + (name.empty() ? std::string() : " " + name) + " (" + aifx::patternText(gate.steps) + " at " +
+               aifx::rateNames()[(size_t)std::clamp(gate.rate, 0, 3)] + (gate.duck > 0 ? ", duck " + percent(gate.duck) : std::string()) +
+               ") over " + bars(end - start);
+  return r;
+}
+
 }  // namespace core::doc

@@ -126,6 +126,11 @@ std::string makeClipUnique(Track& track, const std::string& clipId);
 // Cuts a clip at atTick (strictly inside it): the second part keeps the pattern's phase. Returns its id.
 std::string splitClip(Track& track, const std::string& clipId, int64_t atTick);
 void removeUnusedPatterns(Track& track);  // keeps at least one
+// The song ticks [from, to) of a note track become ONE clip with its own pattern, from its start (offset 0): the
+// clips that cross the edges are cut there, what played inside (repeats of a shorter pattern included) is copied
+// into the new pattern, and those clips go. Nothing outside [from, to) changes. An empty stretch gets an empty
+// pattern. For the AI's selection (Diogo 2026-11-16: changes stay in the selected bars). Returns the pattern's id.
+std::string zonePattern(Track& track, int64_t from, int64_t to);
 
 // ---- effects (M4): built-in inserts on a track or on the master (trackId "")
 struct EffectParamInfo {
