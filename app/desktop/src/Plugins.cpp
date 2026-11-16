@@ -1,4 +1,5 @@
 #include "Plugins.h"
+#include <atomic>
 #include <juce_events/juce_events.h>
 #include <filesystem>
 
@@ -170,9 +171,24 @@ juce::File PluginCatalog::rolesFile() {
   return juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory).getChildFile("Core").getChildFile("roles.json");
 }
 
-core::doc::RoleMap PluginCatalog::roles(std::string* problem) {
+juce::File PluginCatalog::aiRolesFile() { return rolesFile().getSiblingFile("roles-ai.json"); }
+
+namespace {
+std::atomic<bool> manualToolsMode{false};
+}
+void PluginCatalog::setManualTools(bool manual) { manualToolsMode = manual; }
+bool PluginCatalog::manualTools() { return manualToolsMode; }
+
+core::doc::RoleMap PluginCatalog::manualRoles(std::string* problem) {
   return core::doc::loadRoleMap(std::filesystem::path(rolesFile().getFullPathName().toWideCharPointer()), problem);
 }
+// The AI's map: its own file when there is one; else the roles of Settings > Roles that one of the AI's plugins plays
+// (the AI's plugin scan fills the empty roles there with them).
+core::doc::RoleMap PluginCatalog::aiRoles(std::string* problem) {
+  if (aiRolesFile().existsAsFile()) return core::doc::loadRoleMap(std::filesystem::path(aiRolesFile().getFullPathName().toWideCharPointer()), problem);
+  return core::doc::aiRoleSubset(manualRoles(problem));
+}
+core::doc::RoleMap PluginCatalog::roles(std::string* problem) { return manualTools() ? manualRoles(problem) : aiRoles(problem); }
 
 PluginCatalog::json PluginCatalog::qualifyFile(const juce::File& engine, const juce::File& plugin, juce::String* problem) {
   juce::String output;

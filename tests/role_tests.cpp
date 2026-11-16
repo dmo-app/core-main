@@ -210,7 +210,7 @@ CORE_TEST_MAIN
 TEST("pistas mudas: o papel adivinha-se pelo nome e pelo som antigo") {
   Track t;
   t.name = "Kick"; t.instrument.kind = "builtin"; t.instrument.name = "kick";
-  CHECK_EQ(guessInstrumentRole(t), std::string("drums"));
+  CHECK_EQ(guessInstrumentRole(t), std::string("kick"));  // o kick tem o seu proprio papel (Kick 3)
   t.name = "Hats 2"; CHECK_EQ(guessInstrumentRole(t), std::string("drums"));
   t.name = "Sub Bass"; t.instrument.name = "wave"; CHECK_EQ(guessInstrumentRole(t), std::string("bass"));
   t.name = "Big Pad"; CHECK_EQ(guessInstrumentRole(t), std::string("pad"));
@@ -393,4 +393,67 @@ TEST("cartoes das tools: a lista esta certa, sem S-Core, e acha-se por id e pelo
     const std::string card = t.id == "space" ? "rcore" : t.id == "fx" ? "fcore" : t.id == "pump" ? "pum" : t.id;
     CHECK(findCorePlugin(card) != nullptr);
   }
+}
+
+TEST("Tools em modo AI: só os papéis tocados pelos plugins da AI (Vital, sfizz, Dragonfly, Airwindows, gate)") {
+  RoleMap all;
+  all.roles["bass"].plugin = json{{"name", "Serum 2"}, {"id", "Serum 2"}};
+  all.roles["lead"].plugin = json{{"name", "Vital"}, {"id", "Vital"}};
+  all.roles["drums"].plugin = json{{"name", "sfizz"}, {"id", "sfizz"}};
+  all.roles["reverb"].plugin = json{{"name", "Dragonfly Room Reverb"}, {"id", "Dragonfly Room Reverb"}};
+  all.roles["delay"].plugin = json{{"name", "Airwindows Consolidated"}, {"id", "Airwindows Consolidated"}};
+  all.roles["sidechain"].plugin = json{{"name", "Core AI Gate"}, {"id", "Core AI Gate"}};
+  all.roles["filter"].plugin = json{{"name", "FabFilter Pro-Q 3"}, {"id", "FabFilter Pro-Q 3"}};
+  const RoleMap ai = aiRoleSubset(all);
+  CHECK_EQ(ai.roles.size(), (size_t)5);
+  CHECK(ai.find("bass") == nullptr);
+  CHECK(ai.find("filter") == nullptr);
+  CHECK(ai.find("lead") != nullptr && ai.find("drums") != nullptr && ai.find("reverb") != nullptr);
+  CHECK(!isAiPlugin(json()));
+  CHECK(aiRoleSubset(RoleMap{}).roles.empty());
+}
+
+// "kick 3 sonic academy" (Diogo 2026-11-16): o som do kick vem do seu plugin (Kick 3); o Core so poe as batidas.
+TEST("kick: papel proprio, preenchido pelo plugin com kick no nome, com a bateria como recurso") {
+  CHECK(findRole("kick") != nullptr && findRole("kick")->instrument);
+  RoleMap m;
+  std::vector<json> instruments = {fakePlugin("Serum2"), fakePlugin("Kick 3")};
+  CHECK(fillKickRole(m, instruments));
+  CHECK(m.find("kick") != nullptr);
+  CHECK_EQ(m.find("kick")->plugin.value("name", std::string()), std::string("Kick 3"));
+  CHECK(!fillKickRole(m, {fakePlugin("Kick 2")}));  // uma escolha feita nao se troca
+  CHECK_EQ(m.find("kick")->plugin.value("name", std::string()), std::string("Kick 3"));
+  CHECK(!isAiPlugin(m.find("kick")->plugin));        // pago: so no modo Manual
+  CHECK(aiRoleSubset(m).find("kick") == nullptr);
+
+  // Uma pista Kick muda: toca o Kick 3 quando ha; sem ele, o plugin da bateria.
+  Document d = newTemplateDocument();
+  std::string kickId;
+  for (auto& t : d.tracks)
+    if (playsPatterns(t) && kickId.empty()) { t.instrument = Instrument{}; t.instrument.kind = "builtin"; t.instrument.name = "kick"; t.name = "Kick"; kickId = t.id; }
+  Document d2 = d;
+  RoleMap drumsOnly;
+  drumsOnly.roles["drums"] = {fakePlugin("sfizz"), {}, {}};
+  giveSilentTracksRolePlugins(d2, drumsOnly, nullptr);
+  CHECK_EQ(trackById(d2, kickId).instrument.plugin.value("name", std::string()), std::string("sfizz"));
+  m.roles["drums"] = {fakePlugin("sfizz"), {}, {}};
+  giveSilentTracksRolePlugins(d, m, nullptr);
+  CHECK_EQ(trackById(d, kickId).instrument.plugin.value("name", std::string()), std::string("Kick 3"));
+  CHECK_EQ(findKickTrack(d), kickId);
+}
+
+// A lista do Diogo (16/11): os menus mostram so os plugins da lista dele e os da AI.
+TEST("plugins: so a lista do Diogo e os da AI entram nos menus") {
+  auto plug = [](const std::string& name, const std::string& vendor) {
+    return json{{"format", "vst3"}, {"id", name}, {"name", name}, {"vendor", vendor}, {"file", "C:/" + name + ".vst3"}};
+  };
+  CHECK(inManualPluginList(plug("Serum 2", "Xfer Records")));
+  CHECK(inManualPluginList(plug("Pro-Q 4", "FabFilter")));
+  CHECK(inManualPluginList(plug("Valhalla Supermassive", "Valhalla DSP, LLC")));
+  CHECK(inManualPluginList(plug("EchoBoy", "Soundtoys")));
+  CHECK(!inManualPluginList(plug("FilterFreak1", "Soundtoys")));  // so 5 dos 23 Soundtoys
+  CHECK(inManualPluginList(plug("Kick 3", "Sonic Academy")));
+  CHECK(inManualPluginList(plug("Vital", "Vital Audio")));        // da AI
+  CHECK(!inManualPluginList(plug("Some Random Synth", "Other")));
+  CHECK_EQ(manualPlugins({plug("Pro-L 2", "FabFilter"), plug("Junk", "X")}).size(), (size_t)1);
 }

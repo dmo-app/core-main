@@ -71,6 +71,20 @@ std::string addRoleTrack(Document& doc, const std::string& role, const RoleMap& 
 // The track plays the role's plugin (its notes stay). Throws as addRoleTrack.
 void setTrackRole(Document& doc, const std::string& trackId, const std::string& role, const RoleMap& map);
 
+// ---- the Tools device's AI mode (Diogo 2026-11-16: "no modo AI os tools usam os plugins de AI"): the roles of a map
+// that one of the AI's plugins plays (Vital, sfizz, Dragonfly, Airwindows, the Core AI gate), by the plugin's name.
+bool isAiPlugin(const json& plugin);
+RoleMap aiRoleSubset(const RoleMap& map);
+// Diogo's own list (2026-11-16, /mnt/project-files/plugins/lista-manual.md): the plugins Core offers in its menus
+// for manual use, plus the AI's (isAiPlugin). By name and maker, lower case: Serum 2, FabFilter, Valhalla, the five
+// Soundtoys (EchoBoy, Crystallizer, Decapitator, Little AlterBoy, MicroShift), Kick 3, kHs, Xfer 909... The rest of a
+// scan stays out of the menus ("hiperfocado e leve"), reachable under "Other plugins".
+bool inManualPluginList(const json& plugin);
+std::vector<json> manualPlugins(const std::vector<json>& all);  // those of `all` in the list, in their order
+// The kick role, when it has no plugin yet: the first instrument whose name says kick (Kick 3, Kick 2...). True when
+// the map changed. Never replaces a choice made in Settings > Roles.
+bool fillKickRole(RoleMap& map, const std::vector<json>& instruments);
+
 // ---- silent tracks (Diogo 2026-11-16, "não sai som"): a song or template from before 0.7.0 keeps its old Core
 // sounds ("builtin") or has none, and 0.7.0 plays neither. The instrument role a track plays, guessed from its old
 // sound and its name (kick, hats, snare, drums -> drums; bass; pad; pluck/arp; lead): "" when nothing fits.

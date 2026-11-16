@@ -486,6 +486,9 @@ std::string findKickTrack(const Document& doc) {
     if (t.instrument.kind == "builtin" && t.instrument.name == "kick") return t.id;
   for (const auto& t : doc.tracks)
     if (playsPatterns(t) && lower(t.name).find("kick") != std::string::npos) return t.id;
+  for (const auto& t : doc.tracks)  // a track that plays a kick plugin (Kick 3), whatever its name
+    if (playsPatterns(t) && t.instrument.kind == "plugin" && lower(t.instrument.plugin.value("name", std::string())).find("kick") != std::string::npos)
+      return t.id;
   return {};
 }
 

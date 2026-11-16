@@ -48,8 +48,18 @@ public:
   static json paramsOf(const juce::File& engine, const json& plugin, juce::String* problem);
   // %APPDATA%/Core/roles.json: the role map (roles.hpp), beside plugins.json.
   static juce::File rolesFile();
-  // The role map in that file (empty, with problem set, when it cannot be read).
+  // %APPDATA%/Core/roles-ai.json: the AI's own role map (its plugins: Vital, sfizz, Dragonfly, Airwindows, the gate).
+  static juce::File aiRolesFile();
+  // The Tools device's mode (Diogo 2026-11-16: "tools deve ter opção AI e manual"; "no modo AI os tools usam os
+  // plugins de AI"): AI (default) plays the roles with the AI's plugins (aiRolesFile), Manual with the ones chosen in
+  // Settings > Roles (rolesFile: Serum 2, his own...). Kept in the app's settings by the window.
+  static void setManualTools(bool manual);
+  static bool manualTools();
+  // The role map the tools use now: the AI's or the manual one, by the mode (empty, with problem set, when it
+  // cannot be read).
   static core::doc::RoleMap roles(std::string* problem = nullptr);
+  static core::doc::RoleMap manualRoles(std::string* problem = nullptr);  // Settings > Roles' own file
+  static core::doc::RoleMap aiRoles(std::string* problem = nullptr);
 
 private:
   void load();

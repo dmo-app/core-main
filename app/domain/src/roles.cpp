@@ -31,6 +31,8 @@ const std::vector<RoleInfo>& roleCatalog() {
       {"pad", "Pad", true, "Pads and atmospheres", {}},
       {"pluck", "Pluck", true, "Short plucked notes, arps", {}},
       {"drums", "Drums", true, "Kick, snare, hats: a drum plugin played by notes", {}},
+      // Diogo 2026-11-16: "kick 3 sonic academy". The kick's sound is its own plugin (Kick 3); Core only places the hits.
+      {"kick", "Kick", true, "The kick on its own plugin (Kick 3...). Core's patterns only place the hits; the sound is the plugin's", {}},
   };
   return roles;
 }
@@ -243,15 +245,18 @@ std::string guessInstrumentRole(const Track& t) {
     for (const char* w : words) if (name.find(w) != std::string::npos) return true;
     return false;
   };
-  // The name says the part first (a W-Core track called "Bass" is the bass); then the old sound.
-  if (has({"kick", "snare", "hat", "clap", "drum", "perc", "rim", "tom", "cymbal", "ride", "crash", "shaker", "beat"})) return "drums";
+  // The name says the part first (a W-Core track called "Bass" is the bass); then the old sound. A kick asks for the
+  // kick's own plugin (giveSilentTracksRolePlugins falls back to the drums' when there is none).
+  if (has({"kick"})) return "kick";
+  if (has({"snare", "hat", "clap", "drum", "perc", "rim", "tom", "cymbal", "ride", "crash", "shaker", "beat"})) return "drums";
   if (has({"bass", "sub", "808"})) return "bass";
   if (has({"pad", "atmo", "drone", "string", "chord"})) return "pad";
   if (has({"pluck", "arp"})) return "pluck";
   if (has({"lead", "melod", "synth", "keys", "piano", "hook"})) return "lead";
   if (t.instrument.kind == "builtin") {
     const std::string& n = t.instrument.name;
-    if (n == "kick" || n == "hats" || n == "snare" || n == "drums" || n == "sampler") return "drums";
+    if (n == "kick") return "kick";
+    if (n == "hats" || n == "snare" || n == "drums" || n == "sampler") return "drums";
     if (n == "wave") return "lead";
   }
   return "";
@@ -262,12 +267,70 @@ int giveSilentTracksRolePlugins(Document& doc, const RoleMap& map, std::vector<s
   std::vector<std::pair<std::string, std::string>> todo;  // track id, role: decided first, then changed
   for (const auto& t : doc.tracks) {
     if (t.instrument.kind != "builtin" && t.instrument.kind != "none") continue;
-    const std::string role = guessInstrumentRole(t);
+    std::string role = guessInstrumentRole(t);
+    if (role == "kick" && !map.find(role)) role = "drums";
     if (!role.empty() && map.find(role)) todo.emplace_back(t.id, role);
     else if (left) left->push_back(t.name);
   }
   for (const auto& [id, role] : todo) { setTrackRole(doc, id, role, map); ++changed; }
   return changed;
+}
+
+bool fillKickRole(RoleMap& map, const std::vector<json>& instruments) {
+  if (map.find("kick")) return false;
+  for (const auto& p : instruments) {
+    if (!p.is_object() || !p.contains("id")) continue;
+    std::string name = p.value("name", std::string());
+    for (auto& c : name) c = (char)std::tolower((unsigned char)c);
+    if (name.find("kick") == std::string::npos) continue;
+    RoleBinding b;
+    b.plugin = p;
+    map.roles["kick"] = b;
+    return true;
+  }
+  return false;
+}
+
+bool inManualPluginList(const json& plugin) {
+  if (!plugin.is_object()) return false;
+  if (isAiPlugin(plugin)) return true;
+  std::string name = plugin.value("name", std::string()) + " | " + plugin.value("vendor", std::string());
+  for (auto& c : name) c = (char)std::tolower((unsigned char)c);
+  // Soundtoys: only the five on the list (the other 18 are installed but stay out).
+  if (name.find("soundtoys") != std::string::npos) {
+    for (const char* p : {"echoboy", "crystallizer", "decapitator", "alterboy", "microshift"})
+      if (name.find(p) != std::string::npos) return true;
+    return false;
+  }
+  for (const char* p : {"serum", "fabfilter", "pro-q", "pro-r", "pro-c", "pro-l", "pro-mb", "pro-g", "pro-ds", "saturn", "volcano",
+                        "timeless", "twin 3", "simplon", "valhalla", "supermassive", "vintageverb", "echoboy", "crystallizer",
+                        "decapitator", "alterboy", "microshift", "devious", "bassfocus", "bass focus", "multipass", "infiltrator",
+                        "snap heap", "auto-tune", "harmony engine", "vocoder v", "khs", "kilohearts", "kick 3", "sonic academy",
+                        "909", "kick/bass", "kickbass"})
+    if (name.find(p) != std::string::npos) return true;
+  return false;
+}
+
+std::vector<json> manualPlugins(const std::vector<json>& all) {
+  std::vector<json> out;
+  for (const auto& p : all) if (inManualPluginList(p)) out.push_back(p);
+  return out;
+}
+
+bool isAiPlugin(const json& plugin) {
+  if (!plugin.is_object()) return false;
+  std::string name = plugin.value("name", std::string());
+  for (auto& c : name) c = (char)std::tolower((unsigned char)c);
+  for (const char* p : {"vital", "sfizz", "dragonfly", "airwindows", "core ai"})
+    if (name.find(p) != std::string::npos) return true;
+  return false;
+}
+
+RoleMap aiRoleSubset(const RoleMap& map) {
+  RoleMap out;
+  for (const auto& [role, b] : map.roles)
+    if (isAiPlugin(b.plugin)) out.roles[role] = b;
+  return out;
 }
 
 }  // namespace core::doc

@@ -10,6 +10,7 @@
 #include <atomic>
 #include <mutex>
 #include <set>
+#include "time_range.hpp"
 #include <juce_audio_devices/juce_audio_devices.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include "EngineSession.h"
@@ -20,6 +21,7 @@
 #include "InspectorPanel.h"
 #include "LibraryPanel.h"
 #include "PatternEditor.h"
+#include "MultiTrackEditor.h"
 #include "PatternsWindow.h"
 #include "PluginCards.h"
 #include "Plugins.h"
@@ -50,6 +52,7 @@ public:
   double chosenUiScale() const;  // the View > UI size setting (0 = Auto)
 
   void paint(juce::Graphics& g) override;
+  void paintMasterRow(juce::Graphics& g, juce::Rectangle<int> area);
   void resized() override;
   bool keyPressed(const juce::KeyPress& key) override;
   bool keyStateChanged(bool isKeyDown) override;  // releases the piano keys let go
@@ -239,7 +242,9 @@ private:
   void collectSampleAnalysis();
   juce::String templatesStamp_;
   bool templatesLoaded_ = false;
-  void showTrackMenu(const std::string& trackId);  // right click on a track
+  void showTrackMenu(const std::string& trackId);  // the track's own items (rename, duplicate, remove...)
+  void showMainMenu(const std::string& trackId, int64_t tick);  // right click: Tools, Instruments, Import, MIDI, Sample, Music
+  juce::PopupMenu legacyMenu(int index, const juce::String& name);  // the menus that were on the top bar, by their old place
   void showAddTrackMenu();
   // The Patterns window (P-Core's channel rack), a window of its own beside this one (Diogo, 2026-11-08). While it
   // plays a pattern, the engine gets that pattern alone, looped (doc::rackPlayDocument); stopping gives the song back.
@@ -325,7 +330,19 @@ private:
   void buildupTrack(int bars, bool roll, bool gap);  // a sampler track with a snare of the library, ending at the next section
   juce::Rectangle<int> timelineArea() const;
   juce::Rectangle<int> tracksArea() const;
-  int masterRow() const { return mixerOpen_ ? 30 : 64; }
+  int masterRow() const;
+  juce::Rectangle<int> masterArea() const;  // the master's row under the tracks (the CPU footer under the Mixer)
+  juce::Rectangle<int> tracksInner() const;  // where the rows go inside the tracks panel
+  // The tracks' height (Diogo 2026-11-16, compact layout): 0 Compact, 1 Normal, 2 Large; kept in the settings.
+  int trackSize_ = 1;
+  int trackRow() const;
+  void setTrackSize(int size);
+  // The panels on and off with one key each (Ctrl+1..4), and Focus (Ctrl+B): every panel away, then back as they were.
+  void toggleEditorCollapsed();
+  void toggleFocus();
+  struct PanelState { bool library = false, plugins = false, inspector = false, editorCollapsed = false; };
+  std::optional<PanelState> beforeFocus_;
+  juce::Rectangle<int> editorBar() const;  // the folded editor's bar (a click opens it)
   void paintCpuFooter(juce::Graphics& g, juce::Rectangle<int> r) const;
   int64_t tickAt(int x, int64_t snap, bool pastEnd = false) const;  // pastEnd: up to the room after the song's end
   double viewSpan() const;
@@ -380,7 +397,10 @@ private:
   juce::TextButton home_, play_, stop_, loop_, restart_, undo_, redo_, addTrack_;
   theme::BarSlider bpm_;     // drag to change, double-click to type
   theme::BarSlider listen_;  // the listening level (EngineSession::setListenLevel), saved in the user settings
-  juce::Label bpmLabel_, position_, status_, message_;
+  juce::Label bpmLabel_, position_, status_, message_, hint_;
+  // The hint line in the footer (2026-11-16, as on the reference): what the mouse does where it is, e.g.
+  // "DRAG time selection · SHIFT+DRAG rectangle". Set by the rows and the ruler on mouse move.
+  void setHint(const juce::String& text);
   // Minimise, maximise and close, at the top bar's right end (Windows draws no title bar for Core).
   class WindowButton;
   std::unique_ptr<WindowButton> minimise_, maximise_, close_;
@@ -400,7 +420,42 @@ private:
   std::unique_ptr<TimeBar> timeBar_;  // under the lanes when zoomed in: drag it along the song
   void updateTimeBar();
   juce::Component tracksHolder_;
+  // The master's row: the last row of the track list, right under the tracks and scrolling with them (as the reference).
+  struct PaintBox : juce::Component {
+    std::function<void(juce::Graphics&, juce::Rectangle<int>)> draw;
+    void paint(juce::Graphics& g) override { if (draw) draw(g, getLocalBounds()); }
+  };
+  PaintBox masterLane_;
+  // The sound of a pattern played by a plugin (the background render only knows Core's own instruments): its level,
+  // caught from the track's meter while the song plays, per 1/128 of the pattern, so the clips draw a wave too.
+  struct LiveWave {
+    uint64_t signature = 0;     // the pattern's notes and length when it was caught (a change starts again)
+    std::vector<float> peaks;   // per bin of kLiveWaveBin ticks; < 0: not heard yet
+    int lastBin = -1;
+  };
+  static constexpr int64_t kLiveWaveBin = 30;  // 1/128 note at 960 ppq
+  std::map<std::string, LiveWave> liveWaves_;  // trackId|patternId
+  void captureLiveWaves();
+  // Each track's stem over the song, rendered by the engine in the background with the plugins (as an export), so
+  // the clips draw the sound their plugins make (Diogo 2026-11-16: waveforms, as in Bitwig). The shown ones stay
+  // until newer ones are written (no flicker while editing).
+  struct Stems {
+    juce::File folder;                           // a temp folder of this window, removed when it closes
+    std::map<std::string, std::string> shown;    // trackId -> file
+    std::map<std::string, std::string> pending;  // the files of the render running now
+    int64_t renderedRevision = -1, pendingRevision = -1, seenRevision = -1;
+    double seenAt = 0, failedAt = 0;
+    std::map<std::string, float> loudest;        // file -> its loudest peak (each stem is drawn to the clip's height)
+  } stems_;
+  void updateStems();
+public:
+  std::shared_ptr<const Waveform> stemWave(const std::string& trackId);
+  float stemGain(const std::string& trackId);  // what brings the stem's loudest peak to the clip's height
+  const LiveWave* liveWave(const std::string& trackId, const doc::Pattern& pattern) const;
+  static uint64_t patternSignature(const doc::Pattern& pattern);
+private:
   PatternEditor editor_{*this};
+  MultiTrackEditor multi_{*this};  // the bottom panel: several tracks on the song's timeline
   std::unique_ptr<AudioEditor> audioEditor_;
   SCorePanel score_{*this};
   std::unique_ptr<MixerPanel> mixer_;  // the Mixer in the bottom panel (top bar: Mixer, Ctrl+M)
@@ -475,6 +530,26 @@ private:
   void pasteClips(int64_t at);    // the copies' first clip at `at`, the others at the same distances
   void cutClips();
   void duplicateClips();
+  // The time selection (Diogo 2026-11-16: "seleção, andar no timeline, copiar colar, quanto mais próximo do Bitwig"):
+  // a drag on an empty part of the lanes selects a piece of time on the tracks it crosses (Shift+drag: the rectangle of
+  // clips, as before). Ctrl+C / X / V / D and Delete act on it (doc::copyRange & co., time_range.hpp); Ctrl+Shift+Delete
+  // removes the time from the song, Ctrl+Shift+I inserts as much empty time; Ctrl+L loops it; Ctrl+9 zooms to it.
+  // UI state, never saved.
+  doc::TimeRange timeSel_;
+  bool timeSelecting_ = false;
+  int64_t timeAnchor_ = 0;
+  int timeAnchorRow_ = 0;
+  doc::RangeCopy rangeCopy_;
+  bool rangeCopyNewer_ = false;  // Ctrl+V pastes the piece of time (true) or the copied clips (false): the last copied
+  void startTimeSelection(const juce::MouseEvent& e, const std::string& trackId);
+  void dragTimeSelection(const juce::MouseEvent& e);
+  void endTimeSelection(const juce::MouseEvent& e);
+  void clearTimeSelection();
+  int64_t timeSnap() const;
+  bool timeSelectionKey(const juce::KeyPress& key);  // the keys that act on the time selection; true: used
+  void zoomToSelection();
+  bool rulerZooming_ = false;  // a drag up or down on the bar numbers zooms (sideways it moves along the song)
+  double zoomAnchor_ = 0, zoomLength_ = 0;
   std::vector<std::string> missing_;          // asset ids whose file is not in the project folder
   WaveformCache waves_{[this] { repaint(); }};  // the clip lanes and the audio editor
   PatternWaves patternWaves_{[this] { repaint(); }};  // what each pattern sounds like, drawn inside its clips
@@ -486,7 +561,7 @@ private:
   std::mutex liveMutex_;                                  // the MIDI thread reads these two
   std::string liveTrack_;
   std::vector<std::pair<std::string, int>> midiHeld_;     // notes a MIDI keyboard holds, oldest first
-  static constexpr int kTrackHead = 6 + 8 + 130 + 26 + 26 + 6 + 110 + 6 + 56 + 10;  // track header width
+  static constexpr int kTrackHead = 190;  // track header width: colour, name, FX, M, S (the volume a thin bar under the name)
 
   float master_[2] = {0, 0};
   std::map<std::string, std::pair<float, float>> meters_;

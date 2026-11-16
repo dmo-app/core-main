@@ -63,6 +63,25 @@ target_link_libraries(hunt_tests PRIVATE core_domain core_engine_lib core_previe
 target_compile_definitions(hunt_tests PRIVATE CORE_TEMPLATES_DIR="${CMAKE_SOURCE_DIR}/templates" CORE_LANG_DIR="${CMAKE_SOURCE_DIR}/lang")
 add_test(NAME hunt_tests COMMAND hunt_tests)
 
+# The arrangement's time selection (2026-11-16): copy, clear, paste and duplicate a piece of time on several tracks.
+add_executable(time_range_tests time_range_tests.cpp)
+target_include_directories(time_range_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(time_range_tests PRIVATE core_domain core_engine_lib)
+add_test(NAME time_range_tests COMMAND time_range_tests)
+add_executable(pattern_rack_tests pattern_rack_tests.cpp)
+target_include_directories(pattern_rack_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pattern_rack_tests PRIVATE core_domain core_engine_lib)
+add_test(NAME pattern_rack_tests COMMAND pattern_rack_tests)
+
+add_executable(song_notes_tests song_notes_tests.cpp)
+target_include_directories(song_notes_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(song_notes_tests PRIVATE core_domain core_engine_lib)
+add_test(NAME song_notes_tests COMMAND song_notes_tests)
+add_executable(track_waves_tests track_waves_tests.cpp)
+target_include_directories(track_waves_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(track_waves_tests PRIVATE core_domain core_engine_lib)
+add_test(NAME track_waves_tests COMMAND track_waves_tests)
+
 # Ronda 3 do audit (R3-A a R3-G).
 add_executable(round3_tests round3_tests.cpp)
 target_include_directories(round3_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
@@ -81,7 +100,7 @@ add_test(NAME cli_measure COMMAND ${CMAKE_COMMAND} -DENGINE=$<TARGET_FILE:core-e
 add_test(NAME cli_unicode COMMAND ${CMAKE_COMMAND} -DENGINE=$<TARGET_FILE:core-engine> -DWORK=${CMAKE_CURRENT_BINARY_DIR}/cli
                                   -P ${CMAKE_CURRENT_SOURCE_DIR}/cli_unicode.cmake)
 
-set_tests_properties(engine_tests domain_tests role_tests midi_tests bug_tests audit_tests audit2_tests hunt_tests round3_tests bitwig_tests cli_version cli_demo_render cli_measure cli_unicode
+set_tests_properties(engine_tests domain_tests role_tests midi_tests bug_tests audit_tests audit2_tests hunt_tests round3_tests bitwig_tests time_range_tests pattern_rack_tests song_notes_tests track_waves_tests cli_version cli_demo_render cli_measure cli_unicode
                      PROPERTIES LABELS merge TIMEOUT 300)
 
 # The app's own end-to-end test (play, undo, save/reopen, export... on the null device, with its test plugins).

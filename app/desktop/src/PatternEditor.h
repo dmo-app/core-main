@@ -74,6 +74,9 @@ public:
   // when some are selected) and is one undo step; random choices come from a seed that moves on at every click.
   // The bars shown: [start, end) in pattern ticks, whole bars, inside the pattern.
   std::pair<int64_t, int64_t> visibleBars() const;
+  // The bottom panel's Edit ▾ (MultiTrackEditor): this editor's note tools over pattern ticks [from, to), the menu
+  // under `target` (this editor itself stays hidden).
+  void showToolsFor(int64_t from, int64_t to, juce::Component& target);
   void normalize(const doc::NormalizeOptions& options, const juce::String& label);
   void density(const std::string& mode, double amount);  // percent / count / perBeat; how: densityHow
   std::string densityHow = "fill";                        // fill | ghost | ratchet | octave
@@ -194,6 +197,7 @@ private:
   juce::Label toast_;
   int toastStamp_ = 0;
   void showTools();
+  juce::Component* menuTarget_ = nullptr;  // where showTools opens its menu (null: the Edit button)
   std::set<std::string> toolIds() const;  // the selected notes among the bars shown ({} = all of them)
   bool buildRoll_ = true, buildGap_ = true;
   // FOLLOW: late (+) or early (-) and how loose, in ticks, for the next follow (Tools > FOLLOW); a new seed each time.

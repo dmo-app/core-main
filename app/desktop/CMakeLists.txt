@@ -15,7 +15,7 @@ if(WIN32)
   set_source_files_properties(${core_juce_code}/CoreApp_resources.rc PROPERTIES OBJECT_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/resources/core-icon.png;${CMAKE_CURRENT_SOURCE_DIR}/resources/core-icon-small.png;${core_juce_code}/icon.ico")
 endif()
-target_sources(CoreApp PRIVATE src/Main.cpp src/MainComponent.cpp src/EngineSession.cpp src/PatternEditor.cpp src/Waveforms.cpp src/Stretch.cpp src/Plugins.cpp src/Autosave.cpp src/Diagnostics.cpp src/Theme.cpp src/LibraryPanel.cpp src/InspectorPanel.cpp src/Settings.cpp src/Keymap.cpp src/Mixer.cpp src/SCorePanel.cpp src/ChoiceDialog.cpp src/BuildupPanel.cpp src/PatternsWindow.cpp src/ToolDock.cpp src/ProposalsPanel.cpp src/Language.cpp)
+target_sources(CoreApp PRIVATE src/Main.cpp src/MainComponent.cpp src/EngineSession.cpp src/PatternEditor.cpp src/MultiTrackEditor.cpp src/Waveforms.cpp src/Stretch.cpp src/Plugins.cpp src/Autosave.cpp src/Diagnostics.cpp src/Theme.cpp src/LibraryPanel.cpp src/InspectorPanel.cpp src/Settings.cpp src/Keymap.cpp src/Mixer.cpp src/SCorePanel.cpp src/ChoiceDialog.cpp src/BuildupPanel.cpp src/PatternsWindow.cpp src/ToolDock.cpp src/ProposalsPanel.cpp src/Language.cpp)
 target_sources(CoreApp PRIVATE src/GlobalKeys.cpp)  # Space plays / stops in every window
 target_compile_definitions(CoreApp PRIVATE
   JUCE_WEB_BROWSER=0

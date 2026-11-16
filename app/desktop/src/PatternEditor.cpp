@@ -329,7 +329,7 @@ namespace {
 std::string drumRole(const doc::Track& t) {
   for (const char* r : {"kick", "hats", "snare", "drums"})
     if (t.instrument.name == r) return r;
-  std::string words = t.id + " " + t.name;
+  std::string words = t.id + " " + t.name + " " + (t.instrument.kind == "plugin" ? t.instrument.plugin.value("name", std::string()) : std::string());
   for (auto& c : words) c = (char)std::tolower((unsigned char)c);
   if (words.find("kick") != std::string::npos) return "kick";
   if (words.find("hat") != std::string::npos) return "hats";
@@ -623,10 +623,13 @@ juce::Rectangle<int> PatternEditor::velocityLane() const {
 }
 
 // The part of the pattern shown (zoom): all of it, or viewLength_ ticks from viewStart_ (Ctrl+wheel).
+// A short pattern is not stretched over the whole width (a 1-beat hat had 4 giant steps): the view shows at least a
+// bar (drums: up to the bars that fit as pads), and the time after the pattern's end is shaded.
 double PatternEditor::shownLength() const {
   const double len = currentTrack() ? (double)pattern()->lengthTicks : 1.0;
-  if (viewLength_ > 0) return std::min(viewLength_, len);
-  return drums() ? std::min(len, drumFitLength()) : len;
+  const double bar = 4.0 * doc::kPpq;
+  if (viewLength_ > 0) return std::min(viewLength_, std::max(len, bar));
+  return drums() ? std::max(bar, std::min(len, drumFitLength())) : std::max(len, bar);
 }
 
 double PatternEditor::shownStart() const {
@@ -827,6 +830,13 @@ void PatternEditor::paint(juce::Graphics& g) {
     g.setColour(bar ? kBarLine : beat ? kGridLine.brighter(0.2f) : kGridLine);
     g.drawVerticalLine(xOfTick(tick), (float)area.getY(), (float)area.getBottom());
   }
+  // After the pattern's end (a pattern shorter than the view): shaded, it repeats from its start.
+  if (const int endX = xOfTick(pattern()->lengthTicks); endX < area.getRight()) {
+    g.setColour(theme::kBackground.withAlpha(0.6f));
+    g.fillRect(juce::Rectangle<int>::leftTopRightBottom(endX, area.getY(), area.getRight(), area.getBottom()));
+    g.setColour(kBarLine);
+    g.fillRect(endX, area.getY(), 2, area.getHeight());
+  }
   // Drums: how long each open hat rings, a thin line to the next hat that cuts it (the hats are one choke group;
   // the ride and the shaker are not in it). Without a next hat: to the end of the pattern.
   if (drums()) {
@@ -1014,6 +1024,16 @@ void PatternEditor::mouseDown(const juce::MouseEvent& e) {
     drag_ = Drag::Erase;
     host_.startGesture(u8("Erase notes"));
     eraseAt(e.getPosition());
+    return;
+  }
+  // Shift+drag on an empty place: the rectangle that selects notes, with any tool (as in the arrangement, 2026-11-16).
+  if (e.mods.isShiftDown() && !hit) {
+    drag_ = Drag::Marquee;
+    marqueeStart_ = e.getPosition();
+    marqueeBase_ = {};
+    selected_.clear();
+    marquee_ = {};
+    repaint();
     return;
   }
   if (tool_ == Tool::Select && (!hit || drums())) {
@@ -1275,6 +1295,16 @@ std::pair<int64_t, int64_t> PatternEditor::visibleBars() const {
 }
 
 std::set<std::string> PatternEditor::toolIds() const { return selected_; }
+
+void PatternEditor::showToolsFor(int64_t from, int64_t to, juce::Component& target) {
+  if (!currentTrack()) return;
+  selected_.clear();
+  viewStart_ = (double)std::max<int64_t>(0, from);
+  viewLength_ = (double)std::max<int64_t>(4 * doc::kPpq, to - from);
+  menuTarget_ = &target;
+  showTools();
+  menuTarget_ = nullptr;
+}
 
 void PatternEditor::normalize(const doc::NormalizeOptions& options, const juce::String& label) {
   if (!currentTrack()) return;
@@ -1674,7 +1704,7 @@ void PatternEditor::showTools() {
   m.addSeparator();
   m.addItem(kPCore, u8("Patterns window…"));
   m.addItem(juce::PopupMenu::Item(u8("Save the bars shown as a pattern…")).setID(kSave).setEnabled(onSavePattern != nullptr && to > from));
-  m.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&edit_), [safe = juce::Component::SafePointer<PatternEditor>(this), from, to, tempo](int r) {
+  m.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(menuTarget_ ? menuTarget_ : &edit_), [safe = juce::Component::SafePointer<PatternEditor>(this), from, to, tempo](int r) {
     if (!safe || r <= 0) return;
     auto& self = *safe;
     if (r == kPCore) { if (self.onOpenPatterns) self.onOpenPatterns(); return; }
@@ -2071,7 +2101,8 @@ void PatternEditor::eraseAt(juce::Point<int> p) {
 void PatternEditor::zoom(double factor, double at) {
   if (!currentTrack()) return;
   const double len = (double)pattern()->lengthTicks;
-  const double length = std::clamp(shownLength() * factor, std::min(len, (double)doc::kPpq), len);
+  const double most = std::max(len, 4.0 * doc::kPpq);  // a short pattern: out to a whole bar
+  const double length = std::clamp(shownLength() * factor, std::min(len, (double)doc::kPpq), most);
   viewStart_ = at - (at - shownStart()) * length / shownLength();
   viewLength_ = length;  // the whole pattern too (drums would otherwise go back to the first view)
   placePaging();
