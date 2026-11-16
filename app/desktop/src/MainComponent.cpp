@@ -368,19 +368,50 @@ public:
     const auto [a, b] = doc::stemSeconds(owner_.history_.current(), (double)c.startTick, (double)(c.startTick + c.lengthTicks));
     return w.peakBetween(a, b) > 0.001f;
   }
+  // Drawn as a smooth outline (anti-aliased, mirrored around the middle), its RMS body inside, as Bitwig draws audio;
+  // zoomed in further than the overview's steps, the values between two steps are interpolated (no stairs).
   void paintStemWave(juce::Graphics& g, const doc::Clip& c, const Waveform& w, juce::Rectangle<int> box, int x0, int x1) {
     const auto area = box.reduced(0, 3);
     const auto visible = area.getIntersection(g.getClipBounds());
     if (visible.isEmpty() || x1 <= x0 || w.peaks.empty()) return;
     const doc::Document& d = owner_.history_.current();
     const double ticksPerPixel = (double)c.lengthTicks / (double)(x1 - x0);
-    const juce::Colour colour = colour_.interpolatedWith(kText, 0.3f).withAlpha(track_.mix.mute ? 0.35f : 0.82f);
+    const juce::Colour colour = colour_.interpolatedWith(kText, 0.3f).withAlpha(track_.mix.mute ? 0.35f : 0.9f);
     const float mid = (float)area.getCentreY(), half = area.getHeight() / 2.0f - 1.0f, gain = owner_.stemGain(id_);
-    for (int x = visible.getX(); x < visible.getRight(); ++x) {
-      const double from = (double)c.startTick + (x - x0) * ticksPerPixel;
+    const double perSecond = w.sampleRate / w.framesPerPeak;
+    auto smooth = [&](const std::vector<float>& v, double from, double to) {
+      const double a = from * perSecond, b = to * perSecond;
+      if (v.empty()) return 0.0f;
+      if (b - a >= 1.0) {  // a pixel over several steps: the loudest of them
+        float m = 0;
+        for (int64_t i = std::max<int64_t>(0, (int64_t)a); i <= std::min<int64_t>((int64_t)v.size() - 1, (int64_t)b); ++i) m = std::max(m, v[(size_t)i]);
+        return m;
+      }
+      const double at = std::clamp((a + b) / 2 - 0.5, 0.0, (double)v.size() - 1);
+      const size_t i = (size_t)at, j = std::min(v.size() - 1, i + 1);
+      const float t = (float)(at - (double)i);
+      return v[i] + (v[j] - v[i]) * t;
+    };
+    const int n = visible.getWidth() + 1;
+    std::vector<float> peak((size_t)n), body((size_t)n);
+    for (int k = 0; k < n; ++k) {
+      const double from = (double)c.startTick + (visible.getX() + k - x0) * ticksPerPixel;
       const auto [a, b] = doc::stemSeconds(d, from, from + ticksPerPixel);
-      drawWaveColumn(g, w, (float)x, mid, half, a, b, colour, gain);
+      peak[(size_t)k] = std::min(1.0f, smooth(w.peaks, a, b) * gain) * half;
+      body[(size_t)k] = std::min(peak[(size_t)k], smooth(w.rms, a, b) * 1.41f * gain * half);
     }
+    auto outline = [&](const std::vector<float>& h) {
+      juce::Path path;
+      path.startNewSubPath((float)visible.getX(), mid - std::max(0.5f, h[0]));
+      for (int k = 1; k < n; ++k) path.lineTo((float)(visible.getX() + k), mid - std::max(0.5f, h[(size_t)k]));
+      for (int k = n - 1; k >= 0; --k) path.lineTo((float)(visible.getX() + k), mid + std::max(0.5f, h[(size_t)k]));
+      path.closeSubPath();
+      return path;
+    };
+    g.setColour(colour.withMultipliedAlpha(0.5f));
+    g.fillPath(outline(peak));
+    g.setColour(colour);
+    g.fillPath(outline(body));
   }
   void paintClipWave(juce::Graphics& g, const doc::Clip& c, const doc::Pattern& p, const Waveform& w, juce::Rectangle<int> box, int x0, int x1) {
     const auto area = box.reduced(0, 3);
