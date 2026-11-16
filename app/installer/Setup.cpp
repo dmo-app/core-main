@@ -158,6 +158,31 @@ bool removeInstalledAppFiles(const juce::File& folder) {
   return ok;
 }
 
+// The AI's Vital presets (presets/vital in the package) go where Vital's own preset browser finds them:
+// <Vital data folder>\User\Presets\Core AI. The data folder is Vital.config's "data_directory" when Vital has one,
+// else Documents\Vital (Vital's default). Only that "Core AI" folder is written; a file there is replaced by the
+// newer one. Never fatal: Core works without it (the AI loads the presets from the app folder).
+juce::File vitalPresetsFolder() {
+  juce::File data = juce::File::getSpecialLocation(juce::File::userDocumentsDirectory).getChildFile("Vital");
+  const juce::File config = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory).getChildFile("vital").getChildFile("Vital.config");
+  if (config.existsAsFile()) {
+    const juce::var j = juce::JSON::parse(config.loadFileAsString());
+    const juce::String dir = j.getProperty("data_directory", "").toString();
+    if (dir.isNotEmpty() && juce::File::isAbsolutePath(dir)) data = juce::File(dir);
+  }
+  return data.getChildFile("User").getChildFile("Presets").getChildFile("Core AI");
+}
+
+juce::String installVitalPresets(const juce::File& app) {
+  const auto files = app.getChildFile("presets").getChildFile("vital").getChildFile("presets").findChildFiles(juce::File::findFiles, false, "*.vital");
+  if (files.isEmpty()) return {};
+  const juce::File to = vitalPresetsFolder();
+  if (!to.createDirectory()) return "Cannot create " + to.getFullPathName();
+  int failed = 0;
+  for (const auto& f : files) if (!f.copyFileTo(to.getChildFile(f.getFileName()))) ++failed;
+  return failed ? juce::String(failed) + " Vital presets could not be copied to " + to.getFullPathName() : juce::String();
+}
+
 // Unpacks this program's package into app-<version> (a .part folder first, renamed when complete), makes
 // it the current version and keeps the one before it for going back. Older versions are removed.
 juce::String install(const juce::File& folder, bool withShortcuts, bool desktop) {
@@ -188,6 +213,7 @@ juce::String install(const juce::File& folder, bool withShortcuts, bool desktop)
   const juce::File self = juce::File::getSpecialLocation(juce::File::currentExecutableFile);
   if (self != folder.getChildFile("Uninstall.exe")) self.copyFileTo(folder.getChildFile("Uninstall.exe"));
   if (withShortcuts) integrate(folder, kVersion, desktop);
+  if (const juce::String p = installVitalPresets(target); p.isNotEmpty()) std::fputs((p + "\n").toRawUTF8(), stderr);
   return {};
 }
 
