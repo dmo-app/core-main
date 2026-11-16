@@ -298,4 +298,17 @@ TEST("caca 2, seccao 4: um ppq que nao e 960 tem uma mensagem que se entende") {
   CHECK(message.find("between") == std::string::npos);
 }
 
+TEST("freeze, T25: Save as sample de um freeze de 10 ms so tem o trecho, como o playback") {
+  // O ficheiro que "Save as sample" processa: o trecho (0,01 s) e mais 0,1 s (clipSourceSeconds), marcado a 1 e 2.
+  const double sr = 48000;
+  const int64_t span = 480, have = (int64_t)std::llround(core::sampling::clipSourceSeconds(1.0, 0, 0.010) * sr);
+  std::vector<std::vector<float>> file(2, std::vector<float>((size_t)have));
+  for (int64_t i = 0; i < have; ++i) { file[0][(size_t)i] = i < span ? 0.0f : 1.0f; file[1][(size_t)i] = i < span ? 0.0f : 2.0f; }
+  const auto out = core::sampling::processClip(file, sr, (int64_t)sr, 0, 0.010);
+  int64_t firstOutside = -1;
+  for (int64_t i = 0; i < (int64_t)sr && firstOutside < 0; ++i)
+    if (out[0][(size_t)i] != 0 || out[1][(size_t)i] != 0) firstOutside = i;
+  CHECK_EQ(firstOutside, (int64_t)-1);
+}
+
 CORE_TEST_MAIN
