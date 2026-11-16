@@ -102,7 +102,7 @@ TEST("hitech-plugins: o template vai com a app, listado, com o MIDI do hitech-re
       for (auto& p : tr.patterns) for (auto& n : p.notes) if (auto k = g->second.find(n.pitch); k != g->second.end()) n.pitch = k->second;
   CHECK(midiOf(t.document) == midiOf(want));
   // Os plugins do scan do PC do Diogo (core-engine scan, 16/11), pela lista dele.
-  const std::map<std::string, std::string> plays = {{"kick", "Kick 3"},  {"accents", "Kick 3"}, {"impact", "Kick 3"},
+  const std::map<std::string, std::string> plays = {{"kick", "sfizz"},   {"accents", "sfizz"},  {"impact", "sfizz"},
                                                     {"bass", "Serum 2"}, {"lead", "Serum 2"},   {"fm", "Serum 2"},
                                                     {"arp", "Serum 2"},  {"hats", "sfizz"},     {"open-hats", "sfizz"},
                                                     {"perc", "sfizz"},   {"crash", "sfizz"}};

@@ -1,5 +1,5 @@
 {
-  "description": "The MIDI of 'Hi-tech 190 (from Wake Up and Remember)' with its old sounds and effects reset: kick, KBBB bass in A, hats, percussion, crashes, lead, FM answer and arp over 296 bars at 190 BPM (intro 8, breaks of 8 and 16). Kick, Accents, Impacts: Kick 3. Bass, Lead, FM answer, Arp: Serum 2. Space and Huge buses: Pro-R 2; Echo bus: Timeless 3 (100% wet). Master: Pro-Q 4, Pro-L 2. Hats, Percussion and Crash: sfizz with the FreePats GM kit (crash on 49, percussion on claves 75 and cabasa 69). Choose the presets, then save it as your own template.",
+  "description": "The MIDI of 'Hi-tech 190 (from Wake Up and Remember)' with its old sounds and effects reset: kick, KBBB bass in A, hats, percussion, crashes, lead, FM answer and arp over 296 bars at 190 BPM (intro 8, breaks of 8 and 16). Kick, Accents, Impacts: sfizz (FreePats GM, note 36) until Kick 3 is activated. Bass, Lead, FM answer, Arp: Serum 2. Space and Huge buses: Pro-R 2; Echo bus: Timeless 3 (100% wet). Master: Pro-Q 4, Pro-L 2. Hats, Percussion and Crash: sfizz with the FreePats GM kit (crash on 49, percussion on claves 75 and cabasa 69). Choose the presets, then save it as your own template.",
   "document": {
     "format": "core-document",
     "lengthTicks": 1136640,
@@ -358,12 +358,13 @@
         "instrument": {
           "kind": "plugin",
           "plugin": {
-            "file": "C:\\Program Files\\Common Files\\VST3\\Kick 3.vst3",
+            "file": "C:\\Users\\vk_do\\AppData\\Local\\Programs\\Common\\VST3\\sfizz.vst3\\Contents\\x86_64-win\\sfizz.vst3",
             "format": "vst3",
-            "id": "VST3-Kick 3-c1a56da5-bc0347ba",
-            "name": "Kick 3",
-            "vendor": "Sonic Academy",
-            "version": "1.1.6"
+            "id": "VST3-sfizz-e806b3a6-5da1643a",
+            "name": "sfizz",
+            "state": "VkMyISIBAAA8P3htbCB2ZXJzaW9uPSIxLjAiIGVuY29kaW5nPSJVVEYtOCI/PiA8VlNUM1BsdWdpblN0YXRlPjxJQ29tcG9uZW50PjE0MC4uLi4uLi4uLi4uLmIuLi4uQ295S1VNV1l4TTJLMXMxV2o4MUtEODFYMDBWWXRRMmJ1TGtRWjhoUXhVVllQRUZjeUF4VDQ0RmNuVTFib29XWXhBQlRrSTJYME0yYm84bGF1TFVkdFFHWmtNV1o1VWxiUFVsYmlVMmJ5azFhdDB4VEZvVUt4LmlMeC55TXdmeUtGSVdZa0FVWHpNR0hHMGpLeVlsZC4uLi4uLi5QLi4uLi4uLi4uLi5ILi4uPC9JQ29tcG9uZW50PjwvVlNUM1BsdWdpblN0YXRlPgA=",
+            "vendor": "SFZTools",
+            "version": "1.2.3"
           }
         },
         "mix": {
@@ -3844,12 +3845,13 @@
         "instrument": {
           "kind": "plugin",
           "plugin": {
-            "file": "C:\\Program Files\\Common Files\\VST3\\Kick 3.vst3",
+            "file": "C:\\Users\\vk_do\\AppData\\Local\\Programs\\Common\\VST3\\sfizz.vst3\\Contents\\x86_64-win\\sfizz.vst3",
             "format": "vst3",
-            "id": "VST3-Kick 3-c1a56da5-bc0347ba",
-            "name": "Kick 3",
-            "vendor": "Sonic Academy",
-            "version": "1.1.6"
+            "id": "VST3-sfizz-e806b3a6-5da1643a",
+            "name": "sfizz",
+            "state": "VkMyISIBAAA8P3htbCB2ZXJzaW9uPSIxLjAiIGVuY29kaW5nPSJVVEYtOCI/PiA8VlNUM1BsdWdpblN0YXRlPjxJQ29tcG9uZW50PjE0MC4uLi4uLi4uLi4uLmIuLi4uQ295S1VNV1l4TTJLMXMxV2o4MUtEODFYMDBWWXRRMmJ1TGtRWjhoUXhVVllQRUZjeUF4VDQ0RmNuVTFib29XWXhBQlRrSTJYME0yYm84bGF1TFVkdFFHWmtNV1o1VWxiUFVsYmlVMmJ5azFhdDB4VEZvVUt4LmlMeC55TXdmeUtGSVdZa0FVWHpNR0hHMGpLeVlsZC4uLi4uLi5QLi4uLi4uLi4uLi5ILi4uPC9JQ29tcG9uZW50PjwvVlNUM1BsdWdpblN0YXRlPgA=",
+            "vendor": "SFZTools",
+            "version": "1.2.3"
           }
         },
         "mix": {
@@ -3952,12 +3954,13 @@
         "instrument": {
           "kind": "plugin",
           "plugin": {
-            "file": "C:\\Program Files\\Common Files\\VST3\\Kick 3.vst3",
+            "file": "C:\\Users\\vk_do\\AppData\\Local\\Programs\\Common\\VST3\\sfizz.vst3\\Contents\\x86_64-win\\sfizz.vst3",
             "format": "vst3",
-            "id": "VST3-Kick 3-c1a56da5-bc0347ba",
-            "name": "Kick 3",
-            "vendor": "Sonic Academy",
-            "version": "1.1.6"
+            "id": "VST3-sfizz-e806b3a6-5da1643a",
+            "name": "sfizz",
+            "state": "VkMyISIBAAA8P3htbCB2ZXJzaW9uPSIxLjAiIGVuY29kaW5nPSJVVEYtOCI/PiA8VlNUM1BsdWdpblN0YXRlPjxJQ29tcG9uZW50PjE0MC4uLi4uLi4uLi4uLmIuLi4uQ295S1VNV1l4TTJLMXMxV2o4MUtEODFYMDBWWXRRMmJ1TGtRWjhoUXhVVllQRUZjeUF4VDQ0RmNuVTFib29XWXhBQlRrSTJYME0yYm84bGF1TFVkdFFHWmtNV1o1VWxiUFVsYmlVMmJ5azFhdDB4VEZvVUt4LmlMeC55TXdmeUtGSVdZa0FVWHpNR0hHMGpLeVlsZC4uLi4uLi5QLi4uLi4uLi4uLi5ILi4uPC9JQ29tcG9uZW50PjwvVlNUM1BsdWdpblN0YXRlPgA=",
+            "vendor": "SFZTools",
+            "version": "1.2.3"
           }
         },
         "mix": {
@@ -7383,7 +7386,7 @@
     },
     "ui": {}
   },
-  "ficha": "# Hi-tech 190 (plugins)\n\nFicha do template `hitech-plugins` (versão 1). Estilo: Hi-tech.\n\nThe MIDI of 'Hi-tech 190 (from Wake Up and Remember)' with its old sounds and effects reset: kick, KBBB bass in A, hats, percussion, crashes, lead, FM answer and arp over 296 bars at 190 BPM (intro 8, breaks of 8 and 16). Kick, Accents, Impacts: Kick 3. Bass, Lead, FM answer, Arp: Serum 2. Space and Huge buses: Pro-R 2; Echo bus: Timeless 3 (100% wet). Master: Pro-Q 4, Pro-L 2. Hats, Percussion and Crash: sfizz with the FreePats GM kit (crash on 49, percussion on claves 75 and cabasa 69). Choose the presets, then save it as your own template.\n\nFeito a partir de \"hitech-ref\", do tick 0 ao 0 (compassos 1.1 a 1.1).\n\n## Tempo e forma\n\n- BPM: 190\n- Duração: 296 compassos (1136640 ticks, 960 por semínima)\n\n| Secção | Começa | Duração |\n|---|---|---|\n| Intro | 1.1 | 8 compassos |\n| Groove | 9.1 | 64 compassos |\n| Break | 73.1 | 8 compassos |\n| Development | 81.1 | 96 compassos |\n| Break | 177.1 | 16 compassos |\n| Main | 193.1 | 96 compassos |\n| Outro | 289.1 | 8 compassos |\n\n## Master\n\n- Ganho: 0 dB\n\nEfeitos (pela ordem da cadeia):\n\n- **** (``, id `fx1`)\n\n- **** (``, id `fx2`)\n\nAutomação:\n\n| Parâmetro | Pontos | Mín. | Máx. | Começa | Acaba |\n|---|---|---|---|---|---|\n| `gainDb` | 2 | -34 | 0 | 0 em 289.1 | -34 em 296.4 |\n\n## Pistas\n\n### Kick (`kick`)\n\n- Instrumento: plugin (`plugin`, versão 1)\n\n- Mistura: ganho 0 dB, pan 0\n- Notas: 1012, de C2 a C2, em 41 clips e 2 padrões\n\n### Bass (`bass`)\n\n- Instrumento: plugin (`plugin`, versão 1)\n\n- Mistura: ganho 0 dB, pan 0\n- Notas: 2976, de A1 a A2, em 40 clips e 3 padrões\n\n### Closed hats (`hats`)\n\n- Instrumento: plugin (`plugin`, versão 1)\n\n- Mistura: ganho -4 dB, pan 0.12\n- Envio para `space`: -51.6 dB\n- Notas: 4128, de F#2 a F#2, em 36 clips e 2 padrões\n\n### Open hats (`open-hats`)\n\n- Instrumento: plugin (`plugin`, versão 1)\n\n- Mistura: ganho 0 dB, pan -0.12\n- Envio para `space`: -49.6 dB\n- Notas: 640, de A#2 a A#2, em 6 clips e 1 padrões\n\n### Percussion (`perc`)\n\n- Instrumento: plugin (`plugin`, versão 1)\n\n- Mistura: ganho 0 dB, pan -0.3\n- Envio para `space`: -45.6 dB\n- Envio para `echo`: -37 dB\n- Notas: 684, de A4 a D#5, em 76 clips e 2 padrões\n\n### Accents (`accents`)\n\n- Instrumento: plugin (`plugin`, versão 1)\n\n- Mistura: ganho 0 dB, pan 0.25\n- Envio para `huge`: -10 dB\n- Notas: 60, de C2 a C2, em 2 clips e 1 padrões\n\n### Impacts (`impact`)\n\n- Instrumento: plugin (`plugin`, versão 1)\n\n- Mistura: ganho 0 dB, pan 0\n- Notas: 5, de C2 a C2, em 5 clips e 1 padrões\n\n### Crash (`crash`)\n\n- Instrumento: plugin (`plugin`, versão 1)\n\n- Mistura: ganho 0 dB, pan 0\n- Envio para `space`: -41.6 dB\n- Notas: 7, de C#3 a C#3, em 7 clips e 1 padrões\n\n### Lead (`lead`)\n\n- Instrumento: plugin (`plugin`, versão 1)\n\n- Mistura: ganho 0 dB, pan 0\n- Notas: 1784, de A3 a A5, em 12 clips e 2 padrões\n\n### FM answer (`fm`)\n\n- Instrumento: plugin (`plugin`, versão 1)\n\n- Mistura: ganho 0 dB, pan 0\n- Notas: 144, de C4 a E4, em 6 clips e 1 padrões\n\n### Arp (`arp`)\n\n- Instrumento: plugin (`plugin`, versão 1)\n\n- Mistura: ganho 0 dB, pan 0\n- Notas: 864, de A4 a A5, em 4 clips e 1 padrões\n\n### Space (`space`)\n\n- Instrumento: bus (`bus`, versão 1)\n\n- Mistura: ganho 0 dB, pan 0\n\nEfeitos (pela ordem da cadeia):\n\n- **** (``, id `fx1`)\n\nAutomação:\n\n| Parâmetro | Pontos | Mín. | Máx. | Começa | Acaba |\n|---|---|---|---|---|---|\n| `fx:fx1:vst:9` | 1 | 1 | 1 | 1 em 1.1 | 1 em 1.1 |\n\n### Echo (`echo`)\n\n- Instrumento: bus (`bus`, versão 1)\n\n- Mistura: ganho 0 dB, pan 0\n\nEfeitos (pela ordem da cadeia):\n\n- **** (``, id `fx1`)\n\nAutomação:\n\n| Parâmetro | Pontos | Mín. | Máx. | Começa | Acaba |\n|---|---|---|---|---|---|\n| `fx:fx1:vst:160` | 1 | 1 | 1 | 1 em 1.1 | 1 em 1.1 |\n\n### Huge (`huge`)\n\n- Instrumento: bus (`bus`, versão 1)\n\n- Mistura: ganho 0 dB, pan 0\n\nEfeitos (pela ordem da cadeia):\n\n- **** (``, id `fx1`)\n\nAutomação:\n\n| Parâmetro | Pontos | Mín. | Máx. | Começa | Acaba |\n|---|---|---|---|---|---|\n| `fx:fx1:vst:9` | 1 | 1 | 1 | 1 em 1.1 | 1 em 1.1 |\n",
+  "ficha": "# Hi-tech 190 (plugins)\n\nFicha do template `hitech-plugins` (versão 1). Estilo: Hi-tech.\n\nThe MIDI of 'Hi-tech 190 (from Wake Up and Remember)' with its old sounds and effects reset: kick, KBBB bass in A, hats, percussion, crashes, lead, FM answer and arp over 296 bars at 190 BPM (intro 8, breaks of 8 and 16). Kick, Accents, Impacts: sfizz (FreePats GM, note 36) until Kick 3 is activated. Bass, Lead, FM answer, Arp: Serum 2. Space and Huge buses: Pro-R 2; Echo bus: Timeless 3 (100% wet). Master: Pro-Q 4, Pro-L 2. Hats, Percussion and Crash: sfizz with the FreePats GM kit (crash on 49, percussion on claves 75 and cabasa 69). Choose the presets, then save it as your own template.\n\nFeito a partir de \"hitech-ref\", do tick 0 ao 0 (compassos 1.1 a 1.1).\n\n## Tempo e forma\n\n- BPM: 190\n- Duração: 296 compassos (1136640 ticks, 960 por semínima)\n\n| Secção | Começa | Duração |\n|---|---|---|\n| Intro | 1.1 | 8 compassos |\n| Groove | 9.1 | 64 compassos |\n| Break | 73.1 | 8 compassos |\n| Development | 81.1 | 96 compassos |\n| Break | 177.1 | 16 compassos |\n| Main | 193.1 | 96 compassos |\n| Outro | 289.1 | 8 compassos |\n\n## Master\n\n- Ganho: 0 dB\n\nEfeitos (pela ordem da cadeia):\n\n- **** (``, id `fx1`)\n\n- **** (``, id `fx2`)\n\nAutomação:\n\n| Parâmetro | Pontos | Mín. | Máx. | Começa | Acaba |\n|---|---|---|---|---|---|\n| `gainDb` | 2 | -34 | 0 | 0 em 289.1 | -34 em 296.4 |\n\n## Pistas\n\n### Kick (`kick`)\n\n- Instrumento: plugin (`plugin`, versão 1)\n\n- Mistura: ganho 0 dB, pan 0\n- Notas: 1012, de C2 a C2, em 41 clips e 2 padrões\n\n### Bass (`bass`)\n\n- Instrumento: plugin (`plugin`, versão 1)\n\n- Mistura: ganho 0 dB, pan 0\n- Notas: 2976, de A1 a A2, em 40 clips e 3 padrões\n\n### Closed hats (`hats`)\n\n- Instrumento: plugin (`plugin`, versão 1)\n\n- Mistura: ganho -4 dB, pan 0.12\n- Envio para `space`: -51.6 dB\n- Notas: 4128, de F#2 a F#2, em 36 clips e 2 padrões\n\n### Open hats (`open-hats`)\n\n- Instrumento: plugin (`plugin`, versão 1)\n\n- Mistura: ganho 0 dB, pan -0.12\n- Envio para `space`: -49.6 dB\n- Notas: 640, de A#2 a A#2, em 6 clips e 1 padrões\n\n### Percussion (`perc`)\n\n- Instrumento: plugin (`plugin`, versão 1)\n\n- Mistura: ganho 0 dB, pan -0.3\n- Envio para `space`: -45.6 dB\n- Envio para `echo`: -37 dB\n- Notas: 684, de A4 a D#5, em 76 clips e 2 padrões\n\n### Accents (`accents`)\n\n- Instrumento: plugin (`plugin`, versão 1)\n\n- Mistura: ganho 0 dB, pan 0.25\n- Envio para `huge`: -10 dB\n- Notas: 60, de C2 a C2, em 2 clips e 1 padrões\n\n### Impacts (`impact`)\n\n- Instrumento: plugin (`plugin`, versão 1)\n\n- Mistura: ganho 0 dB, pan 0\n- Notas: 5, de C2 a C2, em 5 clips e 1 padrões\n\n### Crash (`crash`)\n\n- Instrumento: plugin (`plugin`, versão 1)\n\n- Mistura: ganho 0 dB, pan 0\n- Envio para `space`: -41.6 dB\n- Notas: 7, de C#3 a C#3, em 7 clips e 1 padrões\n\n### Lead (`lead`)\n\n- Instrumento: plugin (`plugin`, versão 1)\n\n- Mistura: ganho 0 dB, pan 0\n- Notas: 1784, de A3 a A5, em 12 clips e 2 padrões\n\n### FM answer (`fm`)\n\n- Instrumento: plugin (`plugin`, versão 1)\n\n- Mistura: ganho 0 dB, pan 0\n- Notas: 144, de C4 a E4, em 6 clips e 1 padrões\n\n### Arp (`arp`)\n\n- Instrumento: plugin (`plugin`, versão 1)\n\n- Mistura: ganho 0 dB, pan 0\n- Notas: 864, de A4 a A5, em 4 clips e 1 padrões\n\n### Space (`space`)\n\n- Instrumento: bus (`bus`, versão 1)\n\n- Mistura: ganho 0 dB, pan 0\n\nEfeitos (pela ordem da cadeia):\n\n- **** (``, id `fx1`)\n\nAutomação:\n\n| Parâmetro | Pontos | Mín. | Máx. | Começa | Acaba |\n|---|---|---|---|---|---|\n| `fx:fx1:vst:9` | 1 | 1 | 1 | 1 em 1.1 | 1 em 1.1 |\n\n### Echo (`echo`)\n\n- Instrumento: bus (`bus`, versão 1)\n\n- Mistura: ganho 0 dB, pan 0\n\nEfeitos (pela ordem da cadeia):\n\n- **** (``, id `fx1`)\n\nAutomação:\n\n| Parâmetro | Pontos | Mín. | Máx. | Começa | Acaba |\n|---|---|---|---|---|---|\n| `fx:fx1:vst:160` | 1 | 1 | 1 | 1 em 1.1 | 1 em 1.1 |\n\n### Huge (`huge`)\n\n- Instrumento: bus (`bus`, versão 1)\n\n- Mistura: ganho 0 dB, pan 0\n\nEfeitos (pela ordem da cadeia):\n\n- **** (``, id `fx1`)\n\nAutomação:\n\n| Parâmetro | Pontos | Mín. | Máx. | Começa | Acaba |\n|---|---|---|---|---|---|\n| `fx:fx1:vst:9` | 1 | 1 | 1 | 1 em 1.1 | 1 em 1.1 |\n",
   "format": "core-template",
   "id": "hitech-plugins",
   "name": "Hi-tech 190 (plugins)",

@@ -15,7 +15,8 @@ int main(int, char** argv) {
   };
   auto params = [&](const char* key) { return scan["params"][key][0]["params"]; };
   RoleMap m;
-  m.roles["kick"].plugin = plug("Kick 3", "Kick 3");
+  // Diogo 16/11 14:31: o kick no sfizz (nota 36 do FreePats GM) ate o Kick 3 estar ativado (o instalado nao da som).
+  m.roles["kick"].plugin = plug("sfizz", "sfizz");
   for (const char* r : {"bass", "lead", "pluck", "pad"}) m.roles[r].plugin = plug("Serum2", "Serum 2");
   m.roles["drums"].plugin = plug("sfizz", "sfizz");  // Diogo 16/11: "usar sfizz como bateria", kit FreePats GM
   m.roles["reverb"] = guessRoleBinding("reverb", plug("FabFilter Pro-R 2", "Pro-R 2"), params("FabFilter Pro-R 2"));
@@ -52,7 +53,7 @@ int main(int, char** argv) {
   info.style = "Hi-tech";
   info.description = "The MIDI of 'Hi-tech 190 (from Wake Up and Remember)' with its old sounds and effects reset: "
     "kick, KBBB bass in A, hats, percussion, crashes, lead, FM answer and arp over 296 bars at 190 BPM (intro 8, breaks of 8 and 16). "
-    "Kick, Accents, Impacts: Kick 3. Bass, Lead, FM answer, Arp: Serum 2. Space and Huge buses: Pro-R 2; Echo bus: Timeless 3 (100% wet). "
+    "Kick, Accents, Impacts: sfizz (FreePats GM, note 36) until Kick 3 is activated. Bass, Lead, FM answer, Arp: Serum 2. Space and Huge buses: Pro-R 2; Echo bus: Timeless 3 (100% wet). "
     "Master: Pro-Q 4, Pro-L 2. Hats, Percussion and Crash: sfizz with the FreePats GM kit (crash on 49, percussion on claves 75 and cabasa 69). Choose the presets, then save it as your own template.";
   info.source = {{"kind", "builtin"}, {"from", "hitech-ref"}, {"roles", true}};
   SongTemplate t = templateFromDocument(d, info);
