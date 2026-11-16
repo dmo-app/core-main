@@ -1,5 +1,5 @@
 # Core Setup.exe (M6): one file that installs Core for the current user (no administrator rights).
-# The package (Core.exe, core-engine.exe, the demo, the templates, the languages, the patterns, PCore's styles) is built here and carried inside it.
+# The package (Core.exe, core-engine.exe, the demo, the templates, the languages, the patterns, PCore's styles, the AI's Vital presets) is built here and carried inside it.
 #   cmake --build build --target CoreSetup   ->  build/app/installer/CoreSetup_artefacts/Release/Core Setup.exe
 set(CORE_STAGE ${CMAKE_CURRENT_BINARY_DIR}/stage)
 set(CORE_PACKAGE_ZIP ${CMAKE_CURRENT_BINARY_DIR}/CorePackage.zip)
@@ -11,8 +11,9 @@ add_custom_command(OUTPUT ${CORE_PACKAGE_ZIP}
   COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/lang ${CORE_STAGE}/lang
   COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/patterns ${CORE_STAGE}/patterns
   COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/pcore ${CORE_STAGE}/pcore
+  COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/presets ${CORE_STAGE}/presets
   COMMAND ${CMAKE_COMMAND} -E chdir ${CORE_STAGE} ${CMAKE_COMMAND} -E tar cf ${CORE_PACKAGE_ZIP} --format=zip
-          Core.exe core-engine.exe demo.core-document.json templates lang patterns pcore
+          Core.exe core-engine.exe demo.core-document.json templates lang patterns pcore presets
   DEPENDS CoreApp core-engine ${CMAKE_SOURCE_DIR}/app/desktop/demo.core-document.json
   COMMENT "Packing the Core package for the installer")
 juce_add_binary_data(CoreSetupData HEADER_NAME CoreSetupData.h NAMESPACE CoreSetupData SOURCES ${CORE_PACKAGE_ZIP})
