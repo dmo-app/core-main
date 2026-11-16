@@ -1063,6 +1063,20 @@ void vital() {
 }
 }  // namespace synth_t
 
+// The kinds of calls left out, for the bench (the plan's taxonomy): from Core's own reasons.
+namespace taxonomy_t {
+void kinds() {
+  CHECK_EQ(ai::problemKind("left out: New track part \"build\" is not one of: kick, bass: left out"), std::string("name"));
+  CHECK_EQ(ai::problemKind("left out: no section called \"Drop\": P-Core left out (sections: )"), std::string("section"));
+  CHECK_EQ(ai::problemKind("left out: Mix volume 3 is outside -60..6: left out"), std::string("range"));
+  CHECK_EQ(ai::problemKind("left out: P-Core: no track given (\"on\"): left out"), std::string("missing"));
+  CHECK_EQ(ai::problemKind("left out: Mix on the new track Kick: only P-Core, Arrange and Plays can use it in the same proposal: left out"),
+           std::string("dependency"));
+  CHECK_EQ(ai::problemKind("not allowed: arrange"), std::string("permission"));
+  CHECK_EQ(ai::problemKind("left out: something new"), std::string("other"));
+}
+}  // namespace taxonomy_t
+
 // The gateway view (ai-daw's help/call idea): "ajuda" + "fazer" in place of every edit tool, the same checks.
 namespace gateway_t {
 using ai_chat_t::answer;
@@ -1141,6 +1155,7 @@ TEST("memory: episodes and the JSONL export") { memory_t::episodesForTraining(ca
 TEST("song: a style's id as align") { bench_t::alignByStyle(catalog()); }
 TEST("catalog: the gateway view (ajuda / fazer)") { gateway_t::gatewayMode(catalog()); }
 TEST("ai: the synth is Vital") { synth_t::vital(); }
+TEST("ai: the kinds of calls left out") { taxonomy_t::kinds(); }
 TEST("ai: models") { ai_knowledge_t::models(); }
 TEST("ai: knowledge base") { ai_knowledge_t::knowledgeBase(knowledgeDb()); }
 TEST("ai: the consult tool") { ai_knowledge_t::consultTool(knowledgeDb()); }

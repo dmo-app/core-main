@@ -58,6 +58,11 @@ json systemFor(const doc::Document& song, const doc::PCoreCatalog* pcore, const 
 // must still fit: "" when they do, else why nothing should be applied (never only a part of what was shown).
 std::string changedSince(const json& proposal, const control::Proposal& now);
 
+// The kind of a call Core left out, from its reason (for the bench and the logs): "name" (a name or option that
+// does not exist), "section", "range" (a number outside its range), "missing" (a value not given), "dependency"
+// (the call does not fit the track, the master or a new track), "permission", or "other".
+std::string problemKind(const std::string& why);
+
 class Chat {
 public:
   // With the AI's memory, each request carries the recipes most like it (unless the permissions deny

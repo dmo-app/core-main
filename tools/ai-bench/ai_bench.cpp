@@ -9,7 +9,11 @@
 //
 //   core-ai-bench --out <folder> [--models claude-haiku-5-5,claude-sonnet-5-5] [--efforts low,medium]
 //                 [--scenarios beat,structure,change] [--tools full,gateway] [--max-usd 2] [--knowledge <core-ai-knowledge.sqlite>]
-//                 [--pcore <pcore/styles.json>] [--key-file <file>] [--dry-run]
+//                 [--pcore <pcore/styles.json>] [--key-file <file>] [--repeat 3] [--dry-run]
+// Each run records, besides the cost: the seconds of each request (the first one is the wait before anything comes
+// back, as the app does not stream), the read and write calls the model made, the calls left out by kind
+// (ai::problemKind), the share of input tokens read from the cache, and the cost split by token kind. With --repeat
+// N each run is made N times and the Markdown gives the median and the range.
 // The key: ANTHROPIC_API_KEY, else --key-file (default %APPDATA%\Core\AI\anthropic-key.txt). It goes to curl in a
 // temporary header file that is deleted after each request; it is never printed or written in the report.
 // --dry-run sends nothing: it prints the plan and the size of the first request.
@@ -117,9 +121,21 @@ json post(const ai::HttpRequest& req, const fs::path& tmp, std::string* failure)
 
 // A worst-case guess of one run's cost, to stop before passing the cap: maxSteps requests of ~12k input tokens
 // uncached and maxTokens output.
+// The chat stops asking once a message has cost maxUsdPerMessage, so a run never costs more than that plus one request.
 double worstCase(const ai::Config& c) {
   const ai::Prices p = ai::pricesOf(c.model);
-  return c.maxSteps * (12000 * p.cacheWrite + 2000.0 * p.output) / 1e6;
+  const double one = (12000 * p.cacheWrite + 2000.0 * p.output) / 1e6;
+  return c.maxUsdPerMessage > 0 ? std::min(c.maxSteps * one, c.maxUsdPerMessage + one) : c.maxSteps * one;
+}
+
+double median(std::vector<double> v) {
+  if (v.empty()) return 0;
+  std::sort(v.begin(), v.end());
+  return v.size() % 2 ? v[v.size() / 2] : (v[v.size() / 2 - 1] + v[v.size() / 2]) / 2;
+}
+
+bool isRead(const std::string& tool) {
+  return tool == "ler_musica" || tool == "formas_pcore" || tool == "consultar_manual" || tool == "lembrar_receitas" || tool == "ajuda";
 }
 
 }  // namespace
@@ -127,6 +143,7 @@ double worstCase(const ai::Config& c) {
 int main(int argc, char** argv) {
   std::vector<std::string> models = {"claude-haiku-5-5", "claude-sonnet-5-5"}, efforts = {"low", "medium"}, wanted, toolModes = {"full"};
   double maxUsd = 2.0;
+  int repeat = 1;
   fs::path out, knowledgeDb, pcorePath, keyFile;
   bool dry = false;
   for (int i = 1; i < argc; ++i) {
@@ -141,6 +158,7 @@ int main(int argc, char** argv) {
     else if (a == "--knowledge") knowledgeDb = next();
     else if (a == "--pcore") pcorePath = next();
     else if (a == "--key-file") keyFile = next();
+    else if (a == "--repeat") repeat = std::max(1, std::atoi(next().c_str()));
     else if (a == "--dry-run") dry = true;
     else {
       std::cerr << "unknown argument " << a << "\n";
@@ -181,7 +199,8 @@ int main(int argc, char** argv) {
     if (!wanted.empty() && std::find(wanted.begin(), wanted.end(), sc.id) == wanted.end()) continue;
     for (const auto& toolMode : toolModes)
     for (const auto& model : models)
-      for (const auto& effort : efforts) {
+      for (const auto& effort : efforts)
+      for (int rep = 1; rep <= repeat && !capped; ++rep) {
         ai::Config cfg;
         cfg.gateway = toolMode == "gateway";
         cfg.model = model;
@@ -209,8 +228,11 @@ int main(int argc, char** argv) {
         }
         const auto t0 = std::chrono::steady_clock::now();
         std::string failure;
+        json requestSeconds = json::array();
         while (!body.is_null()) {
+          const auto r0 = std::chrono::steady_clock::now();
           const json r = post(chat.http(body), out, &failure);
+          requestSeconds.push_back(std::chrono::duration<double>(std::chrono::steady_clock::now() - r0).count());
           if (!failure.empty()) {
             chat.abandon();
             break;
@@ -238,10 +260,39 @@ int main(int argc, char** argv) {
           }
         }
         int leftOut = 0;
-        for (const auto& l : chat.log()) leftOut += l.rfind("left out", 0) == 0 || l.rfind("not allowed", 0) == 0;
+        json kinds = json::object();
+        for (const auto& l : chat.log())
+          if (l.rfind("left out", 0) == 0 || l.rfind("not allowed", 0) == 0) {
+            ++leftOut;
+            const std::string k = ai::problemKind(l);
+            kinds[k] = kinds.value(k, 0) + 1;
+          }
+        // The calls the model made in this message, read or write (a gateway "fazer" counts as a write).
+        int reads = 0, writes = 0, correctionRounds = 0;
+        const json& msgs = chat.messages();
+        for (size_t i = 0; i < msgs.size(); ++i) {
+          const json& m = msgs[i];
+          if (m.value("role", std::string()) == "user" && m["content"].is_array()) {
+            bool refused = false;
+            for (const auto& b : m["content"])
+              if (b.value("type", std::string()) == "tool_result") refused |= b.value("content", std::string()).find("left out") != std::string::npos;
+            correctionRounds += refused;
+          }
+          if (m.value("role", std::string()) != "assistant" || !m["content"].is_array()) continue;
+          for (const auto& b : m["content"])
+            if (b.value("type", std::string()) == "tool_use") (isRead(b.value("name", std::string())) ? reads : writes)++;
+        }
+        const ai::Prices pr = ai::pricesOf(model);
+        const int64_t inputAll = u.input + u.cacheRead + u.cacheWrite;
+        const json split = {{"input", u.input * pr.input / 1e6}, {"cacheWrite", u.cacheWrite * pr.cacheWrite / 1e6},
+                            {"cacheRead", u.cacheRead * pr.cacheRead / 1e6}, {"output", u.output * pr.output / 1e6}};
         json run = {{"scenario", sc.id}, {"tools", toolMode}, {"model", model}, {"effort", effort}, {"usd", cost}, {"requests", u.requests},
                     {"input", u.input}, {"output", u.output}, {"cacheRead", u.cacheRead}, {"cacheWrite", u.cacheWrite},
-                    {"seconds", seconds}, {"calls", proposal["calls"].size()}, {"leftOut", leftOut}, {"applies", applies},
+                    {"seconds", seconds}, {"requestSeconds", requestSeconds},
+                    {"firstSeconds", requestSeconds.empty() ? 0.0 : requestSeconds[0].get<double>()}, {"repeat", rep},
+                    {"readCalls", reads}, {"writeCalls", writes}, {"leftOutKinds", kinds}, {"correctionRounds", correctionRounds},
+                    {"cacheHit", inputAll ? (double)u.cacheRead / inputAll : 0.0}, {"usdSplit", split},
+                    {"calls", proposal["calls"].size()}, {"leftOut", leftOut}, {"applies", applies},
                     {"problems", p.problems}, {"reply", chat.reply()}, {"error", failure.empty() ? chat.error() : failure},
                     {"log", chat.log()}, {"proposal", proposal}};
         if (!applyError.empty()) run["applyError"] = applyError;
@@ -256,25 +307,57 @@ int main(int argc, char** argv) {
   if (dry) return 0;
 
   // The report: JSON (everything) and Markdown (the table).
-  const json report = {{"format", "core-ai-bench"}, {"version", 1}, {"spentUsd", spent}, {"maxUsd", maxUsd}, {"capped", capped},
+  const json report = {{"format", "core-ai-bench"}, {"version", 2}, {"repeat", repeat}, {"spentUsd", spent}, {"maxUsd", maxUsd}, {"capped", capped},
                        {"knowledge", knowledge != nullptr}, {"runs", runs}};
   std::ofstream(out / "ai-bench.json", std::ios::binary) << report.dump(1, ' ', false, json::error_handler_t::replace);
   std::ofstream md(out / "ai-bench.md", std::ios::binary);
   md << "# Core AI bench\n\nSpent: $" << spent << " (cap $" << maxUsd << ")" << (capped ? ", stopped at the cap" : "") << "\n\n";
-  md << "| scenario | tools | model | effort | USD | requests | seconds | calls | left out | applies | error |\n|---|---|---|---|---|---|---|---|---|---|---|\n";
+  md << "| scenario | tools | model | effort | # | USD | requests | seconds | first s | reads | writes | calls | left out | cache hit | applies | error |\n"
+        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n";
+  auto fmt = [](const char* f, double v) {
+    char b[32];
+    std::snprintf(b, sizeof b, f, v);
+    return std::string(b);
+  };
   for (const auto& r : runs) {
-    char usd[32];
-    std::snprintf(usd, sizeof usd, "%.4f", r["usd"].get<double>());
-    char sec[32];
-    std::snprintf(sec, sizeof sec, "%.1f", r["seconds"].get<double>());
-    md << "| " << r["scenario"].get<std::string>() << " | " << r["tools"].get<std::string>() << " | " << r["model"].get<std::string>() << " | " << r["effort"].get<std::string>() << " | "
-       << usd << " | " << r["requests"].get<int>() << " | " << sec << " | " << r["calls"].get<size_t>() << " | " << r["leftOut"].get<int>()
-       << " | " << (r["applies"].get<bool>() ? "yes" : "no") << " | " << r["error"].get<std::string>() << " |\n";
+    std::string kinds;
+    for (const auto& [k, n] : r["leftOutKinds"].items()) kinds += (kinds.empty() ? " (" : ", ") + k + " " + std::to_string(n.get<int>());
+    if (!kinds.empty()) kinds += ")";
+    md << "| " << r["scenario"].get<std::string>() << " | " << r["tools"].get<std::string>() << " | " << r["model"].get<std::string>() << " | "
+       << r["effort"].get<std::string>() << " | " << r["repeat"].get<int>() << " | " << fmt("%.4f", r["usd"].get<double>()) << " | "
+       << r["requests"].get<int>() << " | " << fmt("%.1f", r["seconds"].get<double>()) << " | " << fmt("%.1f", r["firstSeconds"].get<double>())
+       << " | " << r["readCalls"].get<int>() << " | " << r["writeCalls"].get<int>() << " | " << r["calls"].get<size_t>() << " | "
+       << r["leftOut"].get<int>() << kinds << " | " << fmt("%.0f %%", 100 * r["cacheHit"].get<double>()) << " | "
+       << (r["applies"].get<bool>() ? "yes" : "no") << " | " << r["error"].get<std::string>() << " |\n";
+  }
+  // With repeats: the median and the range of each run's repeats.
+  if (repeat > 1) {
+    md << "\n## Median of the repeats (min to max)\n\n| scenario | tools | model | effort | USD | requests | seconds | left out |\n|---|---|---|---|---|---|---|---|\n";
+    std::vector<std::string> seen;
+    for (const auto& r : runs) {
+      const std::string key = r["scenario"].get<std::string>() + "|" + r["tools"].get<std::string>() + "|" + r["model"].get<std::string>() + "|" + r["effort"].get<std::string>();
+      if (std::find(seen.begin(), seen.end(), key) != seen.end()) continue;
+      seen.push_back(key);
+      std::vector<double> usd, req, sec, left;
+      for (const auto& o : runs)
+        if (o["scenario"] == r["scenario"] && o["tools"] == r["tools"] && o["model"] == r["model"] && o["effort"] == r["effort"]) {
+          usd.push_back(o["usd"].get<double>());
+          req.push_back(o["requests"].get<int>());
+          sec.push_back(o["seconds"].get<double>());
+          left.push_back(o["leftOut"].get<int>());
+        }
+      auto cell = [&](const std::vector<double>& v, const char* f) {
+        return fmt(f, median(v)) + " (" + fmt(f, *std::min_element(v.begin(), v.end())) + "–" + fmt(f, *std::max_element(v.begin(), v.end())) + ")";
+      };
+      md << "| " << r["scenario"].get<std::string>() << " | " << r["tools"].get<std::string>() << " | " << r["model"].get<std::string>() << " | "
+         << r["effort"].get<std::string>() << " | " << cell(usd, "%.4f") << " | " << cell(req, "%.0f") << " | " << cell(sec, "%.1f") << " | "
+         << cell(left, "%.0f") << " |\n";
+    }
   }
   md << "\n## Replies\n\n";
   for (const auto& r : runs)
     md << "**" << r["scenario"].get<std::string>() << " / " << r["tools"].get<std::string>() << " / " << r["model"].get<std::string>() << " / " << r["effort"].get<std::string>()
-       << "**: " << r["reply"].get<std::string>() << "\n\n";
+       << " #" << r["repeat"].get<int>() << "**: " << r["reply"].get<std::string>() << "\n\n";
   std::printf("spent $%.4f; report in %s\n", spent, (out / "ai-bench.md").string().c_str());
   return 0;
 }

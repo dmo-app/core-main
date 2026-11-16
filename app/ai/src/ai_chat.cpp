@@ -322,6 +322,21 @@ json Chat::runTool(const std::string& name, const json& input, const doc::Docume
   return {{"result", "left out"}, {"problems", fresh}};
 }
 
+std::string problemKind(const std::string& why) {
+  auto has = [&](const char* w) { return why.find(w) != std::string::npos; };
+  if (has("not allowed")) return "permission";
+  if (has("no section")) return "section";
+  if (has("is outside") || has("not a number") || has("variationEvery")) return "range";
+  if (has("is not one of") || has("is not a function") || has("unknown tool") || has("no track called") || has("no track '") ||
+      has("no preset") || has("no knob") || has("no sample") || has("no effect"))
+    return "name";
+  if (has("is needed") || has("given") || has("is not clear")) return "missing";
+  if (has("new track") || has("plays no notes") || has("needs a track") || has("on a track") || has("on the master") ||
+      has("the master has") || has("has no audio") || has("cannot run") || has("not a song function"))
+    return "dependency";
+  return "other";
+}
+
 std::string changedSince(const json& proposal, const control::Proposal& now) {
   const size_t asked = proposal.is_object() && proposal.contains("calls") && proposal["calls"].is_array() ? proposal["calls"].size() : 0;
   if (now.calls.size() >= asked) return "";
