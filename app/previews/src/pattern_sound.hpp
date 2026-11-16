@@ -40,7 +40,7 @@ struct Sound {
   double sampleRate = 48000;
   int framesPerPeak = 128;  // 2.7 ms at 48 kHz: the detail of a zoomed-in hat
   std::vector<float> peaks, rms;
-  double seconds() const { return (double)peaks.size() * framesPerPeak / sampleRate; }
+  double seconds() const { return sampleRate > 0 ? (double)peaks.size() * framesPerPeak / sampleRate : 0; }  // never inf (deep hunt U-5)
   bool empty() const { return peaks.empty(); }
 };
 

@@ -5,6 +5,9 @@
  "name": "Português",
  "about": "Core in European Portuguese. Keys are the English texts exactly as the code, help and racks write them; a {} in a key is a hole that matches any text (numbers, names) and goes to the same place in the words. Texts with no entry stay in English. Names (styles, presets, plugins, knob names) stay in English on purpose. Check: python tools/i18n/extract_strings.py --check. Contract: docs/contracts/core-language.md.",
  "strings": {
+  "Rename pattern": "Mudar o nome do padrão",
+  "Save as Template": "Guardar como template",
+  "This pattern, all its rows, goes into Templates > Mine.": "Este padrão, com todas as linhas, vai para Templates > Mine.",
   "Template": "Template",
   "Template and WAV (mono)": "Template e WAV (mono)",
   "Another export is running; the template is saved.": "Já há outra exportação a correr; o template está guardado.",
