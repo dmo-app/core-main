@@ -166,7 +166,32 @@ json Chat::request(const doc::Document& song) const {
           {"cache_control", {{"type", "ephemeral"}}}};
 }
 
-json Chat::ask(const std::string& text, const doc::Document& song) {
+json Chat::withZone(json proposal) const {
+  if (zone_.active()) proposal["zone"] = zone_.toJson();
+  return proposal;
+}
+
+std::string zoneBlock(const doc::Document& song, const control::Zone& zone) {
+  if (!zone.active()) return "";
+  const int64_t bar = 4 * doc::kPpq;
+  const int64_t from = zone.startTick / bar + 1, to = (zone.endTick + bar - 1) / bar;
+  std::string tracks;
+  for (const auto& id : zone.tracks)
+    if (const doc::Track* t = song.findTrack(id)) tracks += (tracks.empty() ? "" : ", ") + t->name;
+  std::string sections;
+  for (const auto& s : song.sections)
+    if (s.startTick < zone.endTick && s.startTick + s.lengthTicks > zone.startTick)
+      sections += (sections.empty() ? "" : ", ") + s.name + " (" + std::to_string(s.startTick / bar + 1) + "-" +
+                  std::to_string((s.startTick + s.lengthTicks) / bar) + ")";
+  return "Seleção do Diogo: compassos " + std::to_string(from) + "-" + std::to_string(to) + ", pistas: " + tracks + "." +
+         (sections.empty() ? std::string() : " Secções nesta zona: " + sections + ".") +
+         " Muda só estas pistas (ou pistas novas que cries para aqui), só nestes compassos: usa \"section\": \"" + control::kZoneSection +
+         "\" para escrever ou subir aqui (o P-Core sem secção também escreve só aqui). O resto da música fica como está; "
+         "o Core deixa de fora o que sair da seleção.";
+}
+
+json Chat::ask(const std::string& text, const doc::Document& song, const control::Zone* zone) {
+  zone_ = zone ? *zone : control::Zone{};
   calls_ = json::array();
   asked_ = 0;
   log_.clear();
@@ -181,6 +206,7 @@ json Chat::ask(const std::string& text, const doc::Document& song) {
   // The song does not change while the model works (its edits are only proposed): one system for the whole message.
   system_ = systemFor(song, pcore_, config_.permissions.mode, config_.gateway);
   std::string content = text;
+  if (const std::string z = zoneBlock(song, zone_); !z.empty()) content += "\n\n" + z;
   // The memory: the recipes most like this request go with it (as data), unless the permissions say no.
   if (memory_)
     if (const Action* a = findAction(actions_, "lembrar_receitas"); a && decide(config_.permissions, *a) != Verdict::deny) {
@@ -212,7 +238,20 @@ json Chat::runTool(const std::string& name, const json& input, const doc::Docume
     log_.push_back("not allowed: " + name);
     return {{"error", "not allowed: Diogo's permissions deny " + name}};
   }
-  if (name == "ler_musica") return songForAi(song);
+  if (name == "ler_musica") {
+    json out = songForAi(song);
+    if (!zone_.active()) return out;
+    // With a selection: the selected tracks whole, the others by name only (they cannot change; smaller requests).
+    json others = json::array();
+    json tracks = json::array();
+    for (const auto& t : out["tracks"])
+      if (std::find(zone_.tracks.begin(), zone_.tracks.end(), t.value("id", std::string())) != zone_.tracks.end()) tracks.push_back(t);
+      else others.push_back(t.value("name", std::string()));
+    out["tracks"] = tracks;
+    out["otherTracks"] = others;
+    out["selection"] = {{"startBar", zone_.startTick / (4 * doc::kPpq) + 1}, {"endBar", zone_.endTick / (4 * doc::kPpq)}};
+    return out;
+  }
   if (name == "lembrar_receitas") {
     if (!memory_) return {{"error", "the memory is not open"}};
     json out = json::array();
@@ -245,8 +284,8 @@ json Chat::runTool(const std::string& name, const json& input, const doc::Docume
   call["fn"] = action->function;
   json all = calls_;
   all.push_back(call);
-  const control::Proposal before = control::validateProposal({{"calls", calls_}}, functions_, song, nullptr);
-  const control::Proposal p = control::validateProposal({{"calls", all}}, functions_, song, nullptr);
+  const control::Proposal before = control::validateProposal(withZone({{"calls", calls_}}), functions_, song, nullptr);
+  const control::Proposal p = control::validateProposal(withZone({{"calls", all}}), functions_, song, nullptr);
   std::vector<std::string> fresh(p.problems.begin() + std::min(p.problems.size(), before.problems.size()), p.problems.end());
   if (p.calls.size() > before.calls.size()) {
     calls_.push_back(call);
@@ -339,6 +378,7 @@ json Chat::episode() const {
           {"tools", mcpTools(offered_)},
           {"messages", messages_},
           {"turnStart", askStart_},
+          {"zone", zone_.active() ? zone_.toJson() : json(nullptr)},
           {"shown", shown_},
           {"log", log_}};
 }
@@ -346,7 +386,7 @@ json Chat::episode() const {
 json Chat::proposal() const {
   // Applied by itself only when every call in it is allowed (trusted); else it waits for Apply.
   const bool automatic = !calls_.empty() && asked_ == 0;
-  return {{"id", "ai-" + std::to_string(proposalNo_)}, {"summary", summary_}, {"calls", calls_}, {"auto", automatic}};
+  return withZone({{"id", "ai-" + std::to_string(proposalNo_)}, {"summary", summary_}, {"calls", calls_}, {"auto", automatic}});
 }
 
 }  // namespace core::ai

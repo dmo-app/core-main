@@ -2347,6 +2347,7 @@ void MainComponent::selectTrack(const std::string& trackId) {
   scoreOpen_ = false;
   automationOpen_ = false;
   boxClips_.clear();
+  aiZone_ = control::Zone{};
   if (trackId != selectedTrack_) { selectedTrack_ = trackId; selectedClip_.clear(); }
   editor_.setTrack(trackId);
   if (mixer_ && mixerOpen_ && !trackId.empty()) mixer_->select(trackId);  // a click on a track row chooses its strip
@@ -2407,6 +2408,7 @@ void MainComponent::selectClip(const std::string& trackId, const std::string& cl
   scoreOpen_ = false;
   automationOpen_ = false;
   boxClips_.clear();
+  aiZone_ = control::Zone{};
   if (trackId != editor_.track()) releaseAllKeys();
   selectedTrack_ = trackId;
   selectedClip_ = clipId;
@@ -2438,6 +2440,7 @@ void MainComponent::endBox(const juce::MouseEvent& e) {
   if (boxOverlay_) boxOverlay_->repaint();
   const juce::Rectangle<int> box(boxFrom_, boxTo_);
   if (box.getWidth() < 4 && box.getHeight() < 4) {  // a click: what it did on the press stays
+    if (!boxAdd_) aiZone_ = control::Zone{};
     // A click on an empty part of a lane also puts the start line there (to the beat), as in Ableton. Ctrl adds
     // to the selection and leaves the line where it is; while playing, only the ruler moves it (no jump by accident).
     if (!boxAdd_ && !snap_.playing) {
@@ -2472,6 +2475,18 @@ void MainComponent::endBox(const juce::MouseEvent& e) {
   for (const auto& t : tracks) if (t != shown) others.insert(t);
   alsoSelected_ = others;
   if (clips.size() > 1) boxClips_ = clips;
+  // The AI's zone (Diogo 2026-11-16): the selected tracks over the box's bars, whole bars.
+  {
+    const int x0 = getLocalPoint(nullptr, juce::Point<int>(box.getX(), box.getY())).x;
+    const int x1 = getLocalPoint(nullptr, juce::Point<int>(box.getRight(), box.getY())).x;
+    const int64_t a = tickAt(x0, 1, true), b = tickAt(x1, 1, true);
+    control::Zone z;
+    z.tracks = selectedTracks();
+    z.startTick = (std::max<int64_t>(0, a) / kBar) * kBar;
+    z.endTick = ((std::max(a, b) + kBar - 1) / kBar) * kBar;
+    if (z.endTick <= z.startTick) z.endTick = z.startTick + kBar;
+    aiZone_ = z;
+  }
   const size_t nTracks = selectedTracks().size();
   const juce::String n((int)nTracks);
   if (clips.size() > 1)
@@ -3257,9 +3272,18 @@ void MainComponent::openAiChat() {
     h.knowledge = aiKnowledge_.get();
     h.keyFolder = bridgeFolder();
     h.apply = [this](const json& proposal) { return applyAiProposal(proposal); };
+    h.zone = [this] { return aiZoneNow(); };
     aiWindow_ = std::make_unique<AiWindow>(std::move(h));
   }
   aiWindow_->show();
+}
+
+// The selection the AI works in: the box's tracks that are still there, over its bars; inactive without a box.
+control::Zone MainComponent::aiZoneNow() const {
+  control::Zone z = aiZone_;
+  const doc::Document& d = history_.current();
+  z.tracks.erase(std::remove_if(z.tracks.begin(), z.tracks.end(), [&](const std::string& id) { return !d.findTrack(id); }), z.tracks.end());
+  return z.active() ? z : control::Zone{};
 }
 
 std::vector<std::string> MainComponent::applyAiProposal(const json& proposal) {

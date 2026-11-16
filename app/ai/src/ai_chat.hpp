@@ -47,6 +47,8 @@ struct Config {
 // Claude's tool definitions: the catalog's Anthropic view (catalog.hpp), every action offered. The chat itself offers
 // only what its permissions do not deny.
 json toolsFor(const std::vector<control::CoreFunction>& functions, bool knowledge = false);
+// What a request says about a selection (PT-PT); "" when the zone is not active.
+std::string zoneBlock(const doc::Document& song, const control::Zone& zone);
 // The system prompt (PT-PT) and the style card (the song's P-Core style, its parts, shapes and the song shapes).
 // With the permission mode: readonly and trusted add a sentence that says so.
 json systemFor(const doc::Document& song, const doc::PCoreCatalog* pcore, const std::string& mode = "ask", bool gateway = false);
@@ -62,8 +64,10 @@ public:
   HttpRequest http(const json& body) const { return makeRequest(config_.provider, body); }
   double cost(const Usage& u) const;  // at this chat's prices
 
-  // A new message from Diogo: the first request body. The proposal starts empty.
-  json ask(const std::string& text, const doc::Document& song);
+  // A new message from Diogo: the first request body. The proposal starts empty. With a zone (his selection, calls.hpp
+  // Zone): the request says which tracks and bars, ler_musica gives only those tracks whole, and every write is
+  // checked against the zone (what falls outside is left out); the proposal carries it, so Apply checks it again.
+  json ask(const std::string& text, const doc::Document& song, const control::Zone* zone = nullptr);
 
   // A response from the API (the provider's own form). Runs the tools (reads; each write is checked and joins the proposal) and returns the
   // next request body, or null when the model is done (or maxSteps was reached, or the response was an error).
@@ -97,6 +101,7 @@ public:
 private:
   json request(const doc::Document& song) const;
   json runTool(const std::string& name, const json& input, const doc::Document& song);
+  json withZone(json proposal) const;  // the proposal with this message's zone
 
   Config config_;
   std::vector<control::CoreFunction> functions_;
@@ -111,6 +116,7 @@ private:
   size_t askStart_ = 0;          // where this message's turn starts in messages_
   json messages_ = json::array();
   json system_;                  // this message's system blocks (set by ask)
+  control::Zone zone_;           // this message's selection (inactive = the whole song)
   json calls_ = json::array();
   std::vector<std::string> log_;
   std::string reply_, error_, summary_;

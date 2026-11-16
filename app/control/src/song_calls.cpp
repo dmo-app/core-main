@@ -421,7 +421,15 @@ std::vector<std::string> apply(doc::Document& song, const Proposal& p, size_t& i
     if (!c.sectionName.empty())
       if (const doc::Section* s = sectionNamed(song, c.sectionName)) at = s->startTick;
     const int bars = (int)arg(c, "bars", 4);
-    const auto results = doc::pcoreApplyToSong(song, *env.pcore, layers, tracks, at, 0, bars);
+    std::map<std::string, std::string> patterns;
+    if (c.endTick > c.startTick) {  // the selection (calls.hpp Zone): each track gets its own clip and pattern there
+      at = c.startTick;
+      for (const auto& t : tracks) {
+        doc::Track& track = doc::trackById(song, t.trackId);
+        if (doc::playsPatterns(track)) patterns[t.trackId] = doc::zonePattern(track, c.startTick, c.endTick);
+      }
+    }
+    const auto results = doc::pcoreApplyToSong(song, *env.pcore, layers, tracks, at, 0, bars, patterns);
     std::vector<std::string> lines;
     for (size_t k = 0; k < group.size(); ++k) {
       std::string line = describe(*group[k]);

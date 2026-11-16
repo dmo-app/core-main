@@ -26,6 +26,8 @@ public:
     juce::File keyFolder;                                        // %APPDATA%\Core\AI: anthropic-key.txt, ai-settings.json
     // Applies a proposal as one undo step; returns the lines applied, or throws (nothing changed then).
     std::function<std::vector<std::string>(const nlohmann::json& proposal)> apply;
+    // The selection on the tracks (a box: tracks and bars); inactive = the whole song. The AI changes only that.
+    std::function<control::Zone()> zone;
   };
   explicit AiPanel(Host host);
   ~AiPanel() override;

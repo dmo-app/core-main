@@ -789,6 +789,159 @@ void episodesForTraining(const doc::PCoreCatalog& cat) {
 
 }  // namespace memory_t
 
+
+// Diogo, 2026-11-16: a selection on the tracks (tracks + bars) limits what the AI changes, for build-ups, rolls, drops.
+namespace zone_t {
+
+using song_calls_t::named;
+
+doc::Document beat(const doc::PCoreCatalog& cat, const std::vector<control::CoreFunction>& fns) {
+  doc::Document song = doc::newEmptyDocument();
+  const json raw = {{"calls", json::array({{{"fn", "shape"}, {"shape", "darkpsycore-64"}},
+                                            {{"fn", "track"}, {"part", "kick"}, {"name", "Kick"}},
+                                            {{"fn", "track"}, {"part", "bass"}, {"name", "Bass"}},
+                                            {{"fn", "track"}, {"part", "hats"}, {"name", "Hats"}},
+                                            {{"fn", "pcore"}, {"on", "Kick"}, {"style", "darkpsycore"}, {"args", {{"bars", 4}}}},
+                                            {{"fn", "pcore"}, {"on", "Bass"}, {"style", "darkpsycore"}, {"args", {{"bars", 4}}}},
+                                            {{"fn", "pcore"}, {"on", "Hats"}, {"style", "darkpsycore"}, {"args", {{"bars", 4}}}},
+                                            {{"fn", "arrange"}}})}};
+  control::ApplyEnv env;
+  env.pcore = &cat;
+  control::applyProposal(song, control::validateProposal(raw, fns, song, nullptr), "", env);
+  return song;
+}
+
+// The notes a track plays in the song ticks [from, to): (song tick, pitch), repeats unrolled.
+std::vector<std::pair<int64_t, int>> heard(const doc::Track& t, int64_t from, int64_t to) {
+  std::vector<std::pair<int64_t, int>> out;
+  for (const auto& c : t.clips) {
+    const doc::Pattern* p = nullptr;
+    for (const auto& x : t.patterns) if (x.id == c.patternId) p = &x;
+    if (!p || p->lengthTicks <= 0) continue;
+    for (int64_t rep = -p->lengthTicks; rep < c.offsetTicks + c.lengthTicks; rep += p->lengthTicks)
+      for (const auto& n : p->notes) {
+        const int64_t inClip = rep + n.tick - c.offsetTicks;
+        if (inClip < 0 || inClip >= c.lengthTicks || n.tick >= p->lengthTicks) continue;
+        const int64_t songTick = c.startTick + inClip;
+        if (songTick >= from && songTick < to) out.push_back({songTick, n.pitch});
+      }
+  }
+  std::sort(out.begin(), out.end());
+  return out;
+}
+
+void rules(const doc::PCoreCatalog& cat) {
+  const auto fns = control::buildFunctions(&cat);
+  doc::Document song = beat(cat, fns);
+  const doc::Track* kick = named(song, "Kick");
+  const doc::Track* bass = named(song, "Bass");
+  CHECK(kick && bass && song.sections.size() > 3);
+  if (!kick || !bass || song.sections.size() < 4) return;
+  const int64_t bar = 4 * doc::kPpq;
+  const doc::Section& build = song.sections[1];
+  control::Zone z;
+  z.tracks = {kick->id, bass->id};
+  z.startTick = build.startTick;
+  z.endTick = build.startTick + 4 * bar;
+  const json calls = json::array({
+      {{"fn", "pcore"}, {"on", "Kick"}, {"section", "Seleção"}, {"style", "darkpsycore"}},         // the zone's bars
+      {{"fn", "pcore"}, {"on", "Hats"}, {"style", "darkpsycore"}},                                   // not selected
+      {{"fn", "shape"}, {"shape", "darkpsycore-64"}},                                                // the whole song
+      {{"fn", "arrange"}, {"on", "Kick"}},                                                           // no section
+      {{"fn", "pcore"}, {"on", "Bass"}, {"section", song.sections.back().name}, {"style", "darkpsycore"}},  // outside
+      {{"fn", "pcore"}, {"on", "Bass"}, {"section", build.name}, {"style", "darkpsycore"}, {"args", {{"bars", 16}}}}});  // cut to the zone
+  const control::Proposal p = control::validateProposal({{"calls", calls}, {"zone", z.toJson()}}, fns, song, nullptr);
+  CHECK(p.zone.active() && p.zone.startTick == z.startTick);
+  CHECK_EQ(p.calls.size(), (size_t)2);
+  CHECK_EQ(p.problems.size(), (size_t)4);
+  for (const auto& pr : p.problems) CHECK(pr.find("left out") != std::string::npos && pr.find("selection") != std::string::npos);
+  if (p.calls.size() == 2) {
+    CHECK(p.calls[0].startTick == z.startTick && p.calls[0].endTick == z.endTick && p.calls[0].args.at("bars") == 4);
+    CHECK(p.calls[0].sectionName == control::kZoneSection && p.calls[0].zoneSection);
+    CHECK(p.calls[1].startTick == z.startTick && p.calls[1].endTick == z.endTick && p.calls[1].args.at("bars") == 4);
+    CHECK(!p.calls[1].warnings.empty());  // 16 bars cut to 4
+  }
+  // Without a zone, "Seleção" is not a section.
+  CHECK(control::validateProposal({{"calls", json::array({calls[0]})}}, fns, song, nullptr).calls.empty());
+
+  // Applied: the zone's bars change, nothing else does (the pattern there becomes its own).
+  const auto kickBefore = heard(*kick, 0, song.lengthTicks), hatsBefore = heard(*named(song, "Hats"), 0, song.lengthTicks);
+  const auto outsideBefore = [&] {
+    auto a = heard(*kick, 0, z.startTick), b = heard(*kick, z.endTick, song.lengthTicks);
+    a.insert(a.end(), b.begin(), b.end());
+    return a;
+  }();
+  const json one = {{"calls", json::array({{{"fn", "pcore"}, {"on", "Kick"}, {"section", "Seleção"}, {"style", "darkpsycore"},
+                                             {"shape", "kick/roll-bar"}}})}, {"zone", z.toJson()}};
+  const control::Proposal q = control::validateProposal(one, fns, song, nullptr);
+  for (const auto& pr : q.problems) std::cerr << "problem: " << pr << "\n";
+  control::ApplyEnv env;
+  env.pcore = &cat;
+  doc::Document after = song;
+  if (!q.calls.empty()) control::applyProposal(after, q, "", env);
+  const doc::Track* k2 = named(after, "Kick");
+  CHECK(k2 != nullptr);
+  if (!k2) return;
+  auto outsideAfter = heard(*k2, 0, z.startTick);
+  const auto tail = heard(*k2, z.endTick, after.lengthTicks);
+  outsideAfter.insert(outsideAfter.end(), tail.begin(), tail.end());
+  CHECK(outsideAfter == outsideBefore);
+  CHECK(heard(*named(after, "Hats"), 0, after.lengthTicks) == hatsBefore);
+  CHECK(!heard(*k2, z.startTick, z.endTick).empty());
+  CHECK(heard(*k2, z.startTick, z.endTick) != heard(*kick, z.startTick, z.endTick));  // the roll is there now
+  int zoneClips = 0;
+  for (const auto& c : k2->clips) zoneClips += c.startTick == z.startTick && c.lengthTicks == z.endTick - z.startTick;
+  CHECK_EQ(zoneClips, 1);
+}
+
+// zonePattern alone: what played there is kept, the edges are cut, a repeating pattern is unrolled.
+void zonePattern() {
+  doc::Document song = doc::newEmptyDocument();
+  doc::Track t;
+  t.id = "t1";
+  t.name = "Kick";
+  doc::Pattern p;
+  p.id = "p1";
+  p.lengthTicks = 4 * doc::kPpq;  // one bar, repeated in a 4-bar clip
+  for (int i = 0; i < 4; ++i) p.notes.push_back({"n" + std::to_string(i), i * doc::kPpq, 240, 36, 0.8});
+  t.patterns.push_back(p);
+  t.clips.push_back({"c1", "p1", 0, 16 * doc::kPpq, 0});
+  const auto before = heard(t, 0, 16 * doc::kPpq);
+  const std::string pid = doc::zonePattern(t, 6 * doc::kPpq, 10 * doc::kPpq);  // bar 2, beat 3 .. bar 3, beat 3
+  CHECK(heard(t, 0, 16 * doc::kPpq) == before);
+  CHECK_EQ(t.clips.size(), (size_t)3);
+  const doc::Pattern* z = t.findPattern(pid);
+  CHECK(z && z->notes.size() == 4 && z->notes.front().tick == 0 && z->lengthTicks == 4 * doc::kPpq);
+}
+
+void inTheChat(const doc::PCoreCatalog& cat) {
+  const auto fns = control::buildFunctions(&cat);
+  doc::Document song = beat(cat, fns);
+  const doc::Track* kick = named(song, "Kick");
+  if (!kick) return;
+  control::Zone z;
+  z.tracks = {kick->id};
+  z.startTick = song.sections[1].startTick;
+  z.endTick = z.startTick + 8 * doc::kPpq;
+  ai::Chat chat(ai::Config{}, fns, &cat);
+  json req = chat.ask("faz um roll no fim do build-up", song, &z);
+  const std::string sent = req["messages"].back()["content"].get<std::string>();
+  CHECK(sent.find("Seleção do Diogo") != std::string::npos && sent.find("Kick") != std::string::npos);
+  req = chat.onResponse(ai_chat_t::answer(json::array({ai_chat_t::toolUse("r", "ler_musica", json::object())}), "tool_use"), song);
+  const json songRead = ai_chat_t::lastToolResult(req);
+  CHECK(songRead["tracks"].size() == 1 && songRead["otherTracks"].size() == 2 && songRead.contains("selection"));
+  req = chat.onResponse(ai_chat_t::answer(json::array({ai_chat_t::toolUse("a", "pcore", {{"on", "Kick"}, {"section", "Seleção"}, {"style", "darkpsycore"}}),
+                                                       ai_chat_t::toolUse("b", "pcore", {{"on", "Hats"}, {"style", "darkpsycore"}})}),
+                                             "tool_use"), song);
+  CHECK(chat.proposal()["calls"].size() == 1 && chat.proposal()["zone"]["tracks"][0] == kick->id);
+  CHECK(chat.episode()["zone"]["startTick"] == z.startTick);
+  // A new message without a selection: the whole song again.
+  req = chat.ask("e agora?", song);
+  CHECK(!chat.proposal().contains("zone"));
+}
+
+}  // namespace zone_t
+
 // Found by the real-API bench (2026-11-16): models write a style's id as "align"; it aligns as that style does.
 namespace bench_t {
 void alignByStyle(const doc::PCoreCatalog& cat) {
@@ -877,6 +1030,9 @@ TEST("chat: a failed message leaves the conversation") { lessons_t::failedMessag
 TEST("memory: recipes, Gostei, export") { memory_t::recipes(); }
 TEST("memory: what is not confirmed fades") { memory_t::fading(); }
 TEST("memory: in the chat, with any model") { memory_t::inTheChat(catalog()); }
+TEST("zone: the selection limits the proposal") { zone_t::rules(catalog()); }
+TEST("zone: its own clip and pattern") { zone_t::zonePattern(); }
+TEST("zone: in the chat") { zone_t::inTheChat(catalog()); }
 TEST("memory: episodes and the JSONL export") { memory_t::episodesForTraining(catalog()); }
 TEST("song: a style's id as align") { bench_t::alignByStyle(catalog()); }
 TEST("catalog: the gateway view (ajuda / fazer)") { gateway_t::gatewayMode(catalog()); }

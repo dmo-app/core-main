@@ -157,11 +157,19 @@ void AiPanel::send() {
   input_.clear();
   showFeedback(false);
   lastRequest_ = text.toStdString();
-  say(u8("Diogo"), text);
+  // The selection on the tracks: the AI changes only those tracks, in those bars.
+  const control::Zone zone = host_.zone ? host_.zone() : control::Zone{};
+  juce::String shown = text;
+  if (zone.active()) {
+    const int64_t bar = 4 * doc::kPpq;
+    shown += u8("\n(selection: ") + juce::String((int)zone.tracks.size()) + (zone.tracks.size() == 1 ? u8(" track, bars ") : u8(" tracks, bars ")) +
+             juce::String((int)(zone.startTick / bar + 1)) + "-" + juce::String((int)(zone.endTick / bar)) + ")";
+  }
+  say(u8("Diogo"), shown);
   busy_ = true;
   send_.setEnabled(false);
   status_.setText(u8("Thinking…"), juce::dontSendNotification);
-  post(chat_->ask(text.toStdString(), host_.song()));
+  post(chat_->ask(text.toStdString(), host_.song(), zone.active() ? &zone : nullptr));
 }
 
 void AiPanel::post(json body) {

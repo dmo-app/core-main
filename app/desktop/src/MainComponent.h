@@ -443,6 +443,8 @@ private:
   void dragBox(const juce::MouseEvent& e);
   void endBox(const juce::MouseEvent& e);
   bool clipBoxed(const std::string& trackId, const std::string& clipId) const { return boxClips_.count({trackId, clipId}) > 0; }
+  control::Zone aiZone_;                 // the box's tracks and bars, for the AI (UI state, never saved)
+  control::Zone aiZoneNow() const;
   void beginBoxMove();
   void moveBox(int64_t delta);
   void endBoxMove();
