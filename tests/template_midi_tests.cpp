@@ -88,15 +88,56 @@ TEST("keepOnlyMidi: hitech-ref fica so com o MIDI (notas, padroes, clips, seccoe
   CHECK(sends > 0);
 }
 
-TEST("hitech-plugins: o template vai com a app, listado, com o MIDI do hitech-ref") {
+TEST("hitech-plugins: o template vai com a app, listado, com o MIDI do hitech-ref e os plugins da lista") {
   const TemplateLibrary lib = builtins();
   const SongTemplate& t = findTemplate(lib, "hitech-plugins");
   CHECK(!isBaseTemplate(t));
   CHECK(usesRolePlugins(t));
   CHECK_EQ(t.document.bpm, 190.0);
-  CHECK(midiOf(t.document) == midiOf(keepOnlyMidi(findTemplate(lib, "hitech-ref").document)));
-  CHECK(t.document.masterEffects.empty());
-  for (const auto& tr : t.document.tracks) CHECK(tr.effects.empty());
+  // O MIDI do hitech-ref; so os pratos e a perc mudam de nota para o mapa GM do kit do sfizz (FreePats GM.sfz).
+  Document want = keepOnlyMidi(findTemplate(lib, "hitech-ref").document);
+  const std::map<std::string, std::map<int, int>> gm = {{"crash", {{46, 49}}}, {"perc", {{60, 75}, {61, 69}}}};
+  for (auto& tr : want.tracks)
+    if (auto g = gm.find(tr.id); g != gm.end())
+      for (auto& p : tr.patterns) for (auto& n : p.notes) if (auto k = g->second.find(n.pitch); k != g->second.end()) n.pitch = k->second;
+  CHECK(midiOf(t.document) == midiOf(want));
+  // Os plugins do scan do PC do Diogo (core-engine scan, 16/11), pela lista dele.
+  const std::map<std::string, std::string> plays = {{"kick", "Kick 3"},  {"accents", "Kick 3"}, {"impact", "Kick 3"},
+                                                    {"bass", "Serum 2"}, {"lead", "Serum 2"},   {"fm", "Serum 2"},
+                                                    {"arp", "Serum 2"},  {"hats", "sfizz"},     {"open-hats", "sfizz"},
+                                                    {"perc", "sfizz"},   {"crash", "sfizz"}};
+  for (const auto& tr : t.document.tracks) {
+    auto it = plays.find(tr.id);
+    if (it != plays.end()) {
+      CHECK_EQ(tr.instrument.kind, std::string("plugin"));
+      CHECK_EQ(tr.instrument.plugin.value("name", std::string()), it->second);
+      CHECK(tr.effects.empty());
+      if (it->second == "sfizz") {  // com o kit: o estado VST3 que o JUCE le (XML VST3PluginState, magic "VC2!")
+        const std::string st = tr.instrument.plugin.value("state", std::string());
+        CHECK(st.rfind("VkMyI", 0) == 0);
+      }
+    } else {
+      CHECK_EQ(tr.instrument.kind, std::string("bus"));
+    }
+  }
+  // Buses de envio a 100% wet: Pro-R 2 (Mix = 9) no Space e no Huge, Timeless 3 (Mix = 160) no Echo.
+  const std::map<std::string, std::pair<std::string, std::string>> buses = {
+      {"space", {"Pro-R 2", "vst:9"}}, {"huge", {"Pro-R 2", "vst:9"}}, {"echo", {"Timeless 3", "vst:160"}}};
+  for (const auto& [id, want] : buses) {
+    const Track* b = t.document.findTrack(id);
+    CHECK(b != nullptr);
+    if (!b) continue;
+    CHECK_EQ(b->effects.size(), (size_t)1);
+    CHECK_EQ(b->effects[0]["plugin"].value("name", std::string()), want.first);
+    CHECK_EQ(b->automation.size(), (size_t)1);
+    if (b->automation.size() == 1) {
+      CHECK_EQ(b->automation[0].param, "fx:" + b->effects[0].value("id", std::string()) + ":" + want.second);
+      CHECK_EQ(b->automation[0].points.at(0).value, 1.0);
+    }
+  }
+  CHECK_EQ(t.document.masterEffects.size(), (size_t)2);
+  CHECK_EQ(t.document.masterEffects[0]["plugin"].value("name", std::string()), std::string("Pro-Q 4"));
+  CHECK_EQ(t.document.masterEffects[1]["plugin"].value("name", std::string()), std::string("Pro-L 2"));
   // Listado na app (sem withBases).
   const TemplateLibrary listed = loadTemplates(CORE_TEMPLATES_DIR, tempDir("user-vazia-2"));
   CHECK(listed.find("hitech-plugins") != nullptr);
@@ -113,29 +154,30 @@ TEST("hitech-plugins: abre e o motor toca-o (sem NaN, as notas chegam ao motor)"
   CHECK(!r.L.empty());
 }
 
-TEST("hitech-plugins: cada pista toca o plugin do seu papel, os buses levam reverb e delay") {
+TEST("hitech-plugins: os papeis do PC nao trocam os plugins do template nem duplicam os efeitos dos buses") {
   Document d = documentFromTemplate(findTemplate(builtins(), "hitech-plugins"));
-  const RoleMap map = diogoMap();
+  const json before = toJson(d);
+  CHECK_EQ(giveSongRolePlugins(d, RoleMap{}, nullptr), 0);
   std::vector<std::string> left;
-  const int changed = giveSongRolePlugins(d, map, &left);
+  CHECK_EQ(giveSongRolePlugins(d, diogoMap(), &left), 0);
   CHECK(left.empty());
-  CHECK(changed > 0);
-  std::map<std::string, std::string> want = {{"kick", "Kick 3"},          {"bass", "Serum 2 Bass"}, {"hats", "Xfer 909"},
-                                             {"open-hats", "Xfer 909"},   {"perc", "Xfer 909"},     {"crash", "Xfer 909"},
-                                             {"lead", "Serum 2 Lead"},    {"fm", "Serum 2 Lead"},   {"arp", "Serum 2 Pluck"},
-                                             {"accents", "Kick 3"},       {"impact", "Kick 3"}};
-  for (const auto& [id, plugin] : want) {
-    const Track* t = d.findTrack(id);
-    if (!t) { coretest::fail(id.c_str(), 0, "pista em falta"); continue; }
-    CHECK_EQ(t->instrument.kind, std::string("plugin"));
-    CHECK_EQ(t->instrument.plugin.value("name", std::string()), plugin);
-  }
+  CHECK(toJson(d) == before);
+}
+
+// giveSongRolePlugins numa musica so com MIDI: cada pista pelo seu papel e os buses com reverb e delay.
+TEST("giveSongRolePlugins: keepOnlyMidi(hitech-ref) toca pelos papeis") {
+  Document d = keepOnlyMidi(findTemplate(builtins(), "hitech-ref").document);
+  std::vector<std::string> left;
+  CHECK(giveSongRolePlugins(d, diogoMap(), &left) > 0);
+  CHECK(left.empty());
+  const std::map<std::string, std::string> want = {{"kick", "Kick 3"}, {"accents", "Kick 3"}, {"bass", "Serum 2 Bass"},
+                                                   {"hats", "Xfer 909"}, {"crash", "Xfer 909"}, {"fm", "Serum 2 Lead"},
+                                                   {"arp", "Serum 2 Pluck"}};
+  for (const auto& [id, name] : want) CHECK_EQ(d.findTrack(id)->instrument.plugin.value("name", std::string()), name);
   CHECK(findRoleEffect(d, "space", "reverb") >= 0);
   CHECK(findRoleEffect(d, "huge", "reverb") >= 0);
   CHECK(findRoleEffect(d, "echo", "delay") >= 0);
-  // Outra vez nao muda nada (nem duplica os efeitos dos buses).
-  CHECK_EQ(giveSongRolePlugins(d, map, nullptr), 0);
-  CHECK_EQ(d.findTrack("space")->effects.size(), (size_t)1);
+  CHECK_EQ(giveSongRolePlugins(d, diogoMap(), nullptr), 0);
 }
 
 TEST("hitech-plugins: guardar e reabrir da o mesmo (template e musica)") {
@@ -157,6 +199,16 @@ TEST("hitech-plugins: guardar e reabrir da o mesmo (template e musica)") {
   saveFile(song, file);
   const OpenResult opened = openFile(file);
   CHECK(toJson(opened.document) == toJson(song));
+}
+
+// Bug visto ao gerar o template (16/11): o Timeless 3 tem "Feedback Cross Mix" (id 87) antes de "Mix" (id 160), e o
+// macro Mix do papel Delay apanhava o primeiro. Um nome igual a palavra ganha a um que so a contem.
+TEST("papel Delay no Timeless 3: o macro Mix e o parametro Mix, nao Feedback Cross Mix") {
+  const json params = json::array({{{"id", "85"}, {"name", "Feedback"}}, {{"id", "87"}, {"name", "Feedback Cross Mix"}},
+                                   {{"id", "160"}, {"name", "Mix"}}, {{"id", "161"}, {"name", "Lock Mix"}}});
+  const RoleBinding b = guessRoleBinding("delay", fakePlugin("Timeless 3"), params);
+  CHECK_EQ(b.params.at("mix"), std::string("160"));
+  CHECK_EQ(b.params.at("feedback"), std::string("85"));
 }
 
 CORE_TEST_MAIN

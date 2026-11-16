@@ -4387,7 +4387,10 @@ void MainComponent::newFromTemplate(const std::string& templateId) {
   // as one undo step (Ctrl+Z leaves the notes without plugins).
   const bool roles = doc::usesRolePlugins(entry->tmpl);
   newFromDocument(std::move(song), [this, roles] {
-    if (roles) { giveSilentTracksPlugins(true); return; }
+    if (roles) {  // no roles chosen yet: the template's own plugins play, the rest stays silent (no error box)
+      if (!PluginCatalog::roles().roles.empty()) giveSilentTracksPlugins(true);
+      return;
+    }
     if (hasSampleIndex_ && settings_.getUserSettings()->getBoolValue("suggestSamples", true)) useSuggestedSamples(true, true);
   });
 }

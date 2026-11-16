@@ -173,13 +173,16 @@ RoleBinding guessRoleBinding(const std::string& role, const json& plugin, const 
   std::vector<std::string> taken;
   for (const auto& macro : info->macros)
     for (const auto& word : macro.words) {
+      // A name that is the word ("Mix") wins over one that only holds it ("Feedback Cross Mix", Timeless 3).
       const json* best = nullptr;
-      for (const auto& p : params) {
-        if (!p.is_object() || !p.contains("id") || !p.contains("name")) continue;
-        const std::string id = p["id"].is_string() ? p["id"].get<std::string>() : p["id"].dump();
-        if (std::find(taken.begin(), taken.end(), id) != taken.end()) continue;
-        if (hasWord(lower(p.value("name", std::string())), word)) { best = &p; break; }
-      }
+      for (int exact = 1; exact >= 0 && !best; --exact)
+        for (const auto& p : params) {
+          if (!p.is_object() || !p.contains("id") || !p.contains("name")) continue;
+          const std::string id = p["id"].is_string() ? p["id"].get<std::string>() : p["id"].dump();
+          if (std::find(taken.begin(), taken.end(), id) != taken.end()) continue;
+          const std::string name = lower(p.value("name", std::string()));
+          if (exact ? name == word : hasWord(name, word)) { best = &p; break; }
+        }
       if (best) {
         const std::string id = (*best)["id"].is_string() ? (*best)["id"].get<std::string>() : (*best)["id"].dump();
         b.params[macro.id] = id;

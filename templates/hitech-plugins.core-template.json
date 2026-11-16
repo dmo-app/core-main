@@ -1,5 +1,5 @@
 {
-  "description": "The MIDI of 'Hi-tech 190 (from Wake Up and Remember)' with its old sounds and effects reset: kick, KBBB bass in A, hats, percussion, crashes, lead, FM answer and arp over 296 bars at 190 BPM (intro 8, breaks of 8 and 16). Every track plays the plugin of its role from Settings > Roles (Kick: Kick 3, Bass / Lead / Arp: Serum 2, Drums: Xfer 909) and the Space, Huge and Echo buses get the Reverb and Delay roles (Pro-R 2, Timeless 3). Choose the presets, then save it as your own template.",
+  "description": "The MIDI of 'Hi-tech 190 (from Wake Up and Remember)' with its old sounds and effects reset: kick, KBBB bass in A, hats, percussion, crashes, lead, FM answer and arp over 296 bars at 190 BPM (intro 8, breaks of 8 and 16). Kick, Accents, Impacts: Kick 3. Bass, Lead, FM answer, Arp: Serum 2. Space and Huge buses: Pro-R 2; Echo bus: Timeless 3 (100% wet). Master: Pro-Q 4, Pro-L 2. Hats, Percussion and Crash: sfizz with the FreePats GM kit (crash on 49, percussion on claves 75 and cabasa 69). Choose the presets, then save it as your own template.",
   "document": {
     "format": "core-document",
     "lengthTicks": 1136640,
@@ -17,6 +17,34 @@
               "value": -34.0
             }
           ]
+        }
+      ],
+      "effects": [
+        {
+          "bypass": false,
+          "id": "fx1",
+          "plugin": {
+            "file": "C:\\Program Files\\Common Files\\VST3\\FabFilter\\FabFilter Pro-Q 4.vst3",
+            "format": "vst3",
+            "id": "VST3-Pro-Q 4-a3607a0f-beb1ab47",
+            "name": "Pro-Q 4",
+            "vendor": "FabFilter",
+            "version": "4.1.0.0"
+          },
+          "type": "plugin"
+        },
+        {
+          "bypass": false,
+          "id": "fx2",
+          "plugin": {
+            "file": "C:\\Program Files\\Common Files\\VST3\\FabFilter\\FabFilter Pro-L 2.vst3",
+            "format": "vst3",
+            "id": "VST3-Pro-L 2-9890e876-45398b95",
+            "name": "Pro-L 2",
+            "vendor": "FabFilter",
+            "version": "2.2.4.0"
+          },
+          "type": "plugin"
         }
       ],
       "gainDb": 0.0
@@ -328,7 +356,15 @@
         "effects": [],
         "id": "kick",
         "instrument": {
-          "kind": "none"
+          "kind": "plugin",
+          "plugin": {
+            "file": "C:\\Program Files\\Common Files\\VST3\\Kick 3.vst3",
+            "format": "vst3",
+            "id": "VST3-Kick 3-c1a56da5-bc0347ba",
+            "name": "Kick 3",
+            "vendor": "Sonic Academy",
+            "version": "1.1.6"
+          }
         },
         "mix": {
           "gainDb": 0.0,
@@ -737,7 +773,15 @@
         "effects": [],
         "id": "bass",
         "instrument": {
-          "kind": "none"
+          "kind": "plugin",
+          "plugin": {
+            "file": "C:\\Program Files\\Common Files\\VST3\\Serum2.vst3",
+            "format": "vst3",
+            "id": "VST3-Serum 2-3dfe7ae4-c441d38e",
+            "name": "Serum 2",
+            "vendor": "Xfer Records",
+            "version": "2.1.5"
+          }
         },
         "mix": {
           "gainDb": 0.0,
@@ -2018,7 +2062,16 @@
         "effects": [],
         "id": "hats",
         "instrument": {
-          "kind": "none"
+          "kind": "plugin",
+          "plugin": {
+            "file": "C:\\Users\\vk_do\\AppData\\Local\\Programs\\Common\\VST3\\sfizz.vst3\\Contents\\x86_64-win\\sfizz.vst3",
+            "format": "vst3",
+            "id": "VST3-sfizz-e806b3a6-5da1643a",
+            "name": "sfizz",
+            "state": "VkMyISIBAAA8P3htbCB2ZXJzaW9uPSIxLjAiIGVuY29kaW5nPSJVVEYtOCI/PiA8VlNUM1BsdWdpblN0YXRlPjxJQ29tcG9uZW50PjE0MC4uLi4uLi4uLi4uLmIuLi4uQ295S1VNV1l4TTJLMXMxV2o4MUtEODFYMDBWWXRRMmJ1TGtRWjhoUXhVVllQRUZjeUF4VDQ0RmNuVTFib29XWXhBQlRrSTJYME0yYm84bGF1TFVkdFFHWmtNV1o1VWxiUFVsYmlVMmJ5azFhdDB4VEZvVUt4LmlMeC55TXdmeUtGSVdZa0FVWHpNR0hHMGpLeVlsZC4uLi4uLi5QLi4uLi4uLi4uLi5ILi4uPC9JQ29tcG9uZW50PjwvVlNUM1BsdWdpblN0YXRlPgA=",
+            "vendor": "SFZTools",
+            "version": "1.2.3"
+          }
         },
         "mix": {
           "gainDb": -4.0,
@@ -3048,7 +3101,16 @@
         "effects": [],
         "id": "open-hats",
         "instrument": {
-          "kind": "none"
+          "kind": "plugin",
+          "plugin": {
+            "file": "C:\\Users\\vk_do\\AppData\\Local\\Programs\\Common\\VST3\\sfizz.vst3\\Contents\\x86_64-win\\sfizz.vst3",
+            "format": "vst3",
+            "id": "VST3-sfizz-e806b3a6-5da1643a",
+            "name": "sfizz",
+            "state": "VkMyISIBAAA8P3htbCB2ZXJzaW9uPSIxLjAiIGVuY29kaW5nPSJVVEYtOCI/PiA8VlNUM1BsdWdpblN0YXRlPjxJQ29tcG9uZW50PjE0MC4uLi4uLi4uLi4uLmIuLi4uQ295S1VNV1l4TTJLMXMxV2o4MUtEODFYMDBWWXRRMmJ1TGtRWjhoUXhVVllQRUZjeUF4VDQ0RmNuVTFib29XWXhBQlRrSTJYME0yYm84bGF1TFVkdFFHWmtNV1o1VWxiUFVsYmlVMmJ5azFhdDB4VEZvVUt4LmlMeC55TXdmeUtGSVdZa0FVWHpNR0hHMGpLeVlsZC4uLi4uLi5QLi4uLi4uLi4uLi5ILi4uPC9JQ29tcG9uZW50PjwvVlNUM1BsdWdpblN0YXRlPgA=",
+            "vendor": "SFZTools",
+            "version": "1.2.3"
+          }
         },
         "mix": {
           "gainDb": 0.0,
@@ -3585,7 +3647,16 @@
         "effects": [],
         "id": "perc",
         "instrument": {
-          "kind": "none"
+          "kind": "plugin",
+          "plugin": {
+            "file": "C:\\Users\\vk_do\\AppData\\Local\\Programs\\Common\\VST3\\sfizz.vst3\\Contents\\x86_64-win\\sfizz.vst3",
+            "format": "vst3",
+            "id": "VST3-sfizz-e806b3a6-5da1643a",
+            "name": "sfizz",
+            "state": "VkMyISIBAAA8P3htbCB2ZXJzaW9uPSIxLjAiIGVuY29kaW5nPSJVVEYtOCI/PiA8VlNUM1BsdWdpblN0YXRlPjxJQ29tcG9uZW50PjE0MC4uLi4uLi4uLi4uLmIuLi4uQ295S1VNV1l4TTJLMXMxV2o4MUtEODFYMDBWWXRRMmJ1TGtRWjhoUXhVVllQRUZjeUF4VDQ0RmNuVTFib29XWXhBQlRrSTJYME0yYm84bGF1TFVkdFFHWmtNV1o1VWxiUFVsYmlVMmJ5azFhdDB4VEZvVUt4LmlMeC55TXdmeUtGSVdZa0FVWHpNR0hHMGpLeVlsZC4uLi4uLi5QLi4uLi4uLi4uLi5ILi4uPC9JQ29tcG9uZW50PjwvVlNUM1BsdWdpblN0YXRlPgA=",
+            "vendor": "SFZTools",
+            "version": "1.2.3"
+          }
         },
         "mix": {
           "gainDb": 0.0,
@@ -3617,56 +3688,56 @@
               {
                 "id": "pa1",
                 "length": 120,
-                "pitch": 60,
+                "pitch": 75,
                 "tick": 720,
                 "velocity": 0.9
               },
               {
                 "id": "pa2",
                 "length": 120,
-                "pitch": 60,
+                "pitch": 75,
                 "tick": 1680,
                 "velocity": 0.6
               },
               {
                 "id": "pa3",
                 "length": 120,
-                "pitch": 60,
+                "pitch": 75,
                 "tick": 2400,
                 "velocity": 0.6
               },
               {
                 "id": "pa4",
                 "length": 120,
-                "pitch": 61,
+                "pitch": 69,
                 "tick": 3360,
                 "velocity": 0.6
               },
               {
                 "id": "pa5",
                 "length": 120,
-                "pitch": 60,
+                "pitch": 75,
                 "tick": 4560,
                 "velocity": 0.9
               },
               {
                 "id": "pa6",
                 "length": 120,
-                "pitch": 60,
+                "pitch": 75,
                 "tick": 5520,
                 "velocity": 0.6
               },
               {
                 "id": "pa7",
                 "length": 120,
-                "pitch": 60,
+                "pitch": 75,
                 "tick": 6240,
                 "velocity": 0.6
               },
               {
                 "id": "pa8",
                 "length": 120,
-                "pitch": 61,
+                "pitch": 69,
                 "tick": 7200,
                 "velocity": 0.6
               }
@@ -3680,70 +3751,70 @@
               {
                 "id": "pb1",
                 "length": 120,
-                "pitch": 60,
+                "pitch": 75,
                 "tick": 240,
                 "velocity": 0.6
               },
               {
                 "id": "pb2",
                 "length": 120,
-                "pitch": 61,
+                "pitch": 69,
                 "tick": 1440,
                 "velocity": 0.9
               },
               {
                 "id": "pb3",
                 "length": 120,
-                "pitch": 60,
+                "pitch": 75,
                 "tick": 2160,
                 "velocity": 0.9
               },
               {
                 "id": "pb4",
                 "length": 120,
-                "pitch": 60,
+                "pitch": 75,
                 "tick": 2640,
                 "velocity": 0.6
               },
               {
                 "id": "pb5",
                 "length": 120,
-                "pitch": 60,
+                "pitch": 75,
                 "tick": 3600,
                 "velocity": 0.9
               },
               {
                 "id": "pb6",
                 "length": 120,
-                "pitch": 60,
+                "pitch": 75,
                 "tick": 4080,
                 "velocity": 0.6
               },
               {
                 "id": "pb7",
                 "length": 120,
-                "pitch": 61,
+                "pitch": 69,
                 "tick": 5280,
                 "velocity": 0.9
               },
               {
                 "id": "pb8",
                 "length": 120,
-                "pitch": 60,
+                "pitch": 75,
                 "tick": 6000,
                 "velocity": 0.9
               },
               {
                 "id": "pb9",
                 "length": 120,
-                "pitch": 60,
+                "pitch": 75,
                 "tick": 6480,
                 "velocity": 0.6
               },
               {
                 "id": "pb10",
                 "length": 120,
-                "pitch": 60,
+                "pitch": 75,
                 "tick": 7440,
                 "velocity": 0.9
               }
@@ -3771,7 +3842,15 @@
         "effects": [],
         "id": "accents",
         "instrument": {
-          "kind": "none"
+          "kind": "plugin",
+          "plugin": {
+            "file": "C:\\Program Files\\Common Files\\VST3\\Kick 3.vst3",
+            "format": "vst3",
+            "id": "VST3-Kick 3-c1a56da5-bc0347ba",
+            "name": "Kick 3",
+            "vendor": "Sonic Academy",
+            "version": "1.1.6"
+          }
         },
         "mix": {
           "gainDb": 0.0,
@@ -3871,7 +3950,15 @@
         "effects": [],
         "id": "impact",
         "instrument": {
-          "kind": "none"
+          "kind": "plugin",
+          "plugin": {
+            "file": "C:\\Program Files\\Common Files\\VST3\\Kick 3.vst3",
+            "format": "vst3",
+            "id": "VST3-Kick 3-c1a56da5-bc0347ba",
+            "name": "Kick 3",
+            "vendor": "Sonic Academy",
+            "version": "1.1.6"
+          }
         },
         "mix": {
           "gainDb": 0.0,
@@ -3947,7 +4034,16 @@
         "effects": [],
         "id": "crash",
         "instrument": {
-          "kind": "none"
+          "kind": "plugin",
+          "plugin": {
+            "file": "C:\\Users\\vk_do\\AppData\\Local\\Programs\\Common\\VST3\\sfizz.vst3\\Contents\\x86_64-win\\sfizz.vst3",
+            "format": "vst3",
+            "id": "VST3-sfizz-e806b3a6-5da1643a",
+            "name": "sfizz",
+            "state": "VkMyISIBAAA8P3htbCB2ZXJzaW9uPSIxLjAiIGVuY29kaW5nPSJVVEYtOCI/PiA8VlNUM1BsdWdpblN0YXRlPjxJQ29tcG9uZW50PjE0MC4uLi4uLi4uLi4uLmIuLi4uQ295S1VNV1l4TTJLMXMxV2o4MUtEODFYMDBWWXRRMmJ1TGtRWjhoUXhVVllQRUZjeUF4VDQ0RmNuVTFib29XWXhBQlRrSTJYME0yYm84bGF1TFVkdFFHWmtNV1o1VWxiUFVsYmlVMmJ5azFhdDB4VEZvVUt4LmlMeC55TXdmeUtGSVdZa0FVWHpNR0hHMGpLeVlsZC4uLi4uLi5QLi4uLi4uLi4uLi5ILi4uPC9JQ29tcG9uZW50PjwvVlNUM1BsdWdpblN0YXRlPgA=",
+            "vendor": "SFZTools",
+            "version": "1.2.3"
+          }
         },
         "mix": {
           "gainDb": 0.0,
@@ -3973,7 +4069,7 @@
               {
                 "id": "n1",
                 "length": 1920,
-                "pitch": 46,
+                "pitch": 49,
                 "tick": 0,
                 "velocity": 0.95
               }
@@ -4095,7 +4191,15 @@
         "effects": [],
         "id": "lead",
         "instrument": {
-          "kind": "none"
+          "kind": "plugin",
+          "plugin": {
+            "file": "C:\\Program Files\\Common Files\\VST3\\Serum2.vst3",
+            "format": "vst3",
+            "id": "VST3-Serum 2-3dfe7ae4-c441d38e",
+            "name": "Serum 2",
+            "vendor": "Xfer Records",
+            "version": "2.1.5"
+          }
         },
         "mix": {
           "gainDb": 0.0,
@@ -6683,7 +6787,15 @@
         "effects": [],
         "id": "fm",
         "instrument": {
-          "kind": "none"
+          "kind": "plugin",
+          "plugin": {
+            "file": "C:\\Program Files\\Common Files\\VST3\\Serum2.vst3",
+            "format": "vst3",
+            "id": "VST3-Serum 2-3dfe7ae4-c441d38e",
+            "name": "Serum 2",
+            "vendor": "Xfer Records",
+            "version": "2.1.5"
+          }
         },
         "mix": {
           "gainDb": 0.0,
@@ -6762,7 +6874,15 @@
         "effects": [],
         "id": "arp",
         "instrument": {
-          "kind": "none"
+          "kind": "plugin",
+          "plugin": {
+            "file": "C:\\Program Files\\Common Files\\VST3\\Serum2.vst3",
+            "format": "vst3",
+            "id": "VST3-Serum 2-3dfe7ae4-c441d38e",
+            "name": "Serum 2",
+            "vendor": "Xfer Records",
+            "version": "2.1.5"
+          }
         },
         "mix": {
           "gainDb": 0.0,
@@ -7119,10 +7239,35 @@
         "role": "pluck"
       },
       {
-        "automation": [],
+        "automation": [
+          {
+            "param": "fx:fx1:vst:9",
+            "points": [
+              {
+                "tick": 0,
+                "value": 1.0
+              }
+            ]
+          }
+        ],
         "clips": [],
         "color": "#257bf4",
-        "effects": [],
+        "effects": [
+          {
+            "bypass": false,
+            "id": "fx1",
+            "plugin": {
+              "file": "C:\\Program Files\\Common Files\\VST3\\FabFilter\\FabFilter Pro-R 2.vst3",
+              "format": "vst3",
+              "id": "VST3-Pro-R 2-7d7f5b0-93ab455f",
+              "name": "Pro-R 2",
+              "vendor": "FabFilter",
+              "version": "2.0.4.0"
+            },
+            "role": "reverb",
+            "type": "plugin"
+          }
+        ],
         "id": "space",
         "instrument": {
           "kind": "bus"
@@ -7137,10 +7282,35 @@
         "patterns": []
       },
       {
-        "automation": [],
+        "automation": [
+          {
+            "param": "fx:fx1:vst:160",
+            "points": [
+              {
+                "tick": 0,
+                "value": 1.0
+              }
+            ]
+          }
+        ],
         "clips": [],
         "color": "#f4d125",
-        "effects": [],
+        "effects": [
+          {
+            "bypass": false,
+            "id": "fx1",
+            "plugin": {
+              "file": "C:\\Program Files\\Common Files\\VST3\\FabFilter\\FabFilter Timeless 3.vst3",
+              "format": "vst3",
+              "id": "VST3-Timeless 3-72be40c7-96546ef3",
+              "name": "Timeless 3",
+              "vendor": "FabFilter",
+              "version": "3.0.8.0"
+            },
+            "role": "delay",
+            "type": "plugin"
+          }
+        ],
         "id": "echo",
         "instrument": {
           "kind": "bus"
@@ -7155,10 +7325,35 @@
         "patterns": []
       },
       {
-        "automation": [],
+        "automation": [
+          {
+            "param": "fx:fx1:vst:9",
+            "points": [
+              {
+                "tick": 0,
+                "value": 1.0
+              }
+            ]
+          }
+        ],
         "clips": [],
         "color": "#25f459",
-        "effects": [],
+        "effects": [
+          {
+            "bypass": false,
+            "id": "fx1",
+            "plugin": {
+              "file": "C:\\Program Files\\Common Files\\VST3\\FabFilter\\FabFilter Pro-R 2.vst3",
+              "format": "vst3",
+              "id": "VST3-Pro-R 2-7d7f5b0-93ab455f",
+              "name": "Pro-R 2",
+              "vendor": "FabFilter",
+              "version": "2.0.4.0"
+            },
+            "role": "reverb",
+            "type": "plugin"
+          }
+        ],
         "id": "huge",
         "instrument": {
           "kind": "bus"
@@ -7188,7 +7383,7 @@
     },
     "ui": {}
   },
-  "ficha": "# Hi-tech 190 (plugins)\n\nFicha do template `hitech-plugins` (versão 1). Estilo: Hi-tech.\n\nThe MIDI of 'Hi-tech 190 (from Wake Up and Remember)' with its old sounds and effects reset: kick, KBBB bass in A, hats, percussion, crashes, lead, FM answer and arp over 296 bars at 190 BPM (intro 8, breaks of 8 and 16). Every track plays the plugin of its role from Settings > Roles (Kick: Kick 3, Bass / Lead / Arp: Serum 2, Drums: Xfer 909) and the Space, Huge and Echo buses get the Reverb and Delay roles (Pro-R 2, Timeless 3). Choose the presets, then save it as your own template.\n\nFeito a partir de \"hitech-ref\", do tick 0 ao 0 (compassos 1.1 a 1.1).\n\n## Tempo e forma\n\n- BPM: 190\n- Duração: 296 compassos (1136640 ticks, 960 por semínima)\n\n| Secção | Começa | Duração |\n|---|---|---|\n| Intro | 1.1 | 8 compassos |\n| Groove | 9.1 | 64 compassos |\n| Break | 73.1 | 8 compassos |\n| Development | 81.1 | 96 compassos |\n| Break | 177.1 | 16 compassos |\n| Main | 193.1 | 96 compassos |\n| Outro | 289.1 | 8 compassos |\n\n## Master\n\n- Ganho: 0 dB\n\nAutomação:\n\n| Parâmetro | Pontos | Mín. | Máx. | Começa | Acaba |\n|---|---|---|---|---|---|\n| `gainDb` | 2 | -34 | 0 | 0 em 289.1 | -34 em 296.4 |\n\n## Pistas\n\n### Kick (`kick`)\n\n- Instrumento: none (`none`, versão 1)\n\n- Mistura: ganho 0 dB, pan 0\n- Notas: 1012, de C2 a C2, em 41 clips e 2 padrões\n\n### Bass (`bass`)\n\n- Instrumento: none (`none`, versão 1)\n\n- Mistura: ganho 0 dB, pan 0\n- Notas: 2976, de A1 a A2, em 40 clips e 3 padrões\n\n### Closed hats (`hats`)\n\n- Instrumento: none (`none`, versão 1)\n\n- Mistura: ganho -4 dB, pan 0.12\n- Envio para `space`: -51.6 dB\n- Notas: 4128, de F#2 a F#2, em 36 clips e 2 padrões\n\n### Open hats (`open-hats`)\n\n- Instrumento: none (`none`, versão 1)\n\n- Mistura: ganho 0 dB, pan -0.12\n- Envio para `space`: -49.6 dB\n- Notas: 640, de A#2 a A#2, em 6 clips e 1 padrões\n\n### Percussion (`perc`)\n\n- Instrumento: none (`none`, versão 1)\n\n- Mistura: ganho 0 dB, pan -0.3\n- Envio para `space`: -45.6 dB\n- Envio para `echo`: -37 dB\n- Notas: 684, de C4 a C#4, em 76 clips e 2 padrões\n\n### Accents (`accents`)\n\n- Instrumento: none (`none`, versão 1)\n\n- Mistura: ganho 0 dB, pan 0.25\n- Envio para `huge`: -10 dB\n- Notas: 60, de C2 a C2, em 2 clips e 1 padrões\n\n### Impacts (`impact`)\n\n- Instrumento: none (`none`, versão 1)\n\n- Mistura: ganho 0 dB, pan 0\n- Notas: 5, de C2 a C2, em 5 clips e 1 padrões\n\n### Crash (`crash`)\n\n- Instrumento: none (`none`, versão 1)\n\n- Mistura: ganho 0 dB, pan 0\n- Envio para `space`: -41.6 dB\n- Notas: 7, de A#2 a A#2, em 7 clips e 1 padrões\n\n### Lead (`lead`)\n\n- Instrumento: none (`none`, versão 1)\n\n- Mistura: ganho 0 dB, pan 0\n- Notas: 1784, de A3 a A5, em 12 clips e 2 padrões\n\n### FM answer (`fm`)\n\n- Instrumento: none (`none`, versão 1)\n\n- Mistura: ganho 0 dB, pan 0\n- Notas: 144, de C4 a E4, em 6 clips e 1 padrões\n\n### Arp (`arp`)\n\n- Instrumento: none (`none`, versão 1)\n\n- Mistura: ganho 0 dB, pan 0\n- Notas: 864, de A4 a A5, em 4 clips e 1 padrões\n\n### Space (`space`)\n\n- Instrumento: bus (`bus`, versão 1)\n\n- Mistura: ganho 0 dB, pan 0\n\n### Echo (`echo`)\n\n- Instrumento: bus (`bus`, versão 1)\n\n- Mistura: ganho 0 dB, pan 0\n\n### Huge (`huge`)\n\n- Instrumento: bus (`bus`, versão 1)\n\n- Mistura: ganho 0 dB, pan 0\n",
+  "ficha": "# Hi-tech 190 (plugins)\n\nFicha do template `hitech-plugins` (versão 1). Estilo: Hi-tech.\n\nThe MIDI of 'Hi-tech 190 (from Wake Up and Remember)' with its old sounds and effects reset: kick, KBBB bass in A, hats, percussion, crashes, lead, FM answer and arp over 296 bars at 190 BPM (intro 8, breaks of 8 and 16). Kick, Accents, Impacts: Kick 3. Bass, Lead, FM answer, Arp: Serum 2. Space and Huge buses: Pro-R 2; Echo bus: Timeless 3 (100% wet). Master: Pro-Q 4, Pro-L 2. Hats, Percussion and Crash: sfizz with the FreePats GM kit (crash on 49, percussion on claves 75 and cabasa 69). Choose the presets, then save it as your own template.\n\nFeito a partir de \"hitech-ref\", do tick 0 ao 0 (compassos 1.1 a 1.1).\n\n## Tempo e forma\n\n- BPM: 190\n- Duração: 296 compassos (1136640 ticks, 960 por semínima)\n\n| Secção | Começa | Duração |\n|---|---|---|\n| Intro | 1.1 | 8 compassos |\n| Groove | 9.1 | 64 compassos |\n| Break | 73.1 | 8 compassos |\n| Development | 81.1 | 96 compassos |\n| Break | 177.1 | 16 compassos |\n| Main | 193.1 | 96 compassos |\n| Outro | 289.1 | 8 compassos |\n\n## Master\n\n- Ganho: 0 dB\n\nEfeitos (pela ordem da cadeia):\n\n- **** (``, id `fx1`)\n\n- **** (``, id `fx2`)\n\nAutomação:\n\n| Parâmetro | Pontos | Mín. | Máx. | Começa | Acaba |\n|---|---|---|---|---|---|\n| `gainDb` | 2 | -34 | 0 | 0 em 289.1 | -34 em 296.4 |\n\n## Pistas\n\n### Kick (`kick`)\n\n- Instrumento: plugin (`plugin`, versão 1)\n\n- Mistura: ganho 0 dB, pan 0\n- Notas: 1012, de C2 a C2, em 41 clips e 2 padrões\n\n### Bass (`bass`)\n\n- Instrumento: plugin (`plugin`, versão 1)\n\n- Mistura: ganho 0 dB, pan 0\n- Notas: 2976, de A1 a A2, em 40 clips e 3 padrões\n\n### Closed hats (`hats`)\n\n- Instrumento: plugin (`plugin`, versão 1)\n\n- Mistura: ganho -4 dB, pan 0.12\n- Envio para `space`: -51.6 dB\n- Notas: 4128, de F#2 a F#2, em 36 clips e 2 padrões\n\n### Open hats (`open-hats`)\n\n- Instrumento: plugin (`plugin`, versão 1)\n\n- Mistura: ganho 0 dB, pan -0.12\n- Envio para `space`: -49.6 dB\n- Notas: 640, de A#2 a A#2, em 6 clips e 1 padrões\n\n### Percussion (`perc`)\n\n- Instrumento: plugin (`plugin`, versão 1)\n\n- Mistura: ganho 0 dB, pan -0.3\n- Envio para `space`: -45.6 dB\n- Envio para `echo`: -37 dB\n- Notas: 684, de A4 a D#5, em 76 clips e 2 padrões\n\n### Accents (`accents`)\n\n- Instrumento: plugin (`plugin`, versão 1)\n\n- Mistura: ganho 0 dB, pan 0.25\n- Envio para `huge`: -10 dB\n- Notas: 60, de C2 a C2, em 2 clips e 1 padrões\n\n### Impacts (`impact`)\n\n- Instrumento: plugin (`plugin`, versão 1)\n\n- Mistura: ganho 0 dB, pan 0\n- Notas: 5, de C2 a C2, em 5 clips e 1 padrões\n\n### Crash (`crash`)\n\n- Instrumento: plugin (`plugin`, versão 1)\n\n- Mistura: ganho 0 dB, pan 0\n- Envio para `space`: -41.6 dB\n- Notas: 7, de C#3 a C#3, em 7 clips e 1 padrões\n\n### Lead (`lead`)\n\n- Instrumento: plugin (`plugin`, versão 1)\n\n- Mistura: ganho 0 dB, pan 0\n- Notas: 1784, de A3 a A5, em 12 clips e 2 padrões\n\n### FM answer (`fm`)\n\n- Instrumento: plugin (`plugin`, versão 1)\n\n- Mistura: ganho 0 dB, pan 0\n- Notas: 144, de C4 a E4, em 6 clips e 1 padrões\n\n### Arp (`arp`)\n\n- Instrumento: plugin (`plugin`, versão 1)\n\n- Mistura: ganho 0 dB, pan 0\n- Notas: 864, de A4 a A5, em 4 clips e 1 padrões\n\n### Space (`space`)\n\n- Instrumento: bus (`bus`, versão 1)\n\n- Mistura: ganho 0 dB, pan 0\n\nEfeitos (pela ordem da cadeia):\n\n- **** (``, id `fx1`)\n\nAutomação:\n\n| Parâmetro | Pontos | Mín. | Máx. | Começa | Acaba |\n|---|---|---|---|---|---|\n| `fx:fx1:vst:9` | 1 | 1 | 1 | 1 em 1.1 | 1 em 1.1 |\n\n### Echo (`echo`)\n\n- Instrumento: bus (`bus`, versão 1)\n\n- Mistura: ganho 0 dB, pan 0\n\nEfeitos (pela ordem da cadeia):\n\n- **** (``, id `fx1`)\n\nAutomação:\n\n| Parâmetro | Pontos | Mín. | Máx. | Começa | Acaba |\n|---|---|---|---|---|---|\n| `fx:fx1:vst:160` | 1 | 1 | 1 | 1 em 1.1 | 1 em 1.1 |\n\n### Huge (`huge`)\n\n- Instrumento: bus (`bus`, versão 1)\n\n- Mistura: ganho 0 dB, pan 0\n\nEfeitos (pela ordem da cadeia):\n\n- **** (``, id `fx1`)\n\nAutomação:\n\n| Parâmetro | Pontos | Mín. | Máx. | Começa | Acaba |\n|---|---|---|---|---|---|\n| `fx:fx1:vst:9` | 1 | 1 | 1 | 1 em 1.1 | 1 em 1.1 |\n",
   "format": "core-template",
   "id": "hitech-plugins",
   "name": "Hi-tech 190 (plugins)",
