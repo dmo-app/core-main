@@ -127,17 +127,23 @@ public:
     // The plugins the AI uses (Diogo, 2026-11-16): look for those only, not the whole VST3 folder.
     label(pluginsLabel_, "PLUGINS THE AI USES");
     pluginStatus_.setColour(juce::Label::textColourId, kText);
+    pluginStatus_.setJustificationType(juce::Justification::topLeft);
     addAndMakeVisible(pluginStatus_);
     scanAi_.setTooltip(u8("Scans only the AI's plugins (quick); the rest of the plugin list stays as it is"));
     scanAi_.onClick = [this] { scanAiPlugins(); };
     addAndMakeVisible(scanAi_);
     getPlugin_.onClick = [this] {
-      for (const auto& p : ai::aiPlugins())
-        if (!ai::findAiPlugin(p)) juce::URL(u8(p.download)).launchInDefaultBrowser();
+      const auto known = owner_.host_.instruments ? owner_.host_.instruments() : std::vector<json>();
+      for (const auto& p : ai::aiPlugins()) {
+        bool listed = false;
+        for (const auto& k : known)
+          listed |= juce::String::fromUTF8(k.value("file", std::string()).c_str()).endsWithIgnoreCase(u8(p.file));
+        if (!ai::findAiPlugin(p) && !listed) juce::URL(u8(p.download)).launchInDefaultBrowser();
+      }
     };
     addChildComponent(getPlugin_);
     refreshPlugins();
-    setSize(420, 520);
+    setSize(440, 580);
   }
 
   void paint(juce::Graphics& g) override { g.fillAll(kPanel); }
@@ -179,11 +185,11 @@ public:
     folder_.setBounds(last);
     r.removeFromTop(10);
     row(pluginsLabel_, 18);
-    row(pluginStatus_, 22);
+    row(pluginStatus_, 72);
     auto pb = r.removeFromTop(kSpaceButton);
     scanAi_.setBounds(pb.removeFromLeft(190));
     pb.removeFromLeft(6);
-    getPlugin_.setBounds(pb.removeFromLeft(140));
+    getPlugin_.setBounds(pb.removeFromLeft(170));
   }
 
 private:
@@ -195,25 +201,37 @@ private:
     bool missing = false;
     const auto known = owner_.host_.instruments ? owner_.host_.instruments() : std::vector<json>();
     for (const auto& p : ai::aiPlugins()) {
-      const auto file = ai::findAiPlugin(p);
       bool listed = false;
       for (const auto& k : known)
         listed |= juce::String::fromUTF8(k.value("name", std::string()).c_str()).equalsIgnoreCase(u8(p.name)) ||
                   juce::String::fromUTF8(k.value("file", std::string()).c_str()).endsWithIgnoreCase(u8(p.file));
+      const bool file = ai::findAiPlugin(p).has_value() || listed;  // in a VST3 folder, or where Core's list found it
       missing |= !file;
-      lines.add(u8(p.name) + u8(": ") +
+      lines.add(u8(p.name) + u8(" (") + u8(p.licence) + u8("): ") +
                 (!file ? u8("not installed (free at ") + u8(p.download) + ")"
                        : listed ? u8("installed and in Core's list") : u8("installed, not scanned yet")));
     }
-    pluginStatus_.setText(lines.joinIntoString("  ·  "), juce::dontSendNotification);
-    getPlugin_.setButtonText(u8("Get ") + u8(ai::synth().name));
+    pluginStatus_.setText(lines.joinIntoString("\n"), juce::dontSendNotification);
+    getPlugin_.setButtonText(u8("Get the missing ones"));
     getPlugin_.setVisible(missing);
   }
 
   void scanAiPlugins() {
     juce::Array<juce::File> files;
-    for (const auto& p : ai::aiPlugins())
-      if (const auto f = ai::findAiPlugin(p)) files.add(juce::File(juce::String(f->wstring().c_str())));
+    const auto known = owner_.host_.instruments ? owner_.host_.instruments() : std::vector<json>();
+    for (const auto& p : ai::aiPlugins()) {
+      if (const auto f = ai::findAiPlugin(p)) {
+        files.add(juce::File(juce::String(f->wstring().c_str())));
+        continue;
+      }
+      for (const auto& k : known) {  // not in a standard folder: where Core's list found it (D:\Core-deps\vst3...)
+        const juce::String at = juce::String::fromUTF8(k.value("file", std::string()).c_str());
+        if (at.endsWithIgnoreCase(u8(p.file)) && juce::File::isAbsolutePath(at)) {
+          files.addIfNotAlreadyThere(juce::File(at));
+          break;
+        }
+      }
+    }
     if (files.isEmpty() || !owner_.host_.scanPlugins) {
       refreshPlugins();
       return;

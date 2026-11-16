@@ -11,15 +11,17 @@ std::string lower(std::string s) {
 }
 }  // namespace
 
-nlohmann::json findSynthPlugin(const nlohmann::json& scanned) {
+nlohmann::json findPluginNamed(const nlohmann::json& scanned, const std::string& name) {
   if (!scanned.is_array()) return nullptr;
   for (const auto& p : scanned) {
     if (!p.is_object() || !p.contains("id") || !p.contains("file")) continue;
     if (lower(p.value("format", "")) != "vst3") continue;
-    if (lower(p.value("name", "")) == lower(synth().name)) return p;
+    if (lower(p.value("name", "")) == lower(name)) return p;
   }
   return nullptr;
 }
+
+nlohmann::json findSynthPlugin(const nlohmann::json& scanned) { return findPluginNamed(scanned, synth().name); }
 
 nlohmann::json withSynthRoles(nlohmann::json roles, const nlohmann::json& scanned) {
   if (!roles.is_object()) roles = {{"version", 1}};
@@ -30,6 +32,29 @@ nlohmann::json withSynthRoles(nlohmann::json roles, const nlohmann::json& scanne
     nlohmann::json& r = roles["roles"][role];
     if (r.is_object() && r.contains("plugin") && !r["plugin"].is_null()) continue;  // the user's choice stays
     r = {{"plugin", plugin}, {"params", nlohmann::json::object()}};
+  }
+  return roles;
+}
+
+nlohmann::json findPluginWith(const nlohmann::json& scanned, const std::string& word) {
+  if (!scanned.is_array()) return nullptr;
+  for (const auto& p : scanned) {
+    if (!p.is_object() || !p.contains("id") || !p.contains("file")) continue;
+    if (lower(p.value("format", "")) != "vst3") continue;
+    if (lower(p.value("name", "")).find(lower(word)) != std::string::npos) return p;
+  }
+  return nullptr;
+}
+
+nlohmann::json withAiRoles(nlohmann::json roles, const nlohmann::json& scanned) {
+  roles = withSynthRoles(std::move(roles), scanned);
+  for (const auto& r : aiRoles()) {
+    const nlohmann::json plugin = findPluginWith(scanned, r.match);
+    if (plugin.is_null()) continue;
+    nlohmann::json& b = roles["roles"][r.role];
+    if (b.is_object() && b.contains("plugin") && !b["plugin"].is_null()) continue;  // the user's choice stays
+    b = {{"plugin", plugin}, {"params", nlohmann::json::object()}};
+    if (*r.effect) b["effect"] = r.effect;
   }
   return roles;
 }

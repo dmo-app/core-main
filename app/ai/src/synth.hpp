@@ -43,11 +43,34 @@ inline std::optional<std::filesystem::path> findSynth(const std::vector<std::fil
   return std::nullopt;
 }
 
-// The plugins the AI uses, as files to look for (Settings of the AI panel scans only these): today the synth.
+// The plugins the AI uses (Diogo, 2026-11-16): open source only, so they can later be forked into the AI's own
+// tools. Kept few on purpose: one synth, one sample player, one reverb, one effects plugin. Each is a separate VST3;
+// Core only loads them, never links their code (GPL stays theirs).
 struct AiPlugin {
-  std::string name, file, download;
+  std::string name, file, download, licence;
 };
-inline std::vector<AiPlugin> aiPlugins() { return {{synth().name, synth().file, synth().download}}; }
+// The default role of each (Settings > Roles, roles.hpp). `match`: a word of the scanned plugin's name (case
+// ignored). `effect`: for Airwindows Consolidated, the effect to choose in it for that role (one plugin, many effects).
+struct AiRole {
+  const char* role;
+  const char* match;
+  const char* effect;
+};
+inline const std::vector<AiRole>& aiRoles() {
+  static const std::vector<AiRole> r = {{"drums", "sfizz", ""},
+                                        {"reverb", "dragonfly room", ""},
+                                        {"delay", "airwindows consolidated", "TapeDelay2"},
+                                        {"filter", "airwindows consolidated", "Capacitor2"},
+                                        {"drive", "airwindows consolidated", "Drive"},
+                                        {"sidechain", "airwindows consolidated", "PurestGain"}};
+  return r;
+}
+inline std::vector<AiPlugin> aiPlugins() {
+  return {{synth().name, synth().file, synth().download, "GPL-3"},
+          {"sfizz", "sfizz.vst3", "https://sfz.tools/sfizz/downloads", "BSD-2"},
+          {"Dragonfly Room Reverb", "DragonflyRoomReverb.vst3", "https://michaelwillis.github.io/dragonfly-reverb/", "GPL-3"},
+          {"Airwindows Consolidated", "Airwindows Consolidated.vst3", "https://github.com/baconpaul/airwin2rack/releases", "MIT"}};
+}
 // Where a plugin of the AI is on this computer, or none.
 inline std::optional<std::filesystem::path> findAiPlugin(const AiPlugin& p, const std::vector<std::filesystem::path>& folders = vst3Folders()) {
   for (const auto& f : folders) {

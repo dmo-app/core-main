@@ -1052,7 +1052,8 @@ void vital() {
   CHECK(found && *found == dir / "b" / "Vital.vst3");
   // The AI's plugins: today the synth, looked for the same way.
   const auto plugins = ai::aiPlugins();
-  CHECK(plugins.size() == 1 && plugins[0].file == "Vital.vst3");
+  CHECK(plugins.size() == 4 && plugins[0].file == "Vital.vst3");  // Vital, sfizz, Dragonfly Room, Airwindows: no more
+  for (const auto& p : plugins) CHECK(!p.licence.empty() && !p.download.empty());
   const auto again = ai::findAiPlugin(plugins[0], {dir / "a", dir / "b"});
   CHECK(again && *again == dir / "b" / "Vital.vst3");
   fs::remove_all(dir);
@@ -1077,6 +1078,23 @@ void vital() {
 
   // Without Vital in the scan nothing changes.
   CHECK_EQ(ai::withSynthRoles(mine, json::array({other})), mine);
+
+  // The whole default map: Vital, sfizz, Dragonfly Room and Airwindows Consolidated; the user's reverb stays.
+  auto plugin = [](const char* name) {
+    return json{{"format", "VST3"}, {"id", std::string("VST3-") + name}, {"name", name}, {"vendor", "x"}, {"file", std::string("C:/x/") + name + ".vst3"}};
+  };
+  json chosen = {{"version", 1}, {"roles", {{"reverb", {{"plugin", plugin("ValhallaRoom")}, {"params", json::object()}}}}}};
+  const json all = ai::withAiRoles(chosen, json::array({vital, plugin("sfizz"), plugin("Dragonfly Room Reverb"), plugin("Airwindows Consolidated")}));
+  CHECK_EQ(all["roles"]["reverb"]["plugin"]["name"], json("ValhallaRoom"));
+  CHECK_EQ(all["roles"]["drums"]["plugin"]["name"], json("sfizz"));
+  CHECK_EQ(all["roles"]["delay"]["plugin"]["name"], json("Airwindows Consolidated"));
+  CHECK_EQ(all["roles"]["delay"]["effect"], json("TapeDelay2"));
+  CHECK_EQ(all["roles"]["sidechain"]["effect"], json("PurestGain"));
+  CHECK(!all["roles"]["reverb"].contains("effect"));
+  const json fresh2 = ai::withAiRoles(nullptr, json::array({plugin("Dragonfly Room Reverb")}));
+  CHECK_EQ(fresh2["roles"]["reverb"]["plugin"]["name"], json("Dragonfly Room Reverb"));
+  CHECK(!fresh2["roles"].contains("delay"));  // Airwindows not scanned: left empty
+  CHECK_EQ(all["roles"]["lead"]["plugin"]["name"], json("Vital"));
 }
 }  // namespace synth_t
 
