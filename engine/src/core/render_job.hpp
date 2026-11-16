@@ -5,6 +5,7 @@
 #pragma once
 #include <atomic>
 #include <cstdint>
+#include <filesystem>
 #include <functional>
 #include <map>
 #include <memory>
@@ -46,6 +47,14 @@ struct ExportLevel {
   }
 };
 void checkExportLevel(const ExportLevel& level, const RenderOutput& output);
+
+// Audit 2 (2026-11-16), bug 3: before an export starts, is there room for every file it will write? Each file is
+// counted with its own channels (a mono file is half a stereo one) and on its own folder's volume; files on the
+// same volume add up (they are all written before any is published). Throws "Not enough disk space" naming the
+// folder. query: where the free space comes from (the tests give their own); false = unknown, not checked.
+using DiskSpaceQuery = std::function<bool(const std::filesystem::path& folder, std::filesystem::space_info& out)>;
+uint64_t exportFileBytes(int64_t frames, int bits, bool mono);
+void checkExportSpace(const std::vector<RenderOutput>& outputs, int64_t frames, int bits, const DiskSpaceQuery& query = {});
 void publishRenderOutputs(const std::vector<RenderOutput>& outputs, int& published,
                           const std::function<void()>& beforePlace = {});
 

@@ -56,6 +56,8 @@ void EngineSession::setDocument(const doc::Document& document) {
   wantedProjection_ = std::move(projection);
   snap_.documentRevision = ++wantedRevision_;   // monotonic, also across engine sessions and undo
   if (snap_.status == EngineStatus::Diverged) snap_.status = EngineStatus::Syncing;  // a full snapshot reconciles
+  retryPending_ = false;  // the edit is sent now
+  syncRetry_.reset();
   wake_.notify_all();
 }
 
@@ -68,6 +70,8 @@ void EngineSession::setAssetRoot(const std::filesystem::path& root, bool send) {
   snap_.documentRevision = ++wantedRevision_;
   wantedDocument_ = document_;
   if (snap_.status == EngineStatus::Diverged) snap_.status = EngineStatus::Syncing;
+  retryPending_ = false;
+  syncRetry_.reset();
   wake_.notify_all();
 }
 
@@ -393,15 +397,27 @@ void EngineSession::run() {
         snap_.playing = transportIntent_;  // what the engine does now; its next state events say the same
       continue;
     }
+    // Audit 2, bug 2: a project.load that got no answer is sent again by itself, with a new revision (the engine
+    // may have taken the old one late and would refuse it again as stale).
+    if (connected && retryPending_ && snap_.status == EngineStatus::Diverged && std::chrono::steady_clock::now() >= retryAt_) {
+      retryPending_ = false;
+      snap_.documentRevision = ++wantedRevision_;
+      snap_.status = EngineStatus::Syncing;
+      sync(lock);
+      continue;
+    }
     if (connected && wantedRevision_ > sentRevision_ && snap_.status != EngineStatus::Diverged) {
       sync(lock);
       continue;
     }
-    wake_.wait(lock, [&] {
+    auto ready = [&] {
       const bool canSend = client_ && snap_.status != EngineStatus::Stopped;
       return quit_ || restartRequested_ || (canSend && !actions_.empty()) ||
-             (canSend && wantedRevision_ > sentRevision_ && snap_.status != EngineStatus::Diverged);
-    });
+             (canSend && wantedRevision_ > sentRevision_ && snap_.status != EngineStatus::Diverged) ||
+             (canSend && retryPending_ && std::chrono::steady_clock::now() >= retryAt_);
+    };
+    if (retryPending_) wake_.wait_until(lock, retryAt_, ready);
+    else wake_.wait(lock, ready);
   }
   std::unique_ptr<client::EngineClient> last = std::move(client_);
   lock.unlock();
@@ -441,6 +457,8 @@ bool EngineSession::connect() {
     snap_.engineBuild = c->hello().value("build", std::string("unversioned"));
     client_ = std::move(c);
     sentRevision_ = 0;  // a new session knows nothing: send the current projection again
+    retryPending_ = false;
+    syncRetry_.reset();
   }
   // The document first (it works without a device), then the device (opening it at another sample
   // rate starts a new audio engine), then the loop and the last known position (stopped).
@@ -518,6 +536,7 @@ void EngineSession::sync(std::unique_lock<std::mutex>& lock) {
     const json result = engine->command("project.load", {{"project", projection}, {"revision", revision}});
     lock.lock();
     if (epoch == documentEpoch_) { acceptedDocument_ = document; snap_.hasAcceptedDocument = true; }
+    syncRetry_.succeeded();
     snap_.acceptedRevision = std::max(snap_.acceptedRevision, result.value("acceptedRevision", revision));
     snap_.songSamples = result.value("lengthSamples", (int64_t)0);
     // Plugins that could not be loaded: their tracks are silent ("missing").
@@ -528,17 +547,26 @@ void EngineSession::sync(std::unique_lock<std::mutex>& lock) {
     // Audio files the engine could not load (too big for its memory, unreadable): say so.
     const json missing = result.value("missingAssets", json::array());
     if (!missing.empty() && missing.is_array())
-      snap_.message = "Audio the engine could not load (" + std::to_string(missing.size()) + "): " + missing[0].get<std::string>();
+      snap_.message = "Audio the engine could not load (" + std::to_string(missing.size()) + "): " + client::engineLineText(missing[0]);
   } catch (const EngineError& e) {
     lock.lock();
     if (e.kind == EngineError::Kind::Rejected) {
+      retryPending_ = false;
       snap_.status = EngineStatus::Diverged;
       snap_.message = std::string("The engine refused the document (your edits are kept): ") + e.what();
     } else if (e.kind != EngineError::Kind::Disconnected) {  // a disconnect has its own state and restart
-      // Not sent or no answer (too large, timeout): the engine plays an older document. Say so, and
-      // try again with the next edit (or after a restart) instead of waiting forever.
+      // Not sent or no answer (too large, timeout): the engine plays an older document. Say so. A timeout is
+      // tried again by itself (SyncRetry); what cannot get better waits for the next edit or a restart.
       snap_.status = EngineStatus::Diverged;
       snap_.message = std::string("The document did not reach the engine (your edits are kept): ") + e.what();
+      int delayMs = 0;
+      if (syncRetry_.failed(e.kind == EngineError::Kind::Timeout, delayMs) == client::SyncRetry::After::Retry) {
+        retryPending_ = true;
+        retryAt_ = std::chrono::steady_clock::now() + std::chrono::milliseconds(delayMs);
+        snap_.message += " Trying again in " + std::to_string((delayMs + 999) / 1000) + " s.";
+      } else {
+        retryPending_ = false;
+      }
     }
   }
 }

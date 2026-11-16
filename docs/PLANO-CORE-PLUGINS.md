@@ -98,6 +98,14 @@ Corrigido, com testes (`tests/audit_tests.cpp`, `tests/cli_unicode.cmake`; cada 
 
 D01 (o `render` da linha de comandos aceita áudio em falta): fica como está, a linha de comandos não faz parte da ligação ao Bitwig (Diogo, 2026-11-16).
 
+### Segunda auditoria (2026-11-16, sweep por análise de código)
+
+Verificado e corrigido, com testes em `tests/audit2_tests.cpp`:
+- Bug 1 (confirmado): uma resposta do motor com `error` ou `ok` de outro tipo lançava dentro da thread de leitura do cliente, e isso fecha a app. Agora cada linha é lida sem lançar (`engine_protocol.hpp`), e qualquer falha na leitura termina a sessão do motor de forma limpa (os comandos pendentes falham com o motivo e o motor reinicia).
+- Bug 2 (confirmado): depois de um `project.load` sem resposta a tempo, nada voltava a ser enviado até à edição seguinte. Agora volta a tentar sozinho (0,5 s, 1 s, 2 s, 4 s, 8 s) com uma revisão nova, porque o motor pode ter aceitado a antiga tarde. Recusas e mensagens grandes demais continuam à espera da próxima edição.
+- Bug 3 (confirmado): o espaço em disco do export contava todos os ficheiros como estéreo e só olhava para a pasta do primeiro. Agora cada ficheiro conta com os seus canais e cada volume é verificado com a soma do que lá vai.
+- Observação do autosave: não era bug (quem chama apanha o erro e o autosave estragado nem aparece na lista), mas a mensagem passou a dizer "The autosave is damaged" em vez do erro do JSON.
+
 ### Export para o Bitwig (2026-11-16)
 
 File > Export for Bitwig: uma pasta "<música> (Bitwig)" com o .mid (uma pista MIDI por pista do Core, rolls expandidos, tempo), um .vstpreset por plugin (instrumento e efeitos de cada pista e do master) com o som atual, tirado do plugin vivo no motor (`plugin.preset`), e "Bitwig - read me.txt" a dizer que preset vai em que pista. No Bitwig: arrastar o .mid, depois largar cada .vstpreset na sua pista. Testes: `tests/bitwig_tests.cpp`; no Windows, `core-engine params <plugin.vst3> --preset-out x.vstpreset`.

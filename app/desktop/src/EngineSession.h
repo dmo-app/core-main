@@ -3,6 +3,7 @@
 // talks to the engine: at most one document edit in flight, intermediate values coalesced, the last
 // one always sent. Plan sections 3.3 (consistency) and 3.4 (IPC).
 #pragma once
+#include <chrono>
 #include <cmath>
 #include <condition_variable>
 #include <cstdint>
@@ -19,6 +20,8 @@
 #include <vector>
 #include "document.hpp"
 #include "engine_client.hpp"
+#include "engine_protocol.hpp"
+#include "sync_retry.hpp"
 
 namespace core::app {
 
@@ -180,6 +183,9 @@ private:
   std::optional<doc::Document> acceptedDocument_;
   uint64_t documentEpoch_ = 0;
   int64_t wantedRevision_ = 1, sentRevision_ = 0;
+  client::SyncRetry syncRetry_;  // audit 2, bug 2: a project.load with no answer is sent again by itself
+  bool retryPending_ = false;
+  std::chrono::steady_clock::time_point retryAt_{};
   std::deque<Action> actions_;
   doc::Loop loop_;          // latest loop asked for
   double listenDb_ = -10;   // setListenLevel; sent with every engine.start

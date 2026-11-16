@@ -185,6 +185,49 @@ void checkExportLevel(const ExportLevel& level, const RenderOutput& output) {
   }
 }
 
+uint64_t exportFileBytes(int64_t frames, int bits, bool mono) {
+  return 44 + (uint64_t)std::max<int64_t>(0, frames) * (mono ? 1u : 2u) * (uint64_t)(bits / 8);
+}
+
+void checkExportSpace(const std::vector<RenderOutput>& outputs, int64_t frames, int bits, const DiskSpaceQuery& query) {
+  constexpr uint64_t kMargin = 16u << 20;  // room left for everything else
+  // The bytes each folder gets.
+  std::vector<std::pair<fs::path, uint64_t>> folders;
+  for (const auto& out : outputs) {
+    const fs::path target = utf8(out.path);
+    const fs::path folder = target.has_parent_path() ? target.parent_path() : fs::path(".");
+    const uint64_t bytes = exportFileBytes(frames, bits, out.mono);
+    auto it = std::find_if(folders.begin(), folders.end(), [&](const auto& f) { return f.first == folder; });
+    if (it == folders.end()) folders.push_back({folder, bytes});
+    else it->second += bytes;
+  }
+  // The same volume answers the same capacity and free space: those folders share it.
+  struct Volume { fs::space_info space; uint64_t bytes = 0; fs::path folder; };
+  std::vector<Volume> volumes;
+  for (const auto& [folder, bytes] : folders) {
+    fs::space_info space{};
+    bool known = false;
+    if (query) known = query(folder, space);
+    else {
+      std::error_code e;
+      space = fs::space(folder, e);
+      known = !e;
+    }
+    if (!known) continue;  // a folder that cannot be asked: the write itself will say
+    auto it = std::find_if(volumes.begin(), volumes.end(), [&](const Volume& v) {
+      return v.space.capacity == space.capacity && v.space.available == space.available;
+    });
+    if (it == volumes.end()) volumes.push_back({space, bytes, folder});
+    else it->bytes += bytes;
+  }
+  for (const auto& v : volumes)
+    if (v.space.available < v.bytes + kMargin) {
+      const std::u8string name = v.folder.u8string();
+      throw std::runtime_error("Not enough disk space: " + std::to_string((v.bytes + (1u << 20) - 1) >> 20) + " MB needed in " +
+                               std::string(name.begin(), name.end()) + ", " + std::to_string(v.space.available >> 20) + " MB free.");
+    }
+}
+
 json RenderJobs::start(RenderJobRequest request) {
   if (request.bits != 24 && request.bits != 32) throw std::runtime_error("bits must be 24 or 32.");
   if (!(request.tailSeconds >= 0 && request.tailSeconds <= 60)) throw std::runtime_error("tailMs must be 0-60000.");
@@ -194,7 +237,6 @@ json RenderJobs::start(RenderJobRequest request) {
   }
   if (request.path.empty()) request.path = request.outputs.front().path;
   if (request.outputs.size() > 64) throw std::runtime_error("At most 64 files in one export.");
-  std::error_code e;
   validateRenderOutputs(request.outputs);
   for (const auto& out : request.outputs)
     if (out.track < -1 || out.track >= (int)request.project.tracks.size()) throw std::runtime_error("No such track for " + out.path + ".");
@@ -209,12 +251,7 @@ json RenderJobs::start(RenderJobRequest request) {
   const int64_t skip = tempo.sampleOfTick(request.startTick);
   const int64_t frames = tempo.sampleOfTick(request.endTick) - skip + (int64_t)std::llround(request.tailSeconds * request.sampleRate);
   if ((uint64_t)frames > WavWriter::maxFrames(request.bits)) throw std::runtime_error("The song is too long for one WAV file (4 GB limit).");
-  const uint64_t bytes = (44 + (uint64_t)frames * 2 * (request.bits / 8)) * request.outputs.size();
-  const fs::path firstTarget = utf8(request.outputs.front().path);
-  const fs::path folder = firstTarget.has_parent_path() ? firstTarget.parent_path() : fs::current_path();
-  const fs::space_info space = fs::space(folder, e);
-  if (!e && space.available < bytes + (16u << 20))
-    throw std::runtime_error("Not enough disk space: " + std::to_string(bytes >> 20) + " MB needed.");
+  checkExportSpace(request.outputs, frames, request.bits);
 
   std::lock_guard<std::mutex> g(mutex_);
   if (current_ && !finished(current_->state.load()))
