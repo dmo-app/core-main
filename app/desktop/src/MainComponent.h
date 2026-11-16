@@ -242,6 +242,7 @@ private:
   void showAddTrackMenu();
   // The Patterns window (P-Core's channel rack), a window of its own beside this one (Diogo, 2026-11-08). While it
   // plays a pattern, the engine gets that pattern alone, looped (doc::rackPlayDocument); stopping gives the song back.
+  void giveSilentTracksPlugins();  // Plugins menu: old (builtin) and empty tracks get their role's plugin
   void openPatterns();
   std::unique_ptr<PatternsWindow> patternsWindow_;
   struct PatternPlay { std::string slot; std::optional<doc::Document> preview; int64_t openTick = 0; };

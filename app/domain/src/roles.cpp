@@ -236,4 +236,38 @@ void setTrackRole(Document& doc, const std::string& trackId, const std::string& 
   replaceInstrumentWithPlugin(doc, trackId, bindingFor(map, role, true).plugin);
 }
 
+std::string guessInstrumentRole(const Track& t) {
+  std::string name;
+  for (char c : t.name) name += (char)std::tolower((unsigned char)c);
+  const auto has = [&name](std::initializer_list<const char*> words) {
+    for (const char* w : words) if (name.find(w) != std::string::npos) return true;
+    return false;
+  };
+  // The name says the part first (a W-Core track called "Bass" is the bass); then the old sound.
+  if (has({"kick", "snare", "hat", "clap", "drum", "perc", "rim", "tom", "cymbal", "ride", "crash", "shaker", "beat"})) return "drums";
+  if (has({"bass", "sub", "808"})) return "bass";
+  if (has({"pad", "atmo", "drone", "string", "chord"})) return "pad";
+  if (has({"pluck", "arp"})) return "pluck";
+  if (has({"lead", "melod", "synth", "keys", "piano", "hook"})) return "lead";
+  if (t.instrument.kind == "builtin") {
+    const std::string& n = t.instrument.name;
+    if (n == "kick" || n == "hats" || n == "snare" || n == "drums" || n == "sampler") return "drums";
+    if (n == "wave") return "lead";
+  }
+  return "";
+}
+
+int giveSilentTracksRolePlugins(Document& doc, const RoleMap& map, std::vector<std::string>* left) {
+  int changed = 0;
+  std::vector<std::pair<std::string, std::string>> todo;  // track id, role: decided first, then changed
+  for (const auto& t : doc.tracks) {
+    if (t.instrument.kind != "builtin" && t.instrument.kind != "none") continue;
+    const std::string role = guessInstrumentRole(t);
+    if (!role.empty() && map.find(role)) todo.emplace_back(t.id, role);
+    else if (left) left->push_back(t.name);
+  }
+  for (const auto& [id, role] : todo) { setTrackRole(doc, id, role, map); ++changed; }
+  return changed;
+}
+
 }  // namespace core::doc

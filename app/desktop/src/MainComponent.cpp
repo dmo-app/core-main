@@ -1976,6 +1976,8 @@ MainComponent::MainComponent(EngineSession::Options options, doc::Document docum
     const std::vector<Item> items = {
         {"arrange", "Arrangement", [this] { arrangeButton_.onClick(); }},
         {"mixer", "Mixer (Ctrl+M)", [this] { setMixerOpen(!mixerOpen_); }},
+        // The Patterns window (channel rack, templates, swing, Send to Arrange): Diogo 2026-11-16, "facilidade em criar".
+        {"patterns", "Patterns: the channel rack and the templates (Ctrl+P)", [this] { openPatterns(); }},
         {"library", "Library", [this] { toggleSidePanel(true); }},
         {"inspector", "Inspector", [this] { toggleSidePanel(false); }}};
     for (const auto& item : items) {
@@ -2231,6 +2233,33 @@ void MainComponent::stopPatternSlot() {
   session_->setDocument(engineDocument());
   session_->setLoop(history_.current().loop);
   session_->seek(patternSongTick_);
+}
+
+void MainComponent::giveSilentTracksPlugins() {
+  std::string problem;
+  const doc::RoleMap roles = PluginCatalog::roles(&problem);
+  if (roles.roles.empty()) {
+    showError(u8("No plugins for the roles yet"),
+              u8("Settings > Roles says which plugin plays each part (Drums: sfizz, Bass / Lead / Pad: Vital...). Choose them there, then try again.") +
+                  (problem.empty() ? juce::String() : u8("\n\n") + u8(problem)));
+    return;
+  }
+  int changed = 0;
+  std::vector<std::string> left;
+  try {
+    edit([&](doc::Document& d) { changed = doc::giveSilentTracksRolePlugins(d, roles, &left); }, u8("Plugins for the silent tracks"));
+  } catch (const std::exception& e) {
+    showError(u8("Plugins for the silent tracks"), u8(e.what()));
+    return;
+  }
+  juce::String text = juce::String(changed) + u8(" tracks play their role's plugin now (Ctrl+Z puts them back).");
+  if (!left.empty()) {
+    juce::String names;
+    for (const auto& n : left) names += (names.isEmpty() ? juce::String() : juce::String(", ")) + u8(n);
+    text += u8(" Still silent (no role guessed, or no plugin for it in Settings > Roles): ") + names + ".";
+  }
+  notice_ = text;
+  repaint();
 }
 
 void MainComponent::openPatterns() {
@@ -4805,6 +4834,7 @@ bool MainComponent::previewLibrarySample(const doc::LibrarySample& sample, const
 
 namespace { enum MenuId { kMidiNone = 200, kMidiDevice = 201, kNewEmpty = 50, kOpen = 1, kSave, kSaveAs, kExport24, kExport32, kQuit, kUndo, kRedo, kImportAudio, kRelocate, kDevice = 100,
                        kMidiDevicesEnd = 400, kPluginCoreFirst = 420 /* + place in doc::corePlugins(), up to 20 */,
+                       kPluginPatterns = 440, kPluginSong = 441, kPluginSilent = 442,
                        kPluginScan = 460, kPluginFolder, kPluginRetry, kMasterFx = 2400 /* + 60 */, kMasterFxAdd = 2500 /* + 400 */,
                        kOpenLogs = 580, kAbout = 581, kExportMono = 590, kImportMidi = 595, kExportMidi = 596, kExportBitwig = 597,
                        kSampleFolder = 1600, kSampleRescan, kSampleApply, kSampleAuto, kSampleShuffle, kSampleCatalogUndo,
@@ -4821,7 +4851,7 @@ juce::String MainComponent::MenuBar::getTooltip() {
       "Undo and redo, and Randomize a song made from a style template (pattern, tempo, sound)",
       "Show or hide the Library and Inspector; open the Mixer; the UI size",
       "Cut or render samples, the audio output and the MIDI input",
-      "Core's own plugins: the song, the instruments, the gestures, each in its window",
+      "Patterns (the channel rack) and the Song window; the VST3 plugins: scan, folders, the master's effects",
       "Your sample library: its folder, rescan, the best samples for this song",
       "AICORE, Core's add-on: open its chat, its proposals, its folder",
       "Logs (problems, crash dumps) and the version",
@@ -4887,6 +4917,17 @@ juce::PopupMenu MainComponent::getMenuForIndex(int index, const juce::String&) {
   } else if (index == 3) {
     // The VST plugins of this PC (Diogo 2026-11-16: Core's sound comes from plugins). Each file is scanned and played
     // on its own first, in its own process: one that hangs or crashes is set aside, never taking Core down.
+    // Core's own windows first: the Patterns window is where songs start (Diogo 2026-11-16), and it plays the tracks' plugins.
+    menu.addSectionHeader(u8("Core"));
+    menu.addItem(juce::PopupMenu::Item(u8("Patterns (channel rack, templates)…")).setID(kPluginPatterns));
+    menu.addItem(juce::PopupMenu::Item(u8("Song (S-Core: the sections and who plays in each)")).setID(kPluginSong));
+    {  // A song from before 0.7.0: its old Core sounds are kept but silent (Diogo 2026-11-16, "não sai som").
+      int silent = 0;
+      for (const auto& t : history_.current().tracks) silent += t.instrument.kind == "builtin" || t.instrument.kind == "none";
+      menu.addItem(juce::PopupMenu::Item(u8("Give the silent tracks their role's plugin (") + juce::String(silent) + u8(" silent)"))
+                       .setID(kPluginSilent).setEnabled(silent > 0));
+    }
+    menu.addSectionHeader(u8("VST3 plugins"));
     menu.addItem(juce::PopupMenu::Item(plugins_->scanning() ? u8("Scanning: ") + plugins_->progress() : u8("Scan plugins (VST3)"))
                      .setID(kPluginScan).setEnabled(!plugins_->scanning()));
     menu.addItem(juce::PopupMenu::Item(u8("Add a plugin folder…")).setID(kPluginFolder));
@@ -4989,7 +5030,7 @@ juce::PopupMenu MainComponent::getMenuForIndex(int index, const juce::String&) {
                    : item.itemID == kUndo ? "edit.undo" : item.itemID == kRedo ? "edit.redo"
                    : item.itemID == kNewEmpty ? "file.new"
                    : item.itemID == kExport24 ? "file.export" : item.itemID == kSettings ? "file.settings" : item.itemID == kImportAudio ? "file.importAudio"
-                   : item.itemID == kViewMixer ? "view.mixer" : nullptr;
+                   : item.itemID == kViewMixer ? "view.mixer" : item.itemID == kPluginPatterns ? "view.patterns" : nullptr;
     item.shortcutKeyDescription = id != nullptr ? Keymap::get().text(id) : juce::String();
   }
   return menu;
@@ -5054,6 +5095,9 @@ void MainComponent::menuItemSelected(int id, int) {
     case kImportAudio: importAudio(); break;
     case kRelocate: relocateMissing(); break;
     case kMidiNone: openMidiInput({}); break;
+    case kPluginPatterns: openPatterns(); break;
+    case kPluginSong: openScore(); break;
+    case kPluginSilent: giveSilentTracksPlugins(); break;
     case kPluginScan: scanPlugins(); break;
     case kPluginRetry: plugins_->clearQuarantine(); scanPlugins(); break;
     case kPluginFolder: {
@@ -5253,7 +5297,7 @@ void MainComponent::resized() {
   {  // the page rail: the pages, then the side panels (as on the reference's left edge)
     auto rail = content().withWidth(kRail);
     for (size_t i = 0; i < rail_.size(); ++i) {
-      if (i == 2) rail.removeFromTop(14);  // the side panels: Library, Plugins, Inspector
+      if (i == 3) rail.removeFromTop(14);  // the side panels: Library, Inspector
       rail_[i]->setBounds(rail.removeFromTop(kRail).reduced(4));
     }
   }
@@ -5588,6 +5632,7 @@ bool MainComponent::keyPressed(const juce::KeyPress& key) {
   if (is("file.settings")) { openSettings(false); return true; }
   if (is("edit.addTrack")) { showAddTrackMenu(); return true; }
   if (is("view.mixer")) { setMixerOpen(!mixerOpen_); return true; }
+  if (is("view.patterns")) { openPatterns(); return true; }
   if (is("view.effects")) {  // the selected track's plugins
     if (const std::string id = selectedTrack_.empty() ? editor_.track() : selectedTrack_; !id.empty()) showTrackMenu(id);
     return true;
@@ -5980,9 +6025,9 @@ void MainComponent::timerCallback() {
   }
   if (test_) selfTestStep();
   arrangeButton_.setToggleState(!mixerOpen_, juce::dontSendNotification);
-  if (rail_.size() == 4) {
-    const bool states[] = {arrangeButton_.getToggleState(), mixerOpen_, libraryShown(), inspectorShown()};
-    for (size_t i = 0; i < 4; ++i) rail_[i]->setToggleState(states[i], juce::dontSendNotification);
+  if (rail_.size() == 5) {
+    const bool states[] = {arrangeButton_.getToggleState(), mixerOpen_, patternsWindow_ != nullptr && patternsWindow_->isVisible(), libraryShown(), inspectorShown()};
+    for (size_t i = 0; i < 5; ++i) rail_[i]->setToggleState(states[i], juce::dontSendNotification);
   }
   repaint(timelineArea());
   editor_.playheadMoved();  // only the old and the new line, not the whole piano roll

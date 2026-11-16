@@ -201,3 +201,58 @@ TEST("build-up: o filtro abre, o reverb e o delay crescem ate ao drop; papeis em
 }
 
 CORE_TEST_MAIN
+
+// "Não sai som" (Diogo 2026-11-16): uma musica de antes do 0.7.0 tem os sons antigos do Core (builtin) ou nenhum,
+// e o 0.7.0 nao toca nenhum dos dois. giveSilentTracksRolePlugins da a cada pista muda o plugin do seu papel.
+TEST("pistas mudas: o papel adivinha-se pelo nome e pelo som antigo") {
+  Track t;
+  t.name = "Kick"; t.instrument.kind = "builtin"; t.instrument.name = "kick";
+  CHECK_EQ(guessInstrumentRole(t), std::string("drums"));
+  t.name = "Hats 2"; CHECK_EQ(guessInstrumentRole(t), std::string("drums"));
+  t.name = "Sub Bass"; t.instrument.name = "wave"; CHECK_EQ(guessInstrumentRole(t), std::string("bass"));
+  t.name = "Big Pad"; CHECK_EQ(guessInstrumentRole(t), std::string("pad"));
+  t.name = "Arp"; CHECK_EQ(guessInstrumentRole(t), std::string("pluck"));
+  t.name = "Track 7"; CHECK_EQ(guessInstrumentRole(t), std::string("lead"));  // W-Core sem nome: lead
+  t.instrument.kind = "none"; t.instrument.name.clear();
+  CHECK_EQ(guessInstrumentRole(t), std::string(""));  // sem nome nem som antigo: nao se adivinha
+}
+
+TEST("pistas mudas: as builtin e none com papel no mapa passam a tocar o plugin; as outras ficam e sao listadas") {
+  Document d = newTemplateDocument();
+  // Como uma musica antiga: todas as pistas com o som antigo do Core.
+  for (auto& t : d.tracks)
+    if (playsPatterns(t)) { t.instrument = Instrument{}; t.instrument.kind = "builtin"; t.instrument.name = "kick"; }
+  const std::string bass = trackNamed(d, "ass");
+  const size_t notesBefore = trackById(d, bass).patterns.empty() ? 0 : trackById(d, bass).patterns[0].notes.size();
+  RoleMap m = fullMap();  // so "bass" tem plugin
+  std::vector<std::string> left;
+  const int changed = giveSilentTracksRolePlugins(d, m, &left);
+  CHECK_EQ(changed, 1);
+  CHECK_EQ(trackById(d, bass).instrument.kind, std::string("plugin"));
+  CHECK_EQ(trackById(d, bass).instrument.plugin.value("name", std::string()), std::string("Serum2"));
+  CHECK_EQ(trackById(d, bass).patterns[0].notes.size(), notesBefore);  // as notas ficam
+  CHECK(!left.empty());  // a bateria nao tem plugin no mapa: fica muda e e dita
+  // Com bateria no mapa, as restantes pistas mudas ganham-na; uma segunda passagem nao muda nada.
+  m.roles["drums"] = {fakePlugin("sfizz"), {}, {}};
+  left.clear();
+  const int more = giveSilentTracksRolePlugins(d, m, &left);
+  int drums = 0;
+  for (const auto& t : d.tracks) if (t.instrument.kind == "plugin" && t.instrument.plugin.value("name", std::string()) == "sfizz") ++drums;
+  CHECK_EQ(drums, more);
+  std::vector<std::string> again;
+  const int none = giveSilentTracksRolePlugins(d, m, &again);
+  CHECK_EQ(none, 0);
+  CHECK_EQ(again.size(), left.size());
+}
+
+TEST("pistas mudas: pistas de audio, bus e com plugin nao mudam") {
+  Document d = newTemplateDocument();
+  const std::string before = toJson(d).dump();
+  RoleMap m = fullMap();
+  m.roles["drums"] = {fakePlugin("sfizz"), {}, {}};
+  bool anySilent = false;
+  for (const auto& t : d.tracks) anySilent = anySilent || t.instrument.kind == "builtin" || t.instrument.kind == "none";
+  const int changed = giveSilentTracksRolePlugins(d, m);
+  if (!anySilent) { CHECK_EQ(changed, 0); CHECK_EQ(toJson(d).dump(), before); }
+  for (const auto& t : d.tracks) CHECK(t.instrument.kind != "builtin");
+}
