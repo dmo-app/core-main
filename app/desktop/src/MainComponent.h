@@ -12,16 +12,8 @@
 #include <set>
 #include <juce_audio_devices/juce_audio_devices.h>
 #include <juce_gui_basics/juce_gui_basics.h>
-#include "CoreFxWindow.h"
-#include "CoreGlitchWindow.h"
 #include "EngineSession.h"
 #include "GlobalKeys.h"
-#include "EffectsPanel.h"
-#include "WCoreModular.h"
-#include "InstrumentDock.h"
-#include "ChainsView.h"
-#include "SoundPage.h"
-#include "PluginCards.h"
 #include "SCorePanel.h"
 #include "Mixer.h"
 #include "Theme.h"
@@ -29,13 +21,12 @@
 #include "LibraryPanel.h"
 #include "PatternEditor.h"
 #include "PatternsWindow.h"
-#include "core_plugins.hpp"
+#include "Plugins.h"
 #include "Waveforms.h"
 #include "edit.hpp"
 #include "history.hpp"
 #include "templates.hpp"
 #include "template_sheet.hpp"
-#include "fx_racks.hpp"
 #include "randomize.hpp"
 #include "samples.hpp"
 #include "Autosave.h"
@@ -46,7 +37,6 @@
 class ProposalsPanel;
 
 namespace core::app {
-class AttachPanel;
 
 class MainComponent final : public juce::Component, public juce::MenuBarModel, private PatternEditor::Host,
                             public juce::DragAndDropContainer, public juce::FileDragAndDropTarget,
@@ -93,31 +83,15 @@ public:
 
   // Drives the window by itself (null device), saves a picture of it and reports the result.
   void runSelfTest(juce::File picture, std::function<void(bool ok, juce::String report)> done);
-  // Pictures of every page with a full song playing (Showcase.cpp), into `folder`.
-  void runShowcase(juce::File folder, std::function<void(bool ok, juce::String report)> done);
 
 private:
   class TrackRow;
   class AudioEditor;  // the bottom panel for the selected audio clip (in place of the pattern editor)
   void showEditorForSelection();
-  void openEffects(const std::string& trackId);  // "" = the master chain; shown in the bottom panel
-  bool effectsOpen_ = false;
-  // The selected track's Core Chain under its notes (Diogo 2026-11-09: the space under the piano roll is for the chain
-  // of the instrument or group, its EQ, filters and effects, to change them there). Its ✕ hides it until the FX is opened.
-  bool chainUnderNotes_ = true;
-  bool chainDocked() const { return effects_.isVisible() && !effectsOpen_; }
-  void openSound(const std::string& trackId, const std::string& param = {}, int kind = 0);  // kind: 0 LFO, 1 envelope, 2 steps
-  void openWave(const std::string& trackId, const std::vector<std::string>& with = {});
   void openScore();  // Stage Core: the song's parts
-  // The window that shows a Core plugin or an "open" call: "score", "mixer", "patterns" (P-Core), "instrument",
-  // "effects", or an effect id on that track (its plugin window). trackId "" = the master / the song.
+  // The window that shows a part of Core or an "open" call: "score", "mixer", "patterns", "instrument" (the
+  // track's plugin window). trackId "" = the master / the song.
   void openCoreWindow(const std::string& what, const std::string& trackId);
-  // Plugins > a Core plugin: its window on the selected track (an instrument only when the track plays it).
-  void openCorePlugin(const doc::CorePluginInfo& plugin);
-  // The tracks a plugin goes to when chosen on `clicked`: the selected tracks when it is one of them (every plugin
-  // applies to all of them at once, then each is adjusted alone), else `clicked` alone. `clicked` comes first.
-  std::vector<std::string> tracksForPlugin(const std::string& clicked) const;
-  bool soundOpen_ = false;  // a built-in instrument's page: sound + modulation (SoundPage.h)
   bool scoreOpen_ = false;
   class AutomationEditor;  // one parameter's curve along the song, in the bottom panel, under the lanes
   void openAutomation(const std::string& trackId, const std::string& param);
@@ -154,14 +128,6 @@ private:
   // Arrangement (clip lanes and sections), used by the mouse and the self-test.
   void selectClip(const std::string& trackId, const std::string& clipId);
   void addClipAt(const std::string& trackId, int64_t tick);
-  void showClipAttach(const std::string& trackId, const std::string& clipId);
-  std::unique_ptr<AttachPanel> clipAttachPanel(const std::string& trackId, const std::string& clipId);
-  void toggleAttachDock(const std::string& trackId);  // the effects' Attachments button
-  void openAttachDock(const std::string& trackId);
-  void closeAttachDock();
-  std::unique_ptr<AttachPanel> attachDock_;  // docked at the right of the effect cards
-  std::string attachDockTrack_;
-  void showClipAttachPlan(const std::string& trackId, int64_t from, int64_t to);
   void showClipMenu(const std::string& trackId, const std::string& clipId, int64_t atTick = -1);  // atTick: where it was clicked
   void showSectionMenu(int64_t tick);
   // Audio (M3): WAV files copied into the project's Audio folder, placed as clips on audio tracks.
@@ -231,14 +197,6 @@ private:
   juce::File builtinTemplatesFolder() const;
   juce::File userTemplatesFolder() const;
   doc::TemplateLibrary templates_;
-  // Style FX racks (Effects > Style FX): built-in ones in "racks" next to Core.exe, the user's own in
-  // %APPDATA%\Core\Racks. Read at start and when the user saves one.
-  void reloadRacks();
-  std::vector<doc::RackEntry> rackList() const;
-  juce::File userRacksFolder() const;
-  mutable std::mutex racksLock_;
-  std::vector<doc::RackEntry> racks_;
-  void wireRacks(EffectsPanel& panel);
   // Sample library (D:\Samples by default): what is in it, scanned on a thread of its own at start and on
   // request; style templates get its best samples per track (one undo step), and each track can swap its
   // sample from the track menu.
@@ -294,6 +252,11 @@ private:
   doc::Loop engineLoop() const;  // the song's loop, or the pattern's while the Patterns window plays
   void askTrackName(const std::string& trackId);
   void exportWav(int bits, bool mono = false);
+  // Plugins (VST3): what this PC has (Plugins menu > Scan), their windows and their states in the song.
+  std::unique_ptr<PluginCatalog> plugins_;
+  uint64_t pluginEditsSeen_ = 0;
+  void scanPlugins();
+  bool fetchPluginStates();  // the engine's plugin states into the document (false: no answer)
   void selectDevice(const std::string& name);
   enum class SaveResult { Failed, Saved };
   void save(bool chooseName, std::function<void(SaveResult)> then = nullptr);
@@ -319,8 +282,6 @@ private:
   bool inspectorShown() const;
   int inspectorWidth() const;
   bool libraryShown() const;
-  bool pluginsShown() const;
-  void togglePlugins();
   void setupLibrary();
   void showProjectMenu();
   // Plays notes of a track one after the other, spaced as in the pattern (the Inspector's preview).
@@ -345,9 +306,6 @@ private:
   juce::Rectangle<int> timelineArea() const;
   juce::Rectangle<int> tracksArea() const;
   int masterRow() const { return mixerOpen_ ? 30 : 64; }
-  int dockRoom() const;                     // the instrument editor's width on the right (0: not shown)
-  juce::Rectangle<int> dockArea() const;
-  void showDock(bool shown);  // the master's row, or the Mixer's CPU footer
   void paintCpuFooter(juce::Graphics& g, juce::Rectangle<int> r) const;
   int64_t tickAt(int x, int64_t snap, bool pastEnd = false) const;  // pastEnd: up to the room after the song's end
   double viewSpan() const;
@@ -355,10 +313,9 @@ private:
   juce::Rectangle<int> dividerArea() const;
   int editorHeight_ = 0, mixerHeight_ = 0, dividerGrab_ = -1;  // 0: the default share
   bool editorCollapsed_ = false;
-  int libraryWidth_ = 0, sideGrab_ = 0;  // the Library's width (0: the default); the edge being dragged (1 Library, 2 dock)
+  int libraryWidth_ = 0, sideGrab_ = 0;  // the Library's width (0: the default); the edge being dragged (1 Library)
   int libraryWidth() const;
   juce::Rectangle<int> libraryEdge() const;
-  juce::Rectangle<int> dockEdge() const;  // the Core Chain minimised to its header (▾)
   int splitRows_ = 0;  // the most track rows seen: the default share grows with them and never shrinks when one is removed
   void growSongToFit(const std::string& trackId, const std::string& clipId);
   // The finest of 1/64, 1/32, 1/16, beat, bar whose steps are at least this many pixels apart at the current zoom
@@ -425,36 +382,16 @@ private:
   juce::Component tracksHolder_;
   PatternEditor editor_{*this};
   std::unique_ptr<AudioEditor> audioEditor_;
-  EffectsPanel effects_{*this};
-  SoundPage soundPage_{*this};
-  // W-Core: one window per track, several open at once (WCoreModular.h); they follow the document.
-  std::map<std::string, std::unique_ptr<WCoreWindow>> waveWindows_;
-  std::unique_ptr<InstrumentDock> dock_;  // the selected track's instrument, on the right of the arrangement
-  bool dockShown_ = true;
-  int dockWidth_ = 560;
-  // The dock unpinned (▢): the same dock in a window of its own, which can leave Core's window. Declared after dock_:
-  // it goes first, and the dock is only lent to it.
-  std::unique_ptr<juce::DocumentWindow> dockWindow_;
-  void unpinDock(bool unpin);
-  void syncWaveWindows();  // closes the windows whose track is gone or is not W-Core any more, refreshes the rest
   SCorePanel score_{*this};
-  std::unique_ptr<CoreFxWindows> coreFx_;  // Core FX windows, one per insert, several open at once
-  std::unique_ptr<CoreGlitchWindows> glitch_;  // Core Glitch windows, one per track, several open at once
   std::unique_ptr<MixerPanel> mixer_;  // the Mixer in the bottom panel (top bar: Mixer, Ctrl+M)
   bool mixerOpen_ = false;
   juce::TextButton arrangeButton_;
   std::vector<std::unique_ptr<juce::TextButton>> rail_;  // the page rail on the left: Arrange, Mix, Library, Inspector  // the page tabs on the top bar: Arrange (no page open), Mix
   juce::TextButton mixerButton_;
-  juce::TextButton chainsButton_;
-  std::unique_ptr<ChainsView> chains_;
-  bool chainsOpen_ = false;
-  void setChainsOpen(bool open);
   void setMixerOpen(bool open);
   std::unique_ptr<AutomationEditor> automation_;
   LibraryPanel library_;
   std::unique_ptr<InspectorPanel> inspector_;
-  bool showPlugins_ = false;  // the rail's Plugins: the cards in the Library's place
-  PluginCards pluginCards_;
   bool showLibrary_ = true, showInspector_ = true;  // View menu (UI state, kept in the user settings)
   bool sectionShades_ = true;  // View > Section colours behind the tracks (kept in the user settings)
   std::string libraryTrackSeen_ = "-";             // the Library's "use on track" follows the selected track
@@ -465,7 +402,8 @@ private:
   void playStop();
   EngineStatus loggedStatus_ = EngineStatus::Stopped;  // the last engine status written to the log
   std::string failedSeen_;  // the failed units last shown (timerCallback)
-  bool unsaved() const { return history_.modified() || recovered_; }
+  bool unsaved() const { return history_.modified() || recovered_ || pluginsDirty_; }
+  bool pluginsDirty_ = false;  // a plugin's own window changed it since the last save
   // Autosave (M6): every minute while there are unsaved changes, a copy goes to the autosave folder (never
   // over the song); saved, or closed cleanly, it is removed. One left by a crash is offered on the next start.
   void autosaveTick();
@@ -481,7 +419,6 @@ private:
   struct AutosaveJob { std::atomic<int> state{0}; std::string error; };  // 0 running, 1 written, 2 failed
   std::shared_ptr<AutosaveJob> autosaveJob_;
   void collectAutosave();
-  juce::TextButton masterFx_;
   double audioEditorTick_ = -1;  // playhead last drawn there
   std::string selectedTrack_, selectedClip_;  // UI state: never saved (a pattern clip or an audio clip)
   std::optional<doc::PCoreCatalog> pcoreCatalog_;  // Pattern Core (P-Core)' catalogue (pcore/styles.json), read once
@@ -565,19 +502,10 @@ private:
     std::string audioTrack, partTrack;
     double duration = 0;
     juce::String log;
+    nlohmann::json synth;  // the self-test's own test synth (app/selftest-plugins), as the scan found it
   };
   std::unique_ptr<SelfTest> test_;
-  struct Showcase {
-    juce::File folder, mix;
-    std::function<void(bool, juce::String)> done;
-    int step = 0;
-    double started = 0, stepStarted = 0;
-    std::string bass, sound;  // sound: a built-in instrument with a filter (the sound page)
-    int64_t from = 0, to = 0;  // the region shown and exported
-    juce::String log;
-  };
-  std::unique_ptr<Showcase> showcase_;
-  void showcaseStep();
+  void selfTestSynth();  // the self-test's synth on every note track without a plugin
   std::vector<control::InboxItem> inbox_;           // the AI's proposals waiting (bridge inbox)
   std::string samplesAddedSeen_ = "?";               // AICORE's samples-added.json as last seen ("?" = not looked yet)
   std::string inboxSeen_, stateWritten_;            // the inbox as last read, the state as last written
@@ -590,19 +518,11 @@ private:
   juce::TooltipWindow tooltips_{this, 450};  // a short help on hover for every control
   bool aiAllowed_ = true;                           // AICORE > Allow AICORE proposals: gates the bridge and Apply
 
-  // Save as sample, render a region to a sample, edit a copy of a library sample (SampleMaker.cpp): made on first use.
-  class SampleMaker;
-  std::unique_ptr<SampleMaker> sampleMaker_;
-  SampleMaker& sampleMaker();
   doc::Document engineDocument() const;  // what the engine plays: the song
   // File > Settings (Settings.cpp): the default folders, the samplers' folders, the keyboard shortcuts.
   class SettingsPanel;
   juce::Component::SafePointer<juce::DialogWindow> settingsWindow_;
-  // File > Make training clips... (TrainingClips.cpp): runs core-clips into the folder chosen in Settings.
-  class TrainingClipsPanel;
-  juce::Component::SafePointer<juce::DialogWindow> clipsWindow_;
-  void openTrainingClips();
-  juce::File trainingClipsFolder() const;  // Settings > Training clips, else Documents\\Core training clips
+  juce::File trainingClipsFolder() const;  // Settings > Training clips (kept for AICORE), else Documents\Core training clips
   void openSettings(bool shortcuts = false);  // shortcuts: the Keyboard shortcuts tab
   void applyDrawingHelp();  // Settings > Piano roll (ghost note, alignment guides) into the editor
   // Settings > Samplers: each sampler role's own folders ("samplerFolders": role -> absolute folders) into the

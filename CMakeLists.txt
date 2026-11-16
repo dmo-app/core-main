@@ -43,6 +43,7 @@ add_subdirectory(app/control)  # Core's functions and the bridge to AICORE (no J
 add_subdirectory(app/sampling) # making samples from audio (no JUCE)
 add_subdirectory(app/previews) # what each pattern sounds like, for the clips' waveforms (no JUCE)
 if(CORE_BUILD_APP AND WIN32)
+  add_subdirectory(app/selftest-plugins)  # a test synth and gain VST3 for Core.exe --self-test (never shipped)
   add_subdirectory(app/desktop)
   add_subdirectory(app/installer)  # Core Setup.exe (M6)
 endif()

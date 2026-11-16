@@ -10,30 +10,13 @@
 #include <cstring>
 #include <functional>
 #include <map>
-#include "../dsp/sampler.hpp"
-#include "../dsp/wave_mod.hpp"
-#include "../dsp/sample_path.hpp"
 
 namespace core {
 
 namespace {
-// An instrument parameter the instrument reads as a switch or a choice (rounded, or compared to 0.5): it jumps to
-// its new value. Gliding there played the values between (filter types 0 -> 19 went through every type, a wavetable
-// through every table, unison 1 -> 16 through every voice count) for the ~15 ms of the glide (audit dbbc592).
-bool steppedInstrumentParam(std::string_view n) {
-  if (n.size() > 3 && n[0] == 'l' && n[1] >= '2' && n[1] <= '9' && n[2] == '_') n.remove_prefix(3);  // W-Core layers 2-4
-  if (n.rfind("sec_", 0) == 0) return true;  // a W-Core section on or off
-  static constexpr std::string_view kNames[] = {
-      // W-Core
-      "on", "mode", "octave", "subOct", "subShape", "unison", "polyVoices", "legato", "glideAlways", "osc1Semi",
-      "osc1Table", "osc2Table", "osc1Warp", "osc2Warp", "filterMode", "filter2Mode", "filterSerial",
-      // Sampler
-      "pitched", "retrigger", "reverse", "filterType",
-      // Sample Path
-      "limiter"};
-  for (auto k : kNames) if (n == k) return true;
-  return false;
-}
+// An instrument parameter that jumps instead of gliding. Core's own instruments left (2026-11-16): a plugin's
+// parameters are its own, so none here.
+bool steppedInstrumentParam(std::string_view) { return false; }
 }  // namespace
 
 double Automation::valueAt(double tick) const {
@@ -48,6 +31,8 @@ double Automation::valueAt(double tick) const {
 
 namespace {
 
+std::atomic<uint64_t> g_pluginNotesDropped{0};
+std::atomic<uint64_t> g_pluginFailures{0};
 std::atomic<uint64_t> g_nativeFailures{0};
 
 // The units that failed (failedUnits): a fixed list the audio thread fills without allocating.
@@ -107,8 +92,40 @@ uint64_t clockNs() {
   return (uint64_t)std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
 }
 
-// Audio past +48 dBFS (256) is a unit gone wrong, not music.
+// M3b: runs one plugin call. An exception (or a failure the host caught itself) marks the plugin failed:
+// it is never called again and the caller silences what it gave. The audio thread does not allocate
+// here; the throw itself is the plugin's.
+template <typename Call>
+bool runPlugin(PluginProcessor& processor, Call&& call) {
+  if (processor.failed()) return false;
+  try {
+    call();
+  } catch (...) {
+    if (processor.markFailed()) g_pluginFailures.fetch_add(1, std::memory_order_relaxed);
+    return false;
+  }
+  if (processor.failed()) {  // the host caught it now (a crash inside the plugin, Windows)
+    g_pluginFailures.fetch_add(1, std::memory_order_relaxed);
+    return false;
+  }
+  return true;
+}
+
+// What a plugin gave must be audio: NaN or Inf would spread through every effect after it to the master,
+// and a level past +48 dBFS (256) is a plugin gone wrong, not music. Either marks it failed.
 constexpr float kRunawayLevel = 256.0f;
+bool checkOutput(PluginProcessor& processor, const float* left, const float* right, int frames) {
+  for (int i = 0; i < frames; ++i) {
+    const float l = left[i], r = right[i];
+    if (std::isfinite(l) && std::isfinite(r) && std::fabs(l) <= kRunawayLevel && std::fabs(r) <= kRunawayLevel) continue;
+    const bool finite = std::isfinite(l) && std::isfinite(r);
+    if (processor.markFailed(finite ? PluginProcessor::Failure::Runaway : PluginProcessor::Failure::NonFinite))
+      g_pluginFailures.fetch_add(1, std::memory_order_relaxed);
+    return false;
+  }
+  return true;
+}
+
 // The same guard for the built-in ("core") DSP: a block whose output is non-finite or runaway is bad, and the
 // unit that made it is silenced and marked failed (Graph::runTrack / masterEnd). One scan of the block after
 // process(); good audio is never touched, so the result stays bit for bit what it was.
@@ -120,8 +137,120 @@ bool nativeOutputBad(const float* left, const float* right, int frames) {
   return false;
 }
 
+// A plugin track's instrument: notes are queued with their sample in the block and the plugin renders
+// the block once, in stereo. The queue never loses a note-off: past kMax events, note-ons are dropped
+// (counted, see pluginNotesDropped()) and note-offs are counted per pitch in a reserve; they go in at
+// their own sample, and any that do not fit in this block's reserve go in at the start of the next one.
+// So a dense block (rolls, many overlapping clips) can never leave a note hanging.
+class PluginInstrument final : public Instrument {
+public:
+  PluginInstrument(double sampleRate, std::shared_ptr<PluginProcessor> processor) : Instrument(sampleRate), processor_(std::move(processor)) {}
+  const char* name() const override { return "plugin"; }
+  bool stereo() const override { return true; }
+  void queueNote(int offset, bool on, int pitch, double velocity) override {
+    pitch &= 127;
+    if (count_ < kMax) {
+      notes_[count_++] = MidiNote{offset, on, pitch, (float)velocity};
+      held_[pitch] = on;
+      return;
+    }
+    // Full: the note-off still reaches the plugin; a note-on cannot be played.
+    if (on) { g_pluginNotesDropped.fetch_add(1, std::memory_order_relaxed); return; }
+    if (pendingOffs_[pitch]++ == 0) pendingAt_[pitch] = offset;  // the sample of the first one
+    held_[pitch] = false;
+  }
+  void noteOn(int pitch, double velocity) override { queueNote(0, true, pitch, velocity); }
+  void noteOff(int pitch) override { queueNote(0, false, pitch, 0); }
+  // Stop, Seek, loop wrap, panic: an off for every pitch it holds, then MIDI All Notes Off, which also
+  // ends voices this count does not know (the same pitch started twice, or a note-on the plugin got
+  // in a block that was too full).
+  void allNotesOff() override {
+    for (int p = 0; p < 128; ++p) if (held_[p]) queueNote(0, false, p, 0);
+    if (count_ < kMax) notes_[count_++] = MidiNote{0, false, kAllNotesOff, 0.0f};
+    else panic_ = true;
+  }
+  void render(float*, int) override {}
+  void renderStereo(float* left, float* right, int frames) override {
+    int count = count_;
+    // (a full queue: after the events at sample 0 that came before it)
+    if (panic_) { insertSorted(MidiNote{0, false, kAllNotesOff, 0.0f}, count); panic_ = false; }
+    // First one off per pitch (the reserve always has room for these), then the extra offs of a
+    // pitch started more than once, while they fit.
+    for (int pass = 0; pass < 2; ++pass)
+      for (int p = 0; p < 128; ++p)
+        while (pendingOffs_[p] > 0 && count < kCapacity) {
+          insertSorted(MidiNote{std::min(pendingAt_[p], frames - 1), false, p, 0.0f}, count);
+          --pendingOffs_[p];
+          if (pass == 0) break;
+        }
+    for (int p = 0; p < 128; ++p) pendingAt_[p] = 0;  // what is left goes at the start of the next block
+    if (!runPlugin(*processor_, [&] { processor_->process(left, right, frames, notes_, count); }) ||
+        !checkOutput(*processor_, left, right, frames)) {
+      std::fill(left, left + frames, 0.0f);  // failed: the track is silent from here on
+      std::fill(right, right + frames, 0.0f);
+    }
+    count_ = 0;
+  }
+  void adopt(const Instrument& previous) override {
+    // The same plugin instance plays on; only the notes it still holds are known here.
+    if (auto* p = dynamic_cast<const PluginInstrument*>(&previous)) std::copy(p->held_, p->held_ + 128, held_);
+  }
+  // At most kCapacity events reach the plugin per block: the JUCE host prepares its MIDI buffer for
+  // kMaxPluginEvents (plugins.hpp), so it never allocates on the audio thread.
+  static constexpr int kCapacity = kMaxPluginEvents;
+  static constexpr int kMax = kCapacity - 128 - 1;  // the rest: reserved note-offs and one All Notes Off
+private:
+  // After the events already at that sample (stable: an on and an off of one pitch at one sample keep
+  // their order); the events stay sorted by sample, as process() expects.
+  void insertSorted(const MidiNote& e, int& count) {
+    int at = count;
+    while (at > 0 && notes_[at - 1].offset > e.offset) { notes_[at] = notes_[at - 1]; --at; }
+    notes_[at] = e;
+    ++count;
+  }
+  std::shared_ptr<PluginProcessor> processor_;
+  MidiNote notes_[kCapacity];
+  int count_ = 0;
+  int pendingOffs_[128] = {};  // per pitch: note-offs that did not fit in the queue
+  int pendingAt_[128] = {};    // and the sample of the first of them
+  bool panic_ = false;         // an All Notes Off that did not fit
+  bool held_[128] = {};
+};
+
+// A plugin in an effect chain.
+class PluginEffect final : public Effect {
+public:
+  // master: on the master chain, where a failed plugin lets the mix through instead of silencing the song.
+  PluginEffect(double sampleRate, std::shared_ptr<PluginProcessor> processor, bool master)
+      : Effect(sampleRate), processor_(std::move(processor)), master_(master) {}
+  const char* name() const override { return "plugin"; }
+  void process(float* left, float* right, int frames) override {
+    // The graph calls with at most one sub-block; the input is kept to let it through on the master.
+    float dryL[Graph::kSubBlock], dryR[Graph::kSubBlock];
+    const bool keep = master_ && frames <= Graph::kSubBlock;
+    if (keep) { std::copy(left, left + frames, dryL); std::copy(right, right + frames, dryR); }
+    if (runPlugin(*processor_, [&] { processor_->process(left, right, frames, nullptr, 0); }) &&
+        checkOutput(*processor_, left, right, frames)) return;
+    if (master_) {  // failed: the mix goes through as it came in
+      if (keep) { std::copy(dryL, dryL + frames, left); std::copy(dryR, dryR + frames, right); }
+      return;
+    }
+    std::fill(left, left + frames, 0.0f);  // on a track: the track is silent from here on
+    std::fill(right, right + frames, 0.0f);
+  }
+  void adopt(Effect&) override {}  // the instance itself goes on playing
+  const std::shared_ptr<PluginProcessor>& processor() const { return processor_; }
+private:
+  std::shared_ptr<PluginProcessor> processor_;
+  bool master_;
+};
+
+std::string pluginName(const json& plugin) { return plugin.is_object() ? plugin.value("name", std::string("plugin")) : std::string("plugin"); }
+
 }  // namespace
 
+uint64_t pluginNotesDropped() { return g_pluginNotesDropped.load(std::memory_order_relaxed); }
+uint64_t pluginFailures() { return g_pluginFailures.load(std::memory_order_relaxed); }
 uint64_t nativeFailures() { return g_nativeFailures.load(std::memory_order_relaxed); }
 std::vector<std::string> failedUnits() {
   std::vector<std::string> list;
@@ -136,17 +265,40 @@ void clearFailedUnits() {
 }
 
 
-Graph::Graph(const Project& p, double sampleRate, AssetStore* assets, bool offline)
+Graph::Graph(const Project& p, double sampleRate, AssetStore* assets, PluginProvider* plugins, bool offline)
     : sampleRate_(sampleRate), bpm_(p.bpm), masterGain_(std::pow(10.0, p.masterGainDb / 20)),
       tempo_(p.bpm, p.tempoMap, sampleRate), lengthTicks_(p.lengthTicks) {
   songSamples_ = sampleOfTick(lengthTicks_);
   smoothCoef_ = 1.0 - std::exp(-(double)kSubBlock / (0.015 * sampleRate));
   // Built-in effects with their parameters in catalogue order (validated by fromJson). Bypassed ones stay
   // in the chain, so the others keep their places; returns whether any of them plays.
+  // A plugin effect (or a plugin track): from the provider; when it cannot be loaded, reported and silent.
+  auto loadPlugin = [&](const std::string& key, const json& plugin) -> std::shared_ptr<PluginProcessor> {
+    std::string why = plugins ? "" : "plugins are not available in this build";
+    std::shared_ptr<PluginProcessor> processor = plugins ? plugins->get(key, plugin, sampleRate, offline, &why) : nullptr;
+    if (processor) {
+      pluginKeys_.push_back(key);
+      json ref = plugin.is_object() ? plugin : json::object();
+      ref.erase("state");
+      plugins_.push_back({key, pluginName(plugin), processor, std::move(ref)});
+    }
+    else missingPlugins_.push_back({{"key", key}, {"plugin", pluginName(plugin)}, {"why", why}});
+    return processor;
+  };
   std::vector<std::pair<Effect*, std::string>> sidechains;  // M7c: compressors and the track that keys each
   auto buildChain = [&](const json& list, std::vector<std::unique_ptr<Effect>>& chain, const std::string& owner) {
     bool any = false;
     for (const auto& fx : list) {
+      if (fx.value("type", "") == "plugin") {
+        auto processor = loadPlugin("fx:" + owner + ":" + fx.value("id", std::to_string(chain.size())), fx.value("plugin", json::object()));
+        if (!processor) continue;
+        auto e = std::make_unique<PluginEffect>(sampleRate, std::move(processor), owner == "master");
+        e->id = fx.value("id", "");
+        e->bypass = fx.value("bypass", false);
+        any = any || !e->bypass;
+        chain.push_back(std::move(e));
+        continue;
+      }
       if (fx.value("type", "") != "builtin" || fx.value("unsupported", false)) continue;
       const std::string name = fx.value("name", "");
       // A tempo-synced effect holds enough for the slowest tempo of the song, and starts at the first.
@@ -184,55 +336,11 @@ Graph::Graph(const Project& p, double sampleRate, AssetStore* assets, bool offli
     rt.id = t.id;
     rt.idHash = trackHash(t.id);
     rt.instrument = makeInstrument(t.instrument, sampleRate);
-    if (t.instrument == "sampler") {
-      // The files at the engine's rate, kept alive by the track (the voices only read them).
-      std::vector<SamplerZone> zones;
-      for (const auto& z : t.samples) {
-        std::string why;
-        std::shared_ptr<const AudioData> data = assets ? assets->get(z.path, sampleRate, &why) : nullptr;
-        if (!data) { missingAssets_.push_back(assets ? why : z.path + ": no audio store"); continue; }
-        // The loop in frames at the engine's rate, inside the file (a loop past its end is cut to it; too short: none).
-        const int64_t frames = data->frames();
-        int64_t loopStart = 0, loopEnd = 0;
-        if (z.loopEnd > 0) {
-          loopEnd = std::min<int64_t>(frames - 1, (int64_t)std::llround(z.loopEnd * sampleRate));
-          loopStart = std::clamp<int64_t>((int64_t)std::llround(z.loopStart * sampleRate), 0, std::max<int64_t>(0, loopEnd - 1));
-          if (loopEnd - loopStart < (int64_t)(kMinLoopSeconds * sampleRate)) loopStart = loopEnd = 0;
-        }
-        zones.push_back({std::move(data), z.rootKey, z.loKey, z.hiKey, loopStart, loopEnd});
+    if (t.instrument == "plugin")
+      if (auto processor = loadPlugin("track:" + t.id, t.plugin)) {
+        rt.plugin = processor;
+        rt.instrument = std::make_unique<PluginInstrument>(sampleRate, std::move(processor));
       }
-      auto sampler = std::make_unique<Sampler>(sampleRate);
-      sampler->setZones(std::move(zones));
-      rt.instrument = std::move(sampler);
-    }
-    if (t.instrument == "wave" && rt.instrument && !t.synth.is_null())
-      rt.instrument->setWavePatch(wmod::parsePatch(t.synth, wmod::targets()));  // checked when the track was read
-    if (auto* path = t.instrument == "samplepath" ? dynamic_cast<SamplePath*>(rt.instrument.get()) : nullptr) {
-      // Core Glitch · Sample Path: its map, and one sound per sampler (the zone's lowest key names it, 0..3).
-      path->setPatch(spath::parsePatch(t.synth));  // checked when the track was read
-      bool taken[spath::kLayers] = {};
-      for (const auto& z : t.samples) {
-        const int layer = std::clamp(z.loKey, 0, spath::kLayers - 1);
-        if (taken[layer]) continue;
-        taken[layer] = true;
-        std::string why;
-        if (auto data = assets ? assets->get(z.path, sampleRate, &why) : nullptr) path->setLayerSource(layer, std::move(data));
-        else missingAssets_.push_back(assets ? why : z.path + ": no audio store");
-      }
-    }
-    if (t.instrument == "wave" && !t.samples.empty() && rt.instrument) {
-      // W-Core Grain reads its grains from a sound, at the engine's rate: one per layer at most, the zone's lowest
-      // key naming its layer (0 = layer 1, as every older song; 1..3 = layers 2..4).
-      bool taken[4] = {};
-      for (const auto& z : t.samples) {
-        const int layer = std::clamp(z.loKey, 0, 3);
-        if (taken[layer]) continue;
-        taken[layer] = true;
-        std::string why;
-        if (auto data = assets ? assets->get(z.path, sampleRate, &why) : nullptr) rt.instrument->setLayerSource(layer, std::move(data));
-        else missingAssets_.push_back(assets ? why : z.path + ": no audio store");
-      }
-    }
     const auto& specs = instrumentParams(t.instrument);
     rt.paramCount = hasNoInstrumentParams(t.instrument) ? 0 : (int)specs.size();
     for (int i = 0; i < rt.paramCount; ++i) {
@@ -335,6 +443,11 @@ Graph::Graph(const Project& p, double sampleRate, AssetStore* assets, bool offli
       if (e.param == "gainDb") { a.slot = -1; a.min = -60; a.max = 12; }
       else if (e.param == "pan") { a.slot = -2; a.min = -1; a.max = 1; }
       else if (e.param.rfind("fx:", 0) == 0) { if (!resolveEffectParam(e.param, rt.effects, a)) continue; }
+      else if (e.param.rfind("vst:", 0) == 0) {  // a parameter of the plugin playing the track (none loaded: silent anyway)
+        const int index = rt.plugin ? rt.plugin->parameterIndex(e.param.substr(4)) : -1;
+        if (index < 0) continue;
+        a.slot = -4; a.plugin = rt.plugin.get(); a.pluginParam = index; a.min = 0; a.max = 1;
+      }
       else {
         a.slot = -100;
         for (int i = 0; i < rt.paramCount; ++i) if (e.param == specs[i].name) { a.slot = i; a.min = specs[i].min; a.max = specs[i].max; }
@@ -369,15 +482,27 @@ Graph::Graph(const Project& p, double sampleRate, AssetStore* assets, bool offli
       mr.sourceOns.erase(std::unique(mr.sourceOns.begin(), mr.sourceOns.end()), mr.sourceOns.end());
       rt.anyEnvelope = true;
     }
-  // Latency compensation: each track's inserts that play (look-ahead, oversampling) delay it; the
+  // Latency compensation: each track's plugins (its instrument, the inserts that play) delay it; the
   // others wait for the latest one, so everything stays on the beat. The master chain delays the whole mix
   // alike and needs nothing.
   for (auto& rt : tracks_) {
+    if (rt.plugin) { rt.latency += std::max(0, rt.plugin->latencySamples()); latencies_.push_back({rt.plugin, rt.plugin->latencySamples()}); }
     for (const auto& e : rt.effects)
-      if (!e->bypass) rt.latency += e->latency();
+      if (auto* pe = dynamic_cast<const PluginEffect*>(e.get())) {
+        latencies_.push_back({pe->processor(), pe->processor()->latencySamples()});
+        if (!e->bypass) rt.latency += std::max(0, pe->processor()->latencySamples());
+      } else if (!e->bypass) {
+        rt.latency += e->latency();  // built-in look-ahead / oversampling (limiter 2, saturation 2)
+      }
   }
-  for (const auto& e : masterEffects_)
-    if (!e->bypass) masterLatency_ += e->latency();
+  for (const auto& e : masterEffects_) {
+    if (auto* pe = dynamic_cast<const PluginEffect*>(e.get())) {
+      latencies_.push_back({pe->processor(), pe->processor()->latencySamples()});
+      if (!e->bypass) masterLatency_ += std::max(0, pe->processor()->latencySamples());
+    } else if (!e->bypass) {
+      masterLatency_ += e->latency();
+    }
+  }
   // M7a routing: where each track's fader and sends go, in an order where every bus comes after what feeds
   // it (validateRouting has ruled out loops). Without buses the order is the project's, as before.
   {
@@ -507,11 +632,17 @@ Graph::Graph(const Project& p, double sampleRate, AssetStore* assets, bool offli
   if (!offline) {
     cpu_ = std::make_shared<CpuMeter>();
     auto& entries = cpu_->entries;
-    auto effectName = [](const Effect& e) -> std::string { return e.name(); };
+    auto effectName = [&](const Effect& e) -> std::string {
+      if (auto* pe = dynamic_cast<const PluginEffect*>(&e))
+        for (const auto& lp : plugins_) if (lp.processor == pe->processor()) return lp.name;
+      return e.name();
+    };
     for (size_t i = 0; i < tracks_.size(); ++i) {
       TrackRt& rt = tracks_[i];
       rt.cpuSlot = (int)entries.size();
-      entries.push_back({rt.id, "", p.tracks[i].instrument});
+      std::string instrument = p.tracks[i].instrument;
+      if (rt.plugin) for (const auto& lp : plugins_) if (lp.processor == rt.plugin) instrument = lp.name;
+      entries.push_back({rt.id, "", instrument});
       for (const auto& e : rt.effects) entries.push_back({rt.id, e->id, effectName(*e)});
     }
     masterCpuSlot_ = (int)entries.size();
@@ -549,6 +680,13 @@ bool Graph::resolveEffectParam(const std::string& param, const std::vector<std::
   const std::string id = param.substr(3, colon - 3), name = param.substr(colon + 1);
   for (size_t i = 0; i < chain.size(); ++i) {
     if (chain[i]->id != id) continue;
+    if (auto* pe = dynamic_cast<const PluginEffect*>(chain[i].get())) {
+      if (name.rfind("vst:", 0) != 0) return false;
+      const int index = pe->processor()->parameterIndex(name.substr(4));
+      if (index < 0) return false;
+      a.slot = -4; a.plugin = pe->processor().get(); a.pluginParam = index; a.min = 0; a.max = 1;
+      return true;
+    }
     const auto& specs = effectParams(chain[i]->name());
     for (size_t k = 0; k < specs.size(); ++k)
       if (name == specs[k].name) { a.slot = -3; a.effect = (int)i; a.effectParam = (int)k; a.min = specs[k].min; a.max = specs[k].max; return true; }
@@ -582,9 +720,28 @@ void Graph::applyEffectAutomation(Automation& a, std::vector<std::unique_ptr<Eff
   chain[(size_t)a.effect]->params[a.effectParam] = a.smooth;
 }
 
+// The same glide as an effect parameter; the plugin is told only when the value moves.
+void Graph::applyPluginAutomation(Automation& a, double tick, int64_t aligned) {
+  const double v = std::min(a.max, std::max(a.min, a.valueAt(tick)));
+  if (aligned == a.block) return;
+  a.smooth = a.smoothInit ? a.smooth + (v - a.smooth) * smoothCoef_ : v;
+  a.smoothInit = true;
+  a.block = aligned;
+  const float value = (float)a.smooth;
+  if (std::fabs(value - a.sent) > 1e-6f) { a.plugin->setParameter(a.pluginParam, value); a.sent = value; }
+}
+
 void Graph::adoptAutomation(std::vector<Automation>& now, const std::vector<std::unique_ptr<Effect>>& chain,
                             const std::vector<Automation>& before, const std::vector<std::unique_ptr<Effect>>& beforeChain) {
   for (auto& a : now) {
+    if (a.slot == -4) {
+      for (const auto& b : before)
+        if (b.slot == -4 && b.plugin == a.plugin && b.pluginParam == a.pluginParam) {
+          a.smooth = b.smooth; a.smoothInit = b.smoothInit; a.block = b.block; a.sent = b.sent;
+          break;
+        }
+      continue;
+    }
     if (a.slot != -3 || chain[(size_t)a.effect]->id.empty()) continue;
     for (const auto& b : before)
       if (b.slot == -3 && b.effectParam == a.effectParam && beforeChain[(size_t)b.effect]->id == chain[(size_t)a.effect]->id) {
@@ -895,7 +1052,7 @@ double Graph::masterGainAt(double tick) const {
   return masterGain;
 }
 
-// The master's own state at the start of a sub-block: tempo, knob glide, effect automation.
+// The master's own state at the start of a sub-block: tempo, knob glide, effect and plugin automation.
 void Graph::masterStart(const Step& st) {
   if (!tempo_.constant() && st.bpm != effectBpm_) {
     effectBpm_ = st.bpm;
@@ -904,7 +1061,8 @@ void Graph::masterStart(const Step& st) {
   glideKnobs(masterEffects_, smoothCoef_, st.aligned);
   for (auto& a : masterAutomation_) {
     if (a.slot == -1) continue;  // masterGainAt
-    applyEffectAutomation(a, masterEffects_, st.tick, st.aligned);
+    if (a.slot == -4) applyPluginAutomation(a, st.tick, st.aligned);
+    else applyEffectAutomation(a, masterEffects_, st.tick, st.aligned);
   }
 }
 
@@ -975,6 +1133,7 @@ void Graph::runTrack(int i, const Step& st, float* buf, float* bufR, EventLog* l
   glideKnobs(t.effects, smoothCoef_, aligned);
   for (auto& a : t.automation) {
     if (a.slot == -3) { applyEffectAutomation(a, t.effects, tick, aligned); continue; }
+    if (a.slot == -4) { applyPluginAutomation(a, tick, aligned); continue; }
     double v = std::min(a.max, std::max(a.min, a.valueAt(tick)));
     if (a.slot >= 0) target[a.slot] = v;
     else if (a.slot == -1) gainDb = v;
@@ -1061,7 +1220,7 @@ void Graph::runTrack(int i, const Step& st, float* buf, float* bufR, EventLog* l
       }
     }
   }
-  // Instruments are mono (the same signal both sides), except the stereo ones; audio clips keep their two channels.
+  // Instruments are mono (the same signal both sides), except plugins; audio clips keep their two channels.
   const float* right = stereoInstrument ? bufR : buf;
   if (!t.audio.empty()) {
     std::copy(buf, buf + n, bufR);

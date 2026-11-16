@@ -2,7 +2,6 @@
 #include <algorithm>
 #include <cctype>
 #include "edit.hpp"
-#include "fcore.hpp"
 
 namespace core::doc {
 
@@ -252,23 +251,7 @@ void scoreSetPlays(Document& doc, const std::string& trackId, const std::string&
   doc = std::move(next);
 }
 
-int scoreRises(Document& doc, const std::vector<std::string>& trackIds) {
-  Document next = doc;
-  int added = 0;
-  for (const auto& id : trackIds) {
-    const Track& t = trackById(next, id);
-    const auto fc = fcoreOf(t);
-    if (!fc || fc->mode != "region") continue;
-    for (const auto& s : next.sections) {
-      if (scoreStageOf(s.name) != "build") continue;
-      const int64_t a = s.startTick, b = s.startTick + s.lengthTicks;
-      removeFCoreRegions(next, id, a, b);
-      addFCoreRegion(next, id, a, b);
-      ++added;
-    }
-  }
-  doc = std::move(next);
-  return added;
-}
+// The rises were F-Core regions on the build sections; F-Core left with Core's own sound (2026-11-16): nothing to add.
+int scoreRises(Document&, const std::vector<std::string>&) { return 0; }
 
 }  // namespace core::doc

@@ -15,10 +15,8 @@ if(WIN32)
   set_source_files_properties(${core_juce_code}/CoreApp_resources.rc PROPERTIES OBJECT_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/resources/core-icon.png;${CMAKE_CURRENT_SOURCE_DIR}/resources/core-icon-small.png;${core_juce_code}/icon.ico")
 endif()
-target_sources(CoreApp PRIVATE src/Main.cpp src/MainComponent.cpp src/EngineSession.cpp src/PatternEditor.cpp src/Waveforms.cpp src/Stretch.cpp src/EffectsPanel.cpp src/CoreFxWindow.cpp src/CoreEqWindow.cpp src/CoreGlitchWindow.cpp src/Autosave.cpp src/Diagnostics.cpp src/Theme.cpp src/LibraryPanel.cpp src/InspectorPanel.cpp src/Settings.cpp src/Keymap.cpp src/SampleMaker.cpp src/Mixer.cpp src/Modulation.cpp src/Showcase.cpp src/TrainingClips.cpp src/WCoreModular.cpp src/SCorePanel.cpp src/SoundStrip.cpp src/SoundPage.cpp src/InstrumentDock.cpp src/ChainsView.cpp src/AbSwitch.cpp src/ChoiceDialog.cpp src/BuildupPanel.cpp src/AttachPanel.cpp src/PatternsWindow.cpp src/ToolDock.cpp src/ProposalsPanel.cpp src/Language.cpp)
+target_sources(CoreApp PRIVATE src/Main.cpp src/MainComponent.cpp src/EngineSession.cpp src/PatternEditor.cpp src/Waveforms.cpp src/Stretch.cpp src/Plugins.cpp src/Autosave.cpp src/Diagnostics.cpp src/Theme.cpp src/LibraryPanel.cpp src/InspectorPanel.cpp src/Settings.cpp src/Keymap.cpp src/Mixer.cpp src/SCorePanel.cpp src/ChoiceDialog.cpp src/BuildupPanel.cpp src/PatternsWindow.cpp src/ToolDock.cpp src/ProposalsPanel.cpp src/Language.cpp)
 target_sources(CoreApp PRIVATE src/GlobalKeys.cpp)  # Space plays / stops in every window
-# The help window every plugin shares (its words are help/<id>.json): docs/contracts/core-plugin-help.md.
-target_sources(CoreApp PRIVATE src/PluginHelp.cpp)
 target_compile_definitions(CoreApp PRIVATE
   JUCE_WEB_BROWSER=0
   JUCE_USE_CURL=0
@@ -31,13 +29,17 @@ target_link_libraries(CoreApp
 
 add_dependencies(CoreApp core_version_header)
 
+# The self-test plays its own test plugins (app/selftest-plugins): Core's sound comes from plugins.
+if(TARGET CoreTestSynth_VST3)
+  add_dependencies(CoreApp CoreTestSynth_VST3 CoreTestGain_VST3)
+  target_compile_definitions(CoreApp PRIVATE
+    CORE_TEST_SYNTH_VST3="$<GENEX_EVAL:$<TARGET_PROPERTY:CoreTestSynth_VST3,JUCE_PLUGIN_ARTEFACT_FILE>>"
+    CORE_TEST_GAIN_VST3="$<GENEX_EVAL:$<TARGET_PROPERTY:CoreTestGain_VST3,JUCE_PLUGIN_ARTEFACT_FILE>>")
+endif()
+
 # A runnable folder: Core.exe, core-engine.exe, the demo and the style templates side by side. The demo is the psy demo
 # without its kick roll (8 kicks in one beat sound like clicks at fast tempos).
 add_dependencies(CoreApp core-engine)
-# core-clips (File > Make training clips...): the training clips are made by this tool, beside Core.exe.
-add_dependencies(CoreApp core-clips)
-add_custom_command(TARGET CoreApp POST_BUILD
-  COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:core-clips> $<TARGET_FILE_DIR:CoreApp>)
 add_custom_command(TARGET CoreApp POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:core-engine> $<TARGET_FILE_DIR:CoreApp>
   COMMAND ${CMAKE_COMMAND} -E copy_if_different
@@ -46,10 +48,6 @@ add_custom_command(TARGET CoreApp POST_BUILD
   # The shipped templates are exactly the repo's: a template removed from the repo leaves the app too.
   COMMAND ${CMAKE_COMMAND} -E remove_directory $<TARGET_FILE_DIR:CoreApp>/templates
   COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/../../templates $<TARGET_FILE_DIR:CoreApp>/templates
-  # Style FX racks (effects per style, build-ups): docs/contracts/core-fx-rack.md.
-  COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/../../racks $<TARGET_FILE_DIR:CoreApp>/racks
-  # The words of every plugin's help window (PluginHelp.h): docs/contracts/core-plugin-help.md.
-  COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/../../help $<TARGET_FILE_DIR:CoreApp>/help
   # Core in another language (Settings > General > Language): docs/contracts/core-language.md.
   COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/../../lang $<TARGET_FILE_DIR:CoreApp>/lang
   # Patterns of the Library's Patterns tab (KBBB, hats, cymbals, build-ups...); Diogo's own go to %APPDATA%\Core\Patterns.
@@ -62,17 +60,15 @@ add_custom_command(TARGET CoreApp POST_BUILD
 # machine without Node, Python or a network. cmake --build build --target core-package
 add_custom_target(core-package
   COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/package/Core
-  COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:CoreApp> $<TARGET_FILE:core-engine> $<TARGET_FILE:core-clips>
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:CoreApp> $<TARGET_FILE:core-engine>
           $<TARGET_FILE_DIR:CoreApp>/demo.core-document.json ${CMAKE_CURRENT_SOURCE_DIR}/../README.md
           ${CMAKE_BINARY_DIR}/package/Core
   COMMAND ${CMAKE_COMMAND} -E remove_directory ${CMAKE_BINARY_DIR}/package/Core/templates
   COMMAND ${CMAKE_COMMAND} -E copy_directory $<TARGET_FILE_DIR:CoreApp>/templates ${CMAKE_BINARY_DIR}/package/Core/templates
-  COMMAND ${CMAKE_COMMAND} -E copy_directory $<TARGET_FILE_DIR:CoreApp>/racks ${CMAKE_BINARY_DIR}/package/Core/racks
-  COMMAND ${CMAKE_COMMAND} -E copy_directory $<TARGET_FILE_DIR:CoreApp>/help ${CMAKE_BINARY_DIR}/package/Core/help
   COMMAND ${CMAKE_COMMAND} -E copy_directory $<TARGET_FILE_DIR:CoreApp>/lang ${CMAKE_BINARY_DIR}/package/Core/lang
   COMMAND ${CMAKE_COMMAND} -E copy_directory $<TARGET_FILE_DIR:CoreApp>/patterns ${CMAKE_BINARY_DIR}/package/Core/patterns
   COMMAND ${CMAKE_COMMAND} -E copy_directory $<TARGET_FILE_DIR:CoreApp>/pcore ${CMAKE_BINARY_DIR}/package/Core/pcore
   COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_BINARY_DIR}/package
           ${CMAKE_COMMAND} -E tar cf ${CMAKE_BINARY_DIR}/Core-windows-x64.zip --format=zip Core
-  DEPENDS CoreApp core-clips
+  DEPENDS CoreApp
   COMMENT "Packing build/Core-windows-x64.zip")

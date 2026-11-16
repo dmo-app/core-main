@@ -88,8 +88,6 @@ public:
     options.dumpFolder = core::app::logsFolder().getFullPathName().toWideCharPointer();
     const juce::String selfTest = option(args, "--self-test").unquoted();
     if (selfTest.isNotEmpty()) options.backend = "null";  // repeatable on any machine, no sound
-    const juce::String showcase = option(args, "--showcase").unquoted();  // pictures of every page with a full song
-    if (showcase.isNotEmpty()) options.backend = "null";
 
     core::doc::Document document;
     juce::String problem;
@@ -104,14 +102,6 @@ public:
     auto* content = new MainComponent(options, document, problem);
     content_ = content;
     window_ = std::make_unique<MainWindow>(getApplicationName() + " - " + juce::String::fromUTF8(document.name.c_str()), new ScaledHolder(content));
-    if (showcase.isNotEmpty()) {
-      const juce::File folder = juce::File::getCurrentWorkingDirectory().getChildFile(showcase);
-      content->runShowcase(folder, [this, folder](bool ok, juce::String report) {
-        folder.getChildFile("showcase.txt").replaceWithText(report + "\n");
-        setApplicationReturnValue(ok ? 0 : 1);
-        quit();
-      });
-    }
     if (selfTest.isNotEmpty()) {
       const juce::File picture = juce::File::getCurrentWorkingDirectory().getChildFile(selfTest);
       content->runSelfTest(picture, [this, picture](bool ok, juce::String report) {

@@ -1,9 +1,6 @@
 #include "MainComponent.h"
 #include "ChoiceDialog.h"
 #include "core/project.hpp"
-#include "AbSwitch.h"
-#include "AttachPanel.h"
-#include "attach.hpp"
 #include "follow.hpp"
 #include "stutter.hpp"
 #include "Language.h"
@@ -13,16 +10,11 @@
 #include "pattern_rack.hpp"
 #include "ProposalsPanel.h"
 #include "Diagnostics.h"
-#include "PluginHelp.h"
 #include <cmath>
 #include <thread>
 #include "Stretch.h"
-#include "SampleMaker.h"
 #include "Theme.h"
 #include "TrackColour.h"
-#include "wcore.hpp"
-#include "glitch.hpp"
-#include "core_plugins.hpp"
 #include "randomize.hpp"
 #include "sample_analysis.hpp"
 #include "sampling.hpp"
@@ -148,10 +140,10 @@ class MainComponent::TrackRow final : public juce::Component, public juce::DragA
 public:
   TrackRow(MainComponent& owner, const doc::Track& track) : owner_(owner), id_(track.id) {
     fx_.setButtonText("FX");
-    fx_.setTooltip(u8("This track's effects (in the bottom panel). Ctrl+F: the selected track's."));
+    fx_.setTooltip(u8("This track's plugins: its instrument and its effects"));
     fx_.setClickingTogglesState(false);
     fx_.setColour(juce::TextButton::buttonOnColourId, theme::kPrimary);
-    fx_.onClick = [this] { owner_.openEffects(id_); };
+    fx_.onClick = [this] { owner_.showTrackMenu(id_); };
     mute_.setButtonText("M");
     solo_.setButtonText("S");
     mute_.setTooltip("Mute");
@@ -486,8 +478,8 @@ public:
       else if (e.mods.isShiftDown()) owner_.selectTracksTo(id_);
       else {
         owner_.selectOnlyTrack(id_);
-        if (track_.instrument.kind == "builtin" && track_.instrument.name == doc::kWaveInstrument) owner_.openWave(id_, {id_});
-        else if (doc::isGlitch(track_)) owner_.glitch_->open(id_);
+        // A double click opens the track's plugin window.
+        if (track_.instrument.kind == "plugin" && e.getNumberOfClicks() >= 2) owner_.session_->openPluginEditor(doc::pluginKey(id_));
       }
       return;
     }
@@ -1048,10 +1040,7 @@ private:
       }
       menu.addSubMenu(u8("VOICE STUTTER"), voice);
     }
-    menu.addSeparator();
-    menu.addItem(juce::PopupMenu::Item(hasSelection() ? u8("Save the selection as a sample…") : u8("Save the clip as a sample…")).setID(6).setEnabled(saved));
     menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&more_), [this](int chosen) {
-      if (chosen == 6) owner_.sampleMaker().saveClip(trackId_, clipId_, hasSelection() ? selFrom_ : 0, hasSelection() ? selTo_ : 0);
       if (chosen == 7) cutSilence();
       if (chosen == 1) normalize();
       if (chosen == 2) reverse();
@@ -1820,6 +1809,7 @@ MainComponent::MainComponent(EngineSession::Options options, doc::Document docum
   if (realOutput_) lang::use(settings_.getUserSettings()->getValue("language", "en"));  // Settings > General > Language
   if (realOutput_)  // the chosen output, unless a test asked for a backend
     options.device = settings_.getUserSettings()->getValue("audioDevice").toStdString();
+  plugins_ = std::make_unique<PluginCatalog>(juce::File(juce::String(options.engineBinary.wstring().c_str())));
   session_ = std::make_unique<EngineSession>(std::move(options), history_.current());
   globalKeys_ = std::make_unique<GlobalKeys>([this] { playStop(); });  // also in the plugin windows and docked panels
   cancelExport_.setButtonText(u8("Cancel export"));
@@ -1957,67 +1947,13 @@ MainComponent::MainComponent(EngineSession::Options options, doc::Document docum
   addAndMakeVisible(editor_);
   audioEditor_ = std::make_unique<AudioEditor>(*this);
   addChildComponent(*audioEditor_);
-  addChildComponent(effects_);
-  effects_.onAutomate = [this](const std::string& trackId, const std::string& param) { openAutomation(trackId, param); };
-  // Each closes only itself: Stage Core and the effects can be open side by side.
-  effects_.onClose = [this] {
-    if (chainDocked()) { chainUnderNotes_ = false; showEditorForSelection(); return; }  // under the notes: hide it
-    if (!scoreOpen_) { closePanels(); return; }
-    closeAttachDock();
-    effectsOpen_ = automationOpen_ = false;
-    showEditorForSelection();
-  };
-  effects_.onMinimise = [this] {  // after the click: the panel is laid out again
-    juce::MessageManager::callAsync([safe = juce::Component::SafePointer<MainComponent>(this)] {
-      if (!safe) return;
-      safe->editorCollapsed_ = !safe->editorCollapsed_;
-      safe->effects_.setCollapsed(safe->editorCollapsed_);
-      safe->resized();
-      safe->repaint();
-    });
-  };
-  effects_.onOpenInstrument = [this](const std::string& trackId) { openCoreWindow("instrument", trackId); };
-  {
-    CoreFxWindows::Callbacks cb;
-    cb.undo = [this] { undo(); };
-    cb.redo = [this] { redo(); };
-    cb.watch = [this](const std::string& owner, const std::string& effectId) { if (session_) session_->watchEffect(owner, effectId); };
-    cb.spectrum = [this] { return snap_.effectSpectrum; };
-    coreFx_ = std::make_unique<CoreFxWindows>(static_cast<PatternEditor::Host&>(*this), std::move(cb));
-  }
-  {
-    CoreGlitchWindows::Callbacks cb;
-    cb.undo = [this] { undo(); };
-    cb.redo = [this] { redo(); };
-    cb.sampleLibrary = [this]() -> const doc::SampleIndex* { return hasSampleIndex_ ? &sampleIndex_ : nullptr; };
-    glitch_ = std::make_unique<CoreGlitchWindows>(static_cast<PatternEditor::Host&>(*this), std::move(cb));
-  }
-  effects_.onOpenCoreFx = [this](const std::string& trackId, const std::string& effectId) { coreFx_->open(trackId, effectId); };
-  effects_.onAttachments = [this](const std::string& trackId) { toggleAttachDock(trackId); };
   addChildComponent(score_);
-  score_.onClose = [this] {
-    if (!effectsOpen_) { closePanels(); return; }
-    scoreOpen_ = false;
-    showEditorForSelection();
-  };
+  score_.onClose = [this] { closePanels(); };
   score_.onSay = [this](const juce::String& text) { notice_ = text; logLine(text); repaint(); };
-  // Stage Core › W-Core: a track's name opens its own plugin, else its notes.
-  score_.onOpenTrack = [this](const std::string& id) {
-    const doc::Track* t = history_.current().findTrack(id);
-    if (t && t->instrument.kind == "builtin" && t->instrument.name == doc::kWaveInstrument) openWave(id, {id});
-    else if (t && doc::isGlitch(*t)) glitch_->open(id);
-    else selectTrack(id);
-  };
-  addChildComponent(soundPage_);
-  soundPage_.onClose = [this] { closePanels(); };
+  score_.onOpenTrack = [this](const std::string& id) { selectTrack(id); };
   automation_ = std::make_unique<AutomationEditor>(*this);
   addChildComponent(*automation_);
   mixer_ = std::make_unique<MixerPanel>(static_cast<PatternEditor::Host&>(*this));
-  mixer_->inserts().onAutomate = effects_.onAutomate;
-  mixer_->inserts().onOpenCoreFx = effects_.onOpenCoreFx;
-  reloadRacks();
-  wireRacks(effects_);
-  wireRacks(mixer_->inserts());
   mixer_->onSelect = [this](const std::string& trackId) {
     if (!trackId.empty()) selectTrack(trackId);
     mixer_->select(trackId);
@@ -2027,38 +1963,14 @@ MainComponent::MainComponent(EngineSession::Options options, doc::Document docum
   arrangeButton_.setButtonText("ARRANGE");
   arrangeButton_.setTooltip(u8("The arrangement and the piano roll (every page closed)"));
   arrangeButton_.setWantsKeyboardFocus(false);
-  arrangeButton_.onClick = [this] {
-    if (mixerOpen_) setMixerOpen(false);
-    setChainsOpen(false);
-  };
+  arrangeButton_.onClick = [this] { if (mixerOpen_) setMixerOpen(false); };
   addAndMakeVisible(arrangeButton_);
-  // Chains: every track as a column with its instrument and effects (Diogo 2026-11-09, the chosen layout).
-  chains_ = std::make_unique<ChainsView>(static_cast<PatternEditor::Host&>(*this));
-  chains_->onSelectTrack = [this](const std::string& id) { selectTrack(id); };
-  chains_->onOpenInstrument = [this](const std::string& id) { openCoreWindow("instrument", id); };
-  chains_->onOpenEffect = [this](const std::string& id, const std::string& key) {
-    openEffects(id);
-    effects_.select(key);
-  };
-  chains_->onAddEffect = [this](const std::string& id) {
-    openEffects(id);
-    effects_.showPicker();
-  };
-  addChildComponent(*chains_);
-  chainsButton_.setButtonText("CHAINS");
-  chainsButton_.setTooltip(u8("Every track as a column: its instrument and its effects, in the order they play"));
-  chainsButton_.setWantsKeyboardFocus(false);
-  chainsButton_.onClick = [this] { setChainsOpen(!chainsOpen_); };
-  addAndMakeVisible(chainsButton_);
-  addChildComponent(pluginCards_);
-  pluginCards_.onOpen = [this](const doc::CorePluginInfo& p) { openCorePlugin(p); };
   {
     struct Item { const char* icon; const char* tip; std::function<void()> click; };
     const std::vector<Item> items = {
         {"arrange", "Arrangement", [this] { arrangeButton_.onClick(); }},
         {"mixer", "Mixer (Ctrl+M)", [this] { setMixerOpen(!mixerOpen_); }},
         {"library", "Library", [this] { toggleSidePanel(true); }},
-        {"plugins", "Plugins: Core's own, as cards", [this] { togglePlugins(); }},
         {"inspector", "Inspector", [this] { toggleSidePanel(false); }}};
     for (const auto& item : items) {
       auto b = std::make_unique<juce::TextButton>(item.tip);
@@ -2111,43 +2023,7 @@ MainComponent::MainComponent(EngineSession::Options options, doc::Document docum
     juce::MessageManager::callAsync([safe = juce::Component::SafePointer<MainComponent>(this)] { if (safe && safe->showLibrary_) safe->toggleSidePanel(true); });
   };
   addAndMakeVisible(library_);
-  dock_ = std::make_unique<InstrumentDock>(static_cast<PatternEditor::Host&>(*this));
-  dockShown_ = settings_.getUserSettings()->getBoolValue("showInstrumentDock", true);
-  dockWidth_ = settings_.getUserSettings()->getIntValue("instrumentDockWidth", InstrumentDock::kDefaultWidth);
   libraryWidth_ = settings_.getUserSettings()->getIntValue("libraryWidth", 0);
-  dock_->setCollapsed(settings_.getUserSettings()->getBoolValue("instrumentDockCollapsed", false));
-  dock_->onLayoutChanged = [this] {
-    settings_.getUserSettings()->setValue("instrumentDockCollapsed", dock_->collapsed());
-    resized();
-    repaint();
-  };
-  dock_->onClose = [this] {
-    juce::MessageManager::callAsync([safe = juce::Component::SafePointer<MainComponent>(this)] {
-      if (!safe) return;
-      safe->unpinDock(false);  // in its own window: it closes, and comes back pinned next time
-      safe->showDock(false);
-    });
-  };
-  dock_->onUnpin = [this](bool unpin) { unpinDock(unpin); };
-  // The docked synth's buttons act after their click (choosing another track rebuilds the dock, the synth with it).
-  dock_->configureWave = [this](WCoreModular& m) {
-    m.sampleLibrary = [this]() -> const doc::SampleIndex* { return hasSampleIndex_ ? &sampleIndex_ : nullptr; };
-    m.onOpenPanel = [this](const std::string& id, const std::string& pluginId) {
-      juce::MessageManager::callAsync([safe = juce::Component::SafePointer<MainComponent>(this), id, pluginId] {
-        if (!safe) return;
-        for (const auto& p : doc::corePlugins())
-          if (p.id == pluginId) { safe->selectTrack(id); safe->openCorePlugin(p); return; }
-      });
-    };
-    m.onOpenModulation = [this](const std::string& id) {
-      juce::MessageManager::callAsync([safe = juce::Component::SafePointer<MainComponent>(this), id] {
-        if (!safe) return;
-        if (!id.empty()) safe->selectTrack(id);
-        safe->setMixerOpen(true);
-      });
-    };
-  };
-  addChildComponent(*dock_);
   showLibrary_ = settings_.getUserSettings()->getBoolValue("showLibrary", true);
   showInspector_ = settings_.getUserSettings()->getBoolValue("showInspector", true);
   inspector_->setFolded(settings_.getUserSettings()->getBoolValue("inspectorFolded", false));
@@ -2162,13 +2038,6 @@ MainComponent::MainComponent(EngineSession::Options options, doc::Document docum
   project_.setWantsKeyboardFocus(false);
   project_.onClick = [this] { showProjectMenu(); };
   addAndMakeVisible(project_);
-  masterFx_.setButtonText("FX");
-  masterFx_.setTooltip(u8("Master effects (after the master volume): EQ, compressor, limiter..."));
-  masterFx_.setClickingTogglesState(false);
-  masterFx_.setColour(juce::TextButton::buttonOnColourId, theme::kPrimary);
-  masterFx_.setWantsKeyboardFocus(false);
-  masterFx_.onClick = [this] { openEffects({}); };
-  addAndMakeVisible(masterFx_);
   aiBadge_ = std::make_unique<AiBadge>();
   aiBadge_->onPress = [this](bool popup) { aiBadgePressed(popup); };
   addAndMakeVisible(*aiBadge_);
@@ -2196,11 +2065,6 @@ MainComponent::MainComponent(EngineSession::Options options, doc::Document docum
 MainComponent::~MainComponent() {
   globalKeys_.reset();  // no more keys into a component being destroyed
   patternsWindow_.reset();  // its buttons call this window
-  waveWindows_.clear();  // they edit through this window
-  closePluginHelp();  // its buttons call this window
-  coreFx_.reset();  // its windows edit this window's song
-  glitch_.reset();  // so do these
-  helpHost() = {};
   if (settingsWindow_ != nullptr) delete settingsWindow_.getComponent();  // it shows this window's settings and jobs
   if (sampleScan_) sampleScan_->stop = true;  // its thread owns what it uses and ends at the next file
   if (analysisJob_) analysisJob_->stop = true;  // the same
@@ -2219,7 +2083,6 @@ void MainComponent::edit(const std::function<void(doc::Document&)>& change, cons
   try {
     change(next);
     doc::refreshFollows(next);   // FOLLOW on: the kick plays the STUTTER, the bass follows the kick (same undo step)
-    doc::refreshAttaches(next);  // attachments follow their notes and clips (one undo step with the change)
     // Refuse an invalid edit before putting it into History or sending it: otherwise every
     // later edit is built on a document the engine cannot play (report parts 12–14).
     (void)core::fromJson(doc::toProjection(next));
@@ -2245,8 +2108,6 @@ void MainComponent::edit(const std::function<void(doc::Document&)>& change, cons
   loop_.setToggleState(after.enabled, juce::dontSendNotification);
   editor_.documentChanged();
   showEditorForSelection();
-  if (coreFx_) coreFx_->documentChanged();
-  if (glitch_) glitch_->documentChanged();
   repaint(timelineArea());
   if (patternsWindow_) patternsWindow_->panel().documentChanged();
 }
@@ -2293,99 +2154,11 @@ void MainComponent::documentChanged(bool rebuildRows) {
   editor_.documentChanged();
   if (editor_.track().empty() && !d.tracks.empty() && !d.findTrack(selectedTrack_)) selectTrack(d.tracks.front().id);
   showEditorForSelection();
-  if (coreFx_) coreFx_->documentChanged();
-  if (glitch_) glitch_->documentChanged();
   repaint();
-}
-
-// The bottom panel: the audio editor while an audio clip is selected, otherwise the pattern editor.
-void MainComponent::openEffects(const std::string& trackId) {
-  chainUnderNotes_ = true;  // the FX brings the chain under the notes back too
-  // A track's FX also makes it the chosen track: the computer keyboard and MIDI play it (through its
-  // effects), as they play the track in the pattern editor.
-  // Stage Core stays open beside it: the editors sit side by side at the bottom (the brief; Diogo: several plugins
-  // open at once).
-  const bool score = scoreOpen_;
-  if (!trackId.empty()) selectTrack(trackId);
-  automationOpen_ = false;
-  soundOpen_ = false;
-  scoreOpen_ = score;
-  effectsOpen_ = true;
-  effects_.setTarget(trackId);
-  showEditorForSelection();
-  for (auto& row : rows_) row->repaint();
-}
-
-void MainComponent::openSound(const std::string& trackId, const std::string& param, int kind) {
-  if (!trackId.empty()) selectTrack(trackId);  // the keyboard and MIDI play it while its bars move
-  automationOpen_ = effectsOpen_ = scoreOpen_ = false;
-  soundOpen_ = true;
-  soundPage_.setTarget(trackId);
-  showEditorForSelection();
-  if (soundOpen_ && !param.empty()) soundPage_.modulate(param, kind);
-  for (auto& row : rows_) row->repaint();
-}
-
-namespace {
-// The instrument dock unpinned: a window of its own (the native title bar: it can go anywhere, on any screen).
-class DockWindow final : public juce::DocumentWindow {
-public:
-  explicit DockWindow(const juce::String& name)
-      : juce::DocumentWindow(name, theme::kPanel, juce::DocumentWindow::closeButton | juce::DocumentWindow::minimiseButton) {
-    setUsingNativeTitleBar(true);
-    setResizable(true, false);
-  }
-  void closeButtonPressed() override { if (onClose) onClose(); }
-  std::function<void()> onClose;
-};
-}  // namespace
-
-void MainComponent::unpinDock(bool unpin) {
-  if (!dock_ || unpin == (dockWindow_ != nullptr)) return;
-  if (unpin) {
-    const auto at = dock_->getScreenBounds();
-    removeChildComponent(dock_.get());
-    dock_->setUnpinned(true);
-    auto w = std::make_unique<DockWindow>(u8("Core \xc2\xb7 ") + dock_->title());
-    w->setContentNonOwned(dock_.get(), false);
-    dock_->setVisible(true);
-    w->setResizeLimits(InstrumentDock::kMinWidth, 300, 2400, 1600);
-    w->setBounds(at.isEmpty() ? juce::Rectangle<int>(120, 120, InstrumentDock::kDefaultWidth, 640) : at.translated(-40, 0));
-    if (const auto* display = juce::Desktop::getInstance().getDisplays().getDisplayForRect(w->getBounds()))
-      w->setBounds(w->getBounds().constrainedWithin(display->userArea));  // never off the screen
-    // Its ✕: hidden, the same as the dock's own ✕ (the instrument stays on the track); it comes back pinned.
-    w->onClose = [this] {
-      juce::MessageManager::callAsync([safe = juce::Component::SafePointer<MainComponent>(this)] {
-        if (!safe) return;
-        safe->unpinDock(false);
-        safe->showDock(false);
-      });
-    };
-    w->setVisible(true);
-    dockWindow_ = std::move(w);
-  } else {
-    dockWindow_->clearContentComponent();
-    dockWindow_.reset();
-    dock_->setUnpinned(false);
-    addChildComponent(*dock_);
-    showDock(true);
-  }
-  resized();
-  repaint();
-  for (auto& row : rows_) row->repaint();
-}
-
-void MainComponent::showDock(bool shown) {
-  dockShown_ = shown;
-  settings_.getUserSettings()->setValue("showInstrumentDock", shown);
-  resized();
-  repaint();
-  for (auto& row : rows_) row->repaint();
 }
 
 void MainComponent::openScore() {
-  // A track's effects stay open beside it (see openEffects).
-  automationOpen_ = soundOpen_ = false;
+  automationOpen_ = false;
   scoreOpen_ = true;
   showEditorForSelection();
 }
@@ -2411,106 +2184,14 @@ void MainComponent::openCoreWindow(const std::string& what, const std::string& t
     if (patternsWindow_ && t && doc::playsPatterns(*t)) patternsWindow_->panel().select(track);
     return;
   }
-  if (what == "instrument") {
-    // The instrument opens on the right of the arrangement (its full panel is one click away there).
-    selectTrack(track);
-    if (dock_ && (dock_->setTrack(track), dock_->hasEditor())) {
-      if (dockWindow_) { dockWindow_->setVisible(true); dockWindow_->toFront(true); return; }
-      dock_->setCollapsed(false);
-      showDock(true);
-      return;
-    }
-    if (t->instrument.kind == "builtin" && t->instrument.name == doc::kWaveInstrument) openWave(track, {});
-    else if (doc::isGlitch(*t)) glitch_->open(track);  // Core Glitch: its own window
-    else openSound(track);  // a built-in instrument: its sound and modulation on their own page
-    return;
-  }
-  openEffects(track);
-}
-
-void MainComponent::openCorePlugin(const doc::CorePluginInfo& plugin) {
-  const std::string track = selectedTrack_.empty() ? editor_.track() : selectedTrack_;
-  const doc::Track* t = history_.current().findTrack(track);
-  if (plugin.kind == doc::CorePluginKind::Instrument &&
-      !(t && t->instrument.kind == "builtin" && t->instrument.name == plugin.instrument)) {
-    // Opening never replaces an instrument: the first track that plays it, else a new track with it.
-    std::string found;
-    for (const auto& tr : history_.current().tracks)
-      if (tr.instrument.kind == "builtin" && tr.instrument.name == plugin.instrument) { found = tr.id; break; }
-    if (found.empty()) {
-      edit([&](doc::Document& d) { found = doc::addTrack(d, plugin.instrument); }, u8("Add ") + u8(plugin.fullName));
-      if (found.empty()) return;
-    }
-    openCoreWindow(plugin.opens, found);
-    return;
-  }
-  openCoreWindow(plugin.opens, plugin.opens == "score" ? std::string() : track);
-}
-
-void MainComponent::openWave(const std::string& trackId, const std::vector<std::string>&) {
-  const doc::Track* t = history_.current().findTrack(trackId);
-  if (!t || t->instrument.kind != "builtin" || t->instrument.name != doc::kWaveInstrument) return;
-  selectTrack(trackId);
-  if (std::all_of(t->patterns.begin(), t->patterns.end(), [](const doc::Pattern& p) { return p.notes.empty(); }))
-    notice_ = u8("W-Core has no notes yet. Draw notes in the piano roll, use P-Core, or play the keyboard to hear it.");
-  auto& w = waveWindows_[trackId];
-  if (!w) {
-    w = std::make_unique<WCoreWindow>(static_cast<PatternEditor::Host&>(*this), trackId, u8(t->name));
-    WCoreModular& m = w->modular();
-    m.sampleLibrary = [this]() -> const doc::SampleIndex* { return hasSampleIndex_ ? &sampleIndex_ : nullptr; };
-    m.onOpenPanel = [this](const std::string& id, const std::string& pluginId) {
-      for (const auto& p : doc::corePlugins())
-        if (p.id == pluginId) { selectTrack(id); openCorePlugin(p); return; }
-    };
-    m.onOpenModulation = [this](const std::string& id) {
-      if (!id.empty()) selectTrack(id);
-      setMixerOpen(true);  // the Mixer shows the chosen track's Modulation under the strips
-    };
-    // Closing from the window's own button: deleted after the click has finished.
-    w->onClose = [this, trackId] {
-      juce::MessageManager::callAsync([safe = juce::Component::SafePointer<MainComponent>(this), trackId] {
-        if (safe) safe->waveWindows_.erase(trackId);
-      });
-    };
-    w->setVisible(true);
-  }
-  w->toFront(true);
-}
-
-void MainComponent::syncWaveWindows() {
-  for (auto it = waveWindows_.begin(); it != waveWindows_.end();) {
-    const doc::Track* t = history_.current().findTrack(it->first);
-    if (!t || t->instrument.kind != "builtin" || t->instrument.name != doc::kWaveInstrument) { it = waveWindows_.erase(it); continue; }
-    it->second->setName(u8("W-Core \xc2\xb7 ") + u8(t->name));
-    it->second->modular().documentChanged();
-    ++it;
-  }
-}
-
-std::vector<std::string> MainComponent::tracksForPlugin(const std::string& clicked) const {
-  const auto all = selectedTracks();
-  if (std::find(all.begin(), all.end(), clicked) == all.end()) return {clicked};
-  std::vector<std::string> out{clicked};
-  for (const auto& id : all) if (id != clicked) out.push_back(id);
-  return out;
-}
-
-void MainComponent::setChainsOpen(bool open) {
-  chainsOpen_ = open;
-  if (open && mixerOpen_) { setMixerOpen(false); chainsOpen_ = true; }
-  if (open && chains_) { chains_->documentChanged(); chains_->setSelected(selectedTrack_); }
-  chainsButton_.setToggleState(chainsOpen_, juce::dontSendNotification);
-  arrangeButton_.setToggleState(!mixerOpen_ && !chainsOpen_, juce::dontSendNotification);
-  resized();
-  repaint();
+  selectTrack(track);
+  if (what == "instrument" && t->instrument.kind == "plugin") session_->openPluginEditor(doc::pluginKey(track));
 }
 
 void MainComponent::setMixerOpen(bool open) {
   mixerOpen_ = open;
-  if (open) chainsOpen_ = false;
-  chainsButton_.setToggleState(chainsOpen_, juce::dontSendNotification);
   if (open) {
-    effectsOpen_ = automationOpen_ = scoreOpen_ = soundOpen_ = false;
+    automationOpen_ = scoreOpen_ = false;
     mixer_->select(selectedTrack_.empty() ? editor_.track() : selectedTrack_);
   }
   mixerButton_.setToggleState(open, juce::dontSendNotification);
@@ -2574,8 +2255,8 @@ void MainComponent::openPatterns() {
       if (auto* top = getTopLevelComponent()) top->toFront(true);
     };
     h.openEffects = [this](const std::string& trackId) {
-      openEffects(trackId);
       if (auto* top = getTopLevelComponent()) top->toFront(true);
+      showTrackMenu(trackId);
     };
     h.addTrack = [this] {
       if (auto* top = getTopLevelComponent()) top->toFront(true);
@@ -2595,95 +2276,41 @@ void MainComponent::openPatterns() {
 }
 
 void MainComponent::closePanels() {
-  closeAttachDock();
-  effectsOpen_ = false;
-  scoreOpen_ = soundOpen_ = false;
+  scoreOpen_ = false;
   automationOpen_ = false;
   showEditorForSelection();
 }
 
 void MainComponent::openAutomation(const std::string& trackId, const std::string& param) {
-  // From the effects of the same track (or the master's): the cards stay, the curve opens under them.
-  const bool docked = effectsOpen_ && effects_.target() == trackId;
   if (!trackId.empty()) selectTrack(trackId);
-  effectsOpen_ = docked;
-  scoreOpen_ = soundOpen_ = false;
+  scoreOpen_ = false;
   automationOpen_ = true;
   automation_->setTarget(trackId, param);
   showEditorForSelection();
   placeBottomPanels();
 }
 
-void MainComponent::closeAutomation() {
-  if (!effectsOpen_) { closePanels(); return; }
-  automationOpen_ = false;
-  showEditorForSelection();
-  placeBottomPanels();
-}
+void MainComponent::closeAutomation() { closePanels(); }
 
 void MainComponent::placeBottomPanels() {
-  auto area = editorArea();
-  // The Attachments beside the effect cards (only while that track's effects are open).
-  if (attachDock_ && !(effectsOpen_ && effects_.target() == attachDockTrack_)) closeAttachDock();
-  if (attachDock_) {
-    const int w = attachDock_->getWidth();
-    attachDock_->setTopLeftPosition(area.getRight() - w, area.getY());
-    attachDock_->toFront(false);
-    area.removeFromRight(w + 6);
-  }
-  if (effectsOpen_ && automationOpen_) {
-    const auto lane = area.removeFromBottom(std::max(200, area.getHeight() * 45 / 100));
-    effects_.setBounds(area.withTrimmedBottom(6));
-    automation_->setBounds(lane);
-    return;
-  }
-  if (effectsOpen_ && scoreOpen_) {  // side by side: Stage Core on the left, the track's chain on the right
-    auto left = area.removeFromLeft(area.getWidth() / 2);
-    score_.setBounds(left.withTrimmedRight(3));
-    effects_.setBounds(area.withTrimmedLeft(3));
-    automation_->setBounds(area);
-    return;
-  }
+  const auto area = editorArea();
   score_.setBounds(area);
   automation_->setBounds(area);
-  if (chainDocked()) {  // the notes on top, the track's chain under them
-    // Minimised (▾): only its header stays, as a bar under the notes; the notes take the rest.
-    // The notes keep at least 180 px over the chain (a short window left the grid 0 px high: desktop_self_test "drag step").
-    const int h = editorCollapsed_ ? kEditorCollapsed
-                                   : std::min(std::clamp(area.getHeight() * 45 / 100, 200, 340), std::max(kEditorCollapsed, area.getHeight() - 6 - 180));
-    const auto chain = area.removeFromBottom(h);
-    effects_.setBounds(chain);
-    area.removeFromBottom(6);
-    editor_.setBounds(area);
-    audioEditor_->setBounds(area);
-    return;
-  }
-  effects_.setBounds(area);
   editor_.setBounds(area);
   audioEditor_->setBounds(area);
 }
 
 void MainComponent::showEditorForSelection() {
-  // The bottom panels' places follow what is open (Stage Core and the effects can sit side by side), on every way out.
+  // The bottom panels' places follow what is open, on every way out.
   struct Place { MainComponent* m; ~Place() { m->placeBottomPanels(); } } place{this};
-  syncWaveWindows();
-  if (chains_ && chainsOpen_) { chains_->documentChanged(); chains_->setSelected(selectedTrack_); }
-  if (dock_) {  // the instrument on the right follows the selected track
-    const bool had = dockRoom() > 0;
-    dock_->setTrack(selectedTrack_);
-    dock_->documentChanged();
-    if (dockWindow_) dockWindow_->setName(u8("Core \xc2\xb7 ") + dock_->title());
-    if (!dockWindow_ && (had != (dockRoom() > 0) || (dock_->isVisible() != (dockRoom() > 0)))) resized();
-  }
-  if (attachDock_ && !(effectsOpen_ && effects_.target() == attachDockTrack_)) closeAttachDock();
-  // The Mixer, until it is closed (or a track's effects or a curve are opened).
-  if (effectsOpen_ || automationOpen_ || scoreOpen_ || soundOpen_ || !mixer_) mixerOpen_ = false;
+  // The Mixer, until it is closed (or a curve or Stage Core is opened).
+  if (automationOpen_ || scoreOpen_ || !mixer_) mixerOpen_ = false;
   mixerButton_.setToggleState(mixerOpen_, juce::dontSendNotification);
   if (mixer_) mixer_->setVisible(mixerOpen_);
   if (library_.isVisible() != libraryShown()) resized();  // the Mixer closed by another view: the side panels come back
   if (mixerOpen_) {
     mixer_->documentChanged();
-    for (juce::Component* c : std::initializer_list<juce::Component*>{automation_.get(), &effects_, &soundPage_, &score_, audioEditor_.get(), &editor_}) c->setVisible(false);
+    for (juce::Component* c : std::initializer_list<juce::Component*>{automation_.get(), &score_, audioEditor_.get(), &editor_}) c->setVisible(false);
     return;
   }
   // Automation of a track or the master, until something else is chosen.
@@ -2691,23 +2318,7 @@ void MainComponent::showEditorForSelection() {
   automation_->setVisible(automationOpen_);
   if (automationOpen_) {
     automation_->documentChanged();
-    effects_.setVisible(effectsOpen_);  // docked under the effects' cards, or alone
-    if (effectsOpen_) effects_.documentChanged();
-    soundPage_.setVisible(false);
     score_.setVisible(false);
-    audioEditor_->setVisible(false);
-    editor_.setVisible(false);
-    return;
-  }
-  // A built-in instrument's page (sound + modulation), the same way (gone with the track, or its instrument: undo).
-  if (soundOpen_) {
-    soundPage_.setTarget(soundPage_.target());
-    if (!soundPage_.shows()) soundOpen_ = false;
-  }
-  soundPage_.setVisible(soundOpen_);
-  if (soundOpen_) {
-    score_.setVisible(false);
-    effects_.setVisible(false);
     audioEditor_->setVisible(false);
     editor_.setVisible(false);
     return;
@@ -2716,22 +2327,6 @@ void MainComponent::showEditorForSelection() {
   score_.setVisible(scoreOpen_);
   if (scoreOpen_) {
     score_.documentChanged();
-    if (effectsOpen_ && !effects_.target().empty() && !history_.current().findTrack(effects_.target())) effectsOpen_ = false;
-    effects_.setVisible(effectsOpen_);  // beside it, when both are open
-    if (effectsOpen_) effects_.documentChanged();
-    audioEditor_->setVisible(false);
-    editor_.setVisible(false);
-    return;
-  }
-  // The effects of a track or the master, until a clip or another track is chosen.
-  if (effectsOpen_ && !effects_.target().empty() && !history_.current().findTrack(effects_.target())) effectsOpen_ = false;
-  effects_.setVisible(effectsOpen_);
-  int active = 0;
-  for (const auto& fx : history_.current().masterEffects) active += !doc::effectBypassed(fx);
-  masterFx_.setToggleState(active > 0, juce::dontSendNotification);
-  masterFx_.setButtonText(history_.current().masterEffects.empty() ? juce::String("FX") : "FX " + juce::String((int)history_.current().masterEffects.size()));
-  if (effectsOpen_) {
-    effects_.documentChanged();
     audioEditor_->setVisible(false);
     editor_.setVisible(false);
     return;
@@ -2744,34 +2339,20 @@ void MainComponent::showEditorForSelection() {
   audioEditor_->documentChanged();
   audioEditor_->setVisible(audioClip);
   editor_.setVisible(!audioClip);
-  // The track's Core Chain under its notes: the same panel as the FX's, on the selected track.
-  const bool chain = chainUnderNotes_ && t != nullptr;
-  if (chain && effects_.target() != selectedTrack_) effects_.setTarget(selectedTrack_);
-  effects_.setVisible(chain);
-  if (chain) effects_.documentChanged();
 }
 
 void MainComponent::selectTrack(const std::string& trackId) {
   releaseAllKeys();  // a held key ends on the track that started it
-  // The effects of a track stay open on the next track chosen (Diogo 2026-11-07: play, open the filters, move to
-  // another track and change its own while it plays). The master's chain closes as before.
-  const bool keepEffects = effectsOpen_ && !effects_.target().empty() && !trackId.empty() && history_.current().findTrack(trackId);
-  effectsOpen_ = false;
-  scoreOpen_ = soundOpen_ = false;
+  scoreOpen_ = false;
   automationOpen_ = false;
   boxClips_.clear();
   if (trackId != selectedTrack_) { selectedTrack_ = trackId; selectedClip_.clear(); }
   editor_.setTrack(trackId);
-  if (keepEffects) {
-    effectsOpen_ = true;
-    if (effects_.target() != trackId) effects_.setTarget(trackId);
-  }
   if (mixer_ && mixerOpen_ && !trackId.empty()) mixer_->select(trackId);  // a click on a track row chooses its strip
   showEditorForSelection();
   { std::lock_guard<std::mutex> g(liveMutex_); liveTrack_ = editor_.track(); }
   for (auto& row : rows_) row->repaint();
 }
-
 std::vector<std::string> MainComponent::selectedTracks() const {
   const doc::Document& d = history_.current();
   const std::string shown = selectedTrack_.empty() ? editor_.track() : selectedTrack_;
@@ -2822,8 +2403,7 @@ void MainComponent::selectTracksTo(const std::string& trackId) {
 }
 
 void MainComponent::selectClip(const std::string& trackId, const std::string& clipId) {
-  effectsOpen_ = false;
-  scoreOpen_ = soundOpen_ = false;
+  scoreOpen_ = false;
   automationOpen_ = false;
   boxClips_.clear();
   if (trackId != editor_.track()) releaseAllKeys();
@@ -3172,100 +2752,6 @@ void MainComponent::addClipAt(const std::string& trackId, int64_t tick) {
   if (!clipId.empty()) selectClip(trackId, clipId);
 }
 
-// Attachments on a clip's start, middle and end (doc::attach): the same window as on notes, plus the edge length.
-void MainComponent::showClipAttach(const std::string& trackId, const std::string& clipId) {
-  auto panel = clipAttachPanel(trackId, clipId);
-  if (!panel) return;
-  juce::CallOutBox::launchAsynchronously(std::move(panel), juce::Rectangle<int>(1, 1).withPosition(juce::Desktop::getMousePosition()), nullptr);
-}
-
-// The Attachments of the effects (Diogo 2026-11-07: "poder meter os settings dos attachments nos filters"): the same
-// window, docked at the right of the effect cards, for the chosen clip of that track (or its first clip).
-void MainComponent::toggleAttachDock(const std::string& trackId) {
-  if (attachDock_ && attachDockTrack_ == trackId) { closeAttachDock(); return; }
-  openAttachDock(trackId);
-}
-
-void MainComponent::openAttachDock(const std::string& trackId) {
-  const doc::Track* t = history_.current().findTrack(trackId);
-  closeAttachDock();
-  if (!t || t->clips.empty()) {
-    if (t) juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::InfoIcon, u8("Attachments"),
-                                                  u8("This track has no clips yet: add a clip, then choose its Start, Middle and End here."));
-    return;
-  }
-  std::string clipId = t->clips.front().id;
-  for (const auto& c : t->clips) if (c.id == selectedClip_ && selectedTrack_ == trackId) clipId = c.id;
-  attachDock_ = clipAttachPanel(trackId, clipId);
-  if (!attachDock_) return;
-  attachDockTrack_ = trackId;
-  addAndMakeVisible(*attachDock_);
-  effects_.setAttachmentsOpen(true);
-  placeBottomPanels();
-}
-
-void MainComponent::closeAttachDock() {
-  if (attachDock_) removeChildComponent(attachDock_.get());
-  attachDock_.reset();
-  attachDockTrack_.clear();
-  effects_.setAttachmentsOpen(false);
-}
-
-std::unique_ptr<AttachPanel> MainComponent::clipAttachPanel(const std::string& trackId, const std::string& clipId) {
-  const doc::Track* t = history_.current().findTrack(trackId);
-  if (!t) return nullptr;
-  const doc::Clip* clip = nullptr;
-  for (const auto& c : t->clips) if (c.id == clipId) clip = &c;
-  if (!clip) return nullptr;
-  AttachPanel::Start start;
-  start.what = u8("clip at bar ") + juce::String(clip->startTick / kBar + 1);
-  for (int i = 0; i < 3; ++i) start.places[i] = doc::clipAttach(*clip, i);
-  start.clip = true;
-  start.edge = doc::clipAttachEdge(*clip);
-  auto panel = std::make_unique<AttachPanel>(start);
-  panel->attaches = [this, trackId] { return doc::trackAttaches(history_.current(), trackId); };
-  panel->onCreate = [this, trackId](const std::string& recipe, const std::string& name) {
-    std::string made;
-    edit([&](doc::Document& d) { made = doc::addAttach(d, trackId, recipe, name); }, u8("New attachment"));
-    return made;
-  };
-  panel->onSet = [this, trackId, clipId](int place, const std::string& name) {
-    doc::AttachSides sides;
-    (place == doc::kAttachStart ? sides.start : place == doc::kAttachMiddle ? sides.middle : sides.end) = name;
-    static const char* places[] = {"Start", "Middle", "End"};
-    const juce::String label = u8(places[std::clamp(place, 0, 2)]) + u8(": ") + (name.empty() ? u8("none") : u8(name));
-    edit([&](doc::Document& d) { doc::attachClip(doc::trackById(d, trackId), clipId, sides); }, u8("Attachment ") + label);
-    return label + u8(" (Ctrl+Z undoes).");
-  };
-  panel->onEdge = [this, trackId, clipId](int64_t edge) {
-    edit([&](doc::Document& d) { doc::attachClip(doc::trackById(d, trackId), clipId, {}, edge); }, u8("Attachment length"));
-    return juce::String(u8("Start and End parts: ")) + juce::String(edge / doc::kPpq) + u8(" beats (Ctrl+Z undoes).");
-  };
-  return panel;
-}
-
-// Many clips at once: this track's clips that start in [from, to) (a section), or all of them (from < 0).
-void MainComponent::showClipAttachPlan(const std::string& trackId, int64_t from, int64_t to) {
-  const doc::Track* t = history_.current().findTrack(trackId);
-  if (!t) return;
-  std::vector<std::string> ids;
-  for (const auto& c : t->clips)
-    if (from < 0 || (c.startTick < to && c.startTick + c.lengthTicks > from)) ids.push_back(c.id);
-  if (ids.empty()) return;
-  auto panel = std::make_unique<AttachPlanPanel>(juce::String((int)ids.size()) + (ids.size() == 1 ? u8(" clip") : u8(" clips")),
-                                                 attachChoices(history_.current(), trackId));
-  panel->onApply = [this, trackId, ids](const doc::AttachPlan& asked, const std::vector<std::string>& recipes) {
-    int changed = 0;
-    edit([&](doc::Document& d) {
-      doc::AttachPlan plan = asked;
-      for (const auto& r : recipes) plan.names.push_back(doc::ensureAttach(d, trackId, r));
-      changed = doc::applyAttachPlan(doc::trackById(d, trackId), ids, plan);
-    }, u8("Apply attachments"));
-    return juce::String(changed) + (changed == 1 ? u8(" clip") : u8(" clips")) + u8(" changed (Ctrl+Z undoes).");
-  };
-  juce::CallOutBox::launchAsynchronously(std::move(panel), juce::Rectangle<int>(1, 1).withPosition(juce::Desktop::getMousePosition()), nullptr);
-}
-
 void MainComponent::showClipMenu(const std::string& trackId, const std::string& clipId, int64_t atTick) {
   const doc::Track* t = history_.current().findTrack(trackId);
   if (!t) return;
@@ -3291,9 +2777,6 @@ void MainComponent::showClipMenu(const std::string& trackId, const std::string& 
   patterns.addSeparator();
   patterns.addItem(juce::PopupMenu::Item(u8("New empty pattern")).setID(2));
   menu.addSubMenu(u8("Use pattern"), patterns);
-  menu.addItem(juce::PopupMenu::Item(u8("Attachments… (Start · Middle · End)")).setID(6));
-  menu.addItem(juce::PopupMenu::Item(section ? u8("Apply attachments to this track's clips in ") + u8(section->name) + u8("…")
-                                             : u8("Apply attachments to this track's clips…")).setID(7));
   menu.addSeparator();
   menu.addItem(juce::PopupMenu::Item("Delete clip").setID(3));
   menu.showMenuAsync(juce::PopupMenu::Options(), [this, trackId, clipId, atTick, secFrom, secTo, clipEnd](int chosen) {
@@ -3301,8 +2784,6 @@ void MainComponent::showClipMenu(const std::string& trackId, const std::string& 
       edit([&](doc::Document& d) { doc::splitClip(doc::trackById(d, trackId), clipId, atTick); }, u8("Split clip"));
       return;
     }
-    if (chosen == 6) { showClipAttach(trackId, clipId); return; }
-    if (chosen == 7) { showClipAttachPlan(trackId, secFrom, secTo); return; }
     if (chosen == 5) {
       std::string middle = clipId, pattern;
       edit([&](doc::Document& d) {
@@ -3357,11 +2838,6 @@ void MainComponent::checkMissingAssets() {
   if (!missing_.empty())
     notice_ = juce::String((int)missing_.size()) + u8(" missing audio file(s) (in red). File > Locate missing files…");
   for (auto& row : rows_) row->repaint();
-}
-
-MainComponent::SampleMaker& MainComponent::sampleMaker() {
-  if (!sampleMaker_) sampleMaker_ = std::make_unique<SampleMaker>(*this);
-  return *sampleMaker_;
 }
 
 void MainComponent::importAudio() {
@@ -3516,8 +2992,6 @@ void MainComponent::showAudioClipMenu(const std::string& trackId, const std::str
   menu.addItem(2, u8("Gain…"));
   menu.addItem(juce::PopupMenu::Item("Mute").setID(3).setTicked(clip->mute));
   menu.addSeparator();
-  menu.addItem(41, u8("Save as sample…"));
-  menu.addSeparator();
   menu.addItem(4, "Delete clip");
   const juce::String gain = juce::String(clip->gainDb, 1);
   menu.showMenuAsync(juce::PopupMenu::Options(), [this, trackId, clipId, splitAt, gain](int chosen) {
@@ -3541,8 +3015,6 @@ void MainComponent::showAudioClipMenu(const std::string& trackId, const std::str
       });
     } else if (chosen == 3) {
       change([](doc::AudioClip& c) { c.mute = !c.mute; }, "Clip mute");
-    } else if (chosen == 41) {
-      sampleMaker().saveClip(trackId, clipId);
     } else if (chosen == 4) {
       edit([&](doc::Document& d) { doc::removeAudioClip(d, trackId, clipId); }, "Delete clip");
       selectedClip_.clear();
@@ -3765,7 +3237,7 @@ void MainComponent::setAiControl(bool on) {
 }
 
 std::vector<control::CoreFunction> MainComponent::callableFunctions() const {
-  return control::buildFunctions(rackList());
+  return control::buildFunctions();
 }
 
 // Every second: the state AICORE reads (written when it changed), and the proposals waiting.
@@ -4029,7 +3501,42 @@ void MainComponent::updateAiBadge() {
   aiBadge_->setTooltip(tip);
 }
 
+juce::File MainComponent::trainingClipsFolder() const {
+  const juce::File chosen = folderSetting("folderTrainingClips");
+  return chosen != juce::File() ? chosen
+                                : juce::File::getSpecialLocation(juce::File::userDocumentsDirectory).getChildFile("Core training clips");
+}
+
+void MainComponent::scanPlugins() {
+  notice_ = u8("Scanning the plugins (each one is checked on its own)...");
+  juce::Component::SafePointer<MainComponent> self(this);
+  plugins_->scan([this, self](int found, int failed) {
+    if (self == nullptr) return;
+    notice_ = u8("Plugins: ") + juce::String(found) + u8(" found") +
+              (failed ? u8(", ") + juce::String(failed) + u8(" with problems (set aside)") : juce::String()) + ".";
+    menuItemsChanged();
+    repaint();
+  });
+}
+
+// What the plugins hold now goes into the document (no new undo step): saving, exporting, before a change that
+// replaces a plugin (so Undo brings it back as it sounded). False when the engine gave no answer.
+bool MainComponent::fetchPluginStates() {
+  if (!doc::hasPlugins(history_.current())) return true;
+  const json states = session_->pluginStates(5000);
+  if (states.empty() && snap_.missingPlugins.empty()) return false;  // no answer from the engine
+  doc::Document withStates = history_.current();
+  if (doc::applyPluginStates(withStates, states) > 0) {
+    history_.amend(withStates);
+    session_->setDocument(engineDocument());  // the same plugins: the engine keeps them as they are
+  }
+  return true;
+}
+
 MainComponent::SaveResult MainComponent::writeTo(const juce::File& target) {
+  // The plugins' sound goes into the file first (the engine's copy is never the only one).
+  if (!fetchPluginStates())
+    showError(u8("Plugins"), u8("The engine did not give the plugins' settings in time: the file keeps the ones from the last save."));
   const std::filesystem::path before = projectDir();
   try {
     if (!before.empty() && !history_.current().assets.empty())
@@ -4042,6 +3549,7 @@ MainComponent::SaveResult MainComponent::writeTo(const juce::File& target) {
   file_ = target;
   imported_ = false;
   history_.markSaved();
+  pluginsDirty_ = false;
   logLine("Saved " + target.getFullPathName());
   recovered_ = false;
   if (!unsaved()) removeOwnAutosave();  // saved: the autosave is not needed any more
@@ -4082,7 +3590,6 @@ void MainComponent::open() {
         doc::Document moved = r.document;
         const int relinked = hasSampleIndex_ ? doc::relinkMovedSamples(moved, sampleIndex_) : 0;
         history_.reset(std::move(r.document));
-        AbSwitch::forgetAll();  // another song: A/B starts again
         if (relinked) history_.amend(moved);
         selectedTrack_.clear();
         selectedClip_.clear();
@@ -4091,7 +3598,7 @@ void MainComponent::open() {
         loadProblem_.clear();
         viewStart_ = viewLength_ = 0;
         recovered_ = false;
-        session_->newSong();
+        session_->newSong(); session_->releasePlugins();
         missing_.clear();
         session_->setAssetRoot(projectDir(), false);
         documentChanged(true);
@@ -4115,7 +3622,6 @@ void MainComponent::newProject(bool fromTemplate) {
 void MainComponent::newFromDocument(doc::Document fresh, std::function<void()> then) {
   confirmUnsaved([this, fresh = std::move(fresh), then] {
     history_.reset(fresh);
-    AbSwitch::forgetAll();
     selectedTrack_.clear();
     selectedClip_.clear();
     file_ = juce::File();
@@ -4123,7 +3629,7 @@ void MainComponent::newFromDocument(doc::Document fresh, std::function<void()> t
     loadProblem_.clear();
     viewStart_ = viewLength_ = 0;
     recovered_ = false;
-    session_->newSong();
+    session_->newSong(); session_->releasePlugins();
     notice_.clear();
     missing_.clear();
     session_->home();
@@ -4139,41 +3645,6 @@ juce::File MainComponent::builtinTemplatesFolder() const {
 
 juce::File MainComponent::userTemplatesFolder() const {
   return juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory).getChildFile("Core").getChildFile("Templates");
-}
-
-juce::File MainComponent::userRacksFolder() const {
-  return juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory).getChildFile("Core").getChildFile("Racks");
-}
-
-void MainComponent::reloadRacks() {
-  const juce::File builtin = juce::File::getSpecialLocation(juce::File::currentExecutableFile).getParentDirectory().getChildFile("racks");
-  std::vector<doc::RackProblem> problems;
-  std::vector<doc::RackEntry> list = doc::loadRacks(builtin.getFullPathName().toWideCharPointer(), userRacksFolder().getFullPathName().toWideCharPointer(), &problems);
-  for (const auto& p : problems) logLine("Style FX rack not read: " + juce::String(p.file.wstring().c_str()) + ": " + u8(p.message));
-  logLine("Style FX racks: " + juce::String((int)list.size()));
-  const std::lock_guard<std::mutex> lock(racksLock_);
-  racks_ = std::move(list);
-}
-
-std::vector<doc::RackEntry> MainComponent::rackList() const {
-  const std::lock_guard<std::mutex> lock(racksLock_);
-  return racks_;
-}
-
-void MainComponent::wireRacks(EffectsPanel& panel) {
-  panel.racks = [this] { return rackList(); };
-  panel.songStyle = [this] {
-    const doc::Document& d = history_.current();
-    if (d.extra.contains("template") && d.extra["template"].is_object()) return d.extra["template"].value("style", std::string());
-    return std::string();
-  };
-  panel.onOpenRacksFolder = [this] { userRacksFolder().createDirectory(); userRacksFolder().startAsProcess(); };
-  // FCore: the library for its Sample ▾, and Print to sample (the track over the loop region, as Render to sample).
-  panel.sampleLibrary = [this]() -> const doc::SampleIndex* { return hasSampleIndex_ ? &sampleIndex_ : nullptr; };
-  panel.onPrintFCore = [this](const std::string& trackId) {
-    const doc::Loop& l = history_.current().loop;
-    sampleMaker().renderRegion(trackId, l.startTick, l.endTick);
-  };
 }
 
 // Reads the template files again only when one of them (or hidden.json) changed: the File menu asks
@@ -4686,6 +4157,20 @@ void MainComponent::deleteTemplate(const std::string& templateId) {
 // start bass), W-Core, the hats, the snare and the sampler.
 void MainComponent::showAddTrackMenu() {
   juce::PopupMenu menu;
+  // The plugins of this PC first (Diogo 2026-11-16: the sound comes from plugins), by maker.
+  const std::vector<nlohmann::json> instruments = plugins_->instruments();
+  menu.addSectionHeader(u8("Plugin instruments"));
+  {
+    std::map<std::string, juce::PopupMenu> byVendor;
+    for (size_t i = 0; i < instruments.size(); ++i) {
+      std::string vendor = instruments[i].value("vendor", std::string());
+      if (vendor.empty()) vendor = "Other";
+      byVendor[vendor].addItem(2000 + (int)i, u8(instruments[i].value("name", std::string("Plugin"))));
+    }
+    for (auto& [vendor, sub] : byVendor) menu.addSubMenu(u8(vendor), sub);
+    if (instruments.empty()) menu.addItem(juce::PopupMenu::Item(u8("None found yet: Plugins menu > Scan plugins")).setID(99999).setEnabled(false));
+  }
+  menu.addSeparator();
   const std::vector<doc::InstrumentChoice>& native = doc::builtinInstruments();
   menu.addSectionHeader(u8("Core's own instruments"));
   for (size_t i = 0; i < native.size(); ++i)
@@ -4694,15 +4179,20 @@ void MainComponent::showAddTrackMenu() {
   menu.addSeparator();
   menu.addItem(1000, u8("Audio track (empty)"));
   menu.addItem(1001, u8("Import audio (WAV)…"));
-  menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&addTrack_), [this](int chosen) {
+  menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&addTrack_), [this, instruments](int chosen) {
+    if (chosen >= 2000 && chosen - 2000 < (int)instruments.size()) {
+      const nlohmann::json plugin = instruments[(size_t)chosen - 2000];
+      std::string id;
+      edit([&](doc::Document& d) { id = doc::addPluginTrack(d, plugin); }, u8("Add ") + u8(plugin.value("name", std::string("plugin"))));
+      if (!id.empty()) { selectTrack(id); session_->openPluginEditor(doc::pluginKey(id)); }
+      return;
+    }
     const std::vector<doc::InstrumentChoice>& list = doc::builtinInstruments();
     if (chosen >= 3000 && chosen - 3000 < (int)list.size()) {
       const doc::InstrumentChoice choice = list[(size_t)chosen - 3000];
       std::string id;
       edit([&](doc::Document& d) { id = doc::addTrack(d, choice.name); }, u8("Add ") + u8(choice.label));
       if (!id.empty()) selectTrack(id);
-      if (!id.empty() && (choice.name == std::string(doc::kWaveInstrument) || choice.name == std::string("bass"))) openWave(id, {id});  // its window, straight away
-      if (!id.empty() && choice.name == std::string(doc::kGlitchInstrument)) glitch_->open(id);
       return;
     }
     if (chosen == 1002) {
@@ -4724,111 +4214,97 @@ void MainComponent::showTrackMenu(const std::string& trackId) {
   menu.addItem(1, u8("Rename…"));
   menu.addItem(2, "Duplicate");
   menu.addItem(4, u8("Automation (volume, pan, effects)…"));
-  menu.addItem(5, u8("Effects…"));
-  // The track's own Core instrument window. Another instrument: Replace instrument (one way only, Diogo 2026-11-07).
-  if (const doc::Track* et = history_.current().findTrack(trackId); et && et->instrument.kind == "builtin") {
-    if (et->instrument.name == doc::kWaveInstrument) menu.addItem(11, u8("Open ") + u8(doc::findCorePlugin("wcore")->fullName) + u8("…"));
-  }
   // Another instrument for this track (its notes, effects, volume and automation stay).
   const doc::Track* current = history_.current().findTrack(trackId);
   // Core's own instruments (ids 800 + place in builtinInstruments()).
   juce::PopupMenu replace;
+  const std::vector<nlohmann::json> instruments = plugins_->instruments(), pluginFx = plugins_->effects();
+  auto byVendor = [](const std::vector<nlohmann::json>& list, int firstId, const std::function<bool(const nlohmann::json&)>& ticked) {
+    std::map<std::string, juce::PopupMenu> groups;
+    for (size_t i = 0; i < list.size(); ++i) {
+      std::string vendor = list[i].value("vendor", std::string());
+      if (vendor.empty()) vendor = "Other";
+      groups[vendor].addItem(juce::PopupMenu::Item(u8(list[i].value("name", std::string("Plugin")))).setID(firstId + (int)i).setTicked(ticked(list[i])));
+    }
+    juce::PopupMenu out;
+    for (auto& [vendor, sub] : groups) out.addSubMenu(u8(vendor), sub);
+    if (list.empty()) out.addItem(juce::PopupMenu::Item(u8("None found yet: Plugins menu > Scan plugins")).setID(99999).setEnabled(false));
+    return out;
+  };
+  // The track's plugins: its instrument's window, and each plugin effect's window (ids 900 + its place in the chain).
+  if (current && current->instrument.kind == "plugin")
+    menu.addItem(juce::PopupMenu::Item(u8("Open ") + u8(current->instrument.plugin.value("name", std::string("the plugin"))) + u8("…"))
+                     .setID(6).setEnabled(!snap_.missingPlugins.count(doc::pluginKey(trackId))));
+  if (current) {
+    juce::PopupMenu fxMenu;
+    for (size_t i = 0; i < current->effects.size() && i < 16; ++i) {
+      const nlohmann::json& fx = current->effects[i];
+      if (fx.value("type", std::string()) != "plugin" || !fx.contains("plugin")) continue;
+      const std::string key = doc::pluginKey(trackId, fx.value("id", std::string()));
+      juce::PopupMenu one;
+      one.addItem(juce::PopupMenu::Item(u8("Open…")).setID(900 + (int)i).setEnabled(!snap_.missingPlugins.count(key)));
+      one.addItem(juce::PopupMenu::Item(u8("On")).setID(940 + (int)i).setTicked(!doc::effectBypassed(fx)));
+      one.addItem(juce::PopupMenu::Item(u8("Remove")).setID(920 + (int)i));
+      fxMenu.addSubMenu(u8(fx["plugin"].value("name", std::string("Plugin"))), one);
+    }
+    fxMenu.addSeparator();
+    fxMenu.addSubMenu(u8("Add a plugin effect"), byVendor(pluginFx, 4000, [](const nlohmann::json&) { return false; }));
+    menu.addSubMenu(u8("Plugin effects"), fxMenu);
+  }
   if (current && doc::playsPatterns(*current)) {
+    replace.addSubMenu(u8("Plugin instruments"), byVendor(instruments, 300, [&](const nlohmann::json& p) {
+      return current->instrument.kind == "plugin" && current->instrument.plugin.value("id", std::string()) == p.value("id", std::string()) &&
+             current->instrument.plugin.value("file", std::string()) == p.value("file", std::string());
+    }));
+    replace.addSeparator();
     const std::vector<doc::InstrumentChoice>& native = doc::builtinInstruments();
     for (size_t i = 0; i < native.size(); ++i)
       replace.addItem(juce::PopupMenu::Item(u8(native[i].label)).setID(800 + (int)i)
                           .setTicked(current->instrument.kind == "builtin" && current->instrument.name == native[i].name));
     menu.addSubMenu(u8("Replace instrument"), replace);
   }
-  // A sample of the library for this track (Core Sampler): the best ones for its role, or any file.
-  juce::PopupMenu samples;
-  std::vector<std::string> offered;  // library files (the index may be rescanned before the choice)
-  if (current && current->instrument.kind != "audio") {
-    const std::string playing = current->instrument.samples.empty() ? std::string() : current->instrument.samples.front().file;
-    std::string role = doc::trackSampleRole(*current);
-    const std::string style = doc::songStyle(history_.current()), pack = hasSampleIndex_ ? doc::anchorPack(history_.current(), sampleIndex_) : std::string();
-    auto addSuggestions = [&](juce::PopupMenu& into, const std::string& r, int limit) {
-      int n = 0;
-      for (const auto& sug : doc::suggestSamples(sampleIndex_, r, style, limit, pack)) {
-        into.addItem(juce::PopupMenu::Item(u8(doc::shownName(*sug.sample)) + "  (" + u8(sug.why) + ")")
-                         .setID(kOfferedSampleId + (int)offered.size())
-                         .setTicked(sug.sample->file == playing));
-        offered.push_back(sug.sample->file);
-        ++n;
-      }
-      return n;
-    };
-    if (hasSampleIndex_ && !role.empty()) addSuggestions(samples, role, 15);
-    // A plain Sampler track (its name says no kick, bass, hats...): the best of each kind, one submenu each;
-    // the kind of the sample it plays first (Diogo 2026-11-07: "no suggestions" on the Sampler track).
-    if (hasSampleIndex_ && role.empty() && current->instrument.name == "sampler") {
-      std::vector<std::string> kinds = doc::browseSampleRoles();
-      if (const doc::LibrarySample* now = playing.empty() ? nullptr : sampleIndex_.findFile(playing))
-        for (size_t i = 0; i < kinds.size(); ++i) {
-          if (!doc::sampleFit(*now, kinds[i], 0).fits) continue;  // not of this kind
-          std::rotate(kinds.begin(), kinds.begin() + (long)i, kinds.begin() + (long)i + 1);
-          break;
-        }
-      int shown = 0;
-      for (const auto& k : kinds) {
-        juce::PopupMenu sub;
-        if (addSuggestions(sub, k, 12) == 0) continue;
-        samples.addSubMenu(k == "accent" ? u8("Clap / snare") : k == "hat" ? u8("Hats") : k == "openhat" ? u8("Open hats") : u8(doc::sampleRoleLabel(k)), sub);
-        ++shown;
-      }
-      if (shown == 0) samples.addItem(juce::PopupMenu::Item(u8("(the library has no kick, bass, hats, fx... samples)")).setID(99997).setEnabled(false));
-    }
-    if (!hasSampleIndex_) samples.addItem(juce::PopupMenu::Item(u8("No sample library: Samples menu")).setID(99998).setEnabled(false));
-    else if (role.empty() && current->instrument.name != "sampler")
-      samples.addItem(juce::PopupMenu::Item(u8("(no suggestions for this kind of track)")).setID(99997).setEnabled(false));
-    samples.addSeparator();
-    samples.addItem(juce::PopupMenu::Item(u8("Choose a sample file…")).setID(720));
-    // The sustain loop of each zone (a pad or a drone held as long as the note).
-    if (current->instrument.name == "sampler" && !current->instrument.samples.empty()) {
-      samples.addSeparator();
-      const auto& zones = current->instrument.samples;
-      for (size_t i = 0; i < zones.size() && i < 32; ++i)
-        samples.addItem(juce::PopupMenu::Item((zones.size() == 1 ? u8("Loop points…") : u8("Loop points: ") + u8(doc::shownName(sampleIndex_, zones[i])) + u8("…")))
-                            .setID(740 + (int)i).setTicked(zones[i].loops()));
-    }
-    if (!playing.empty()) samples.addItem(juce::PopupMenu::Item(u8("Playing: ") + u8(doc::shownName(sampleIndex_, current->instrument.samples.front()))).setID(99996).setEnabled(false));
-    menu.addSubMenu(u8("Sample"), samples);
-  }
-  menu.addItem(juce::PopupMenu::Item(u8("Render the loop to a sample…")).setID(7)
-                   .setEnabled(history_.current().loop.enabled && !snap_.exportJob.active()));
-  // AB1: the track as audio on a new track below, this one muted (the song sounds the same; Undo puts it back).
-  menu.addItem(juce::PopupMenu::Item(u8("Bounce to audio (new track, this one muted)")).setID(10)
-                   .setEnabled(!snap_.exportJob.active() && doc::cannotBounce(history_.current(), trackId).empty()));
+  std::vector<std::string> offered;
   menu.addSeparator();
   menu.addItem(3, "Remove");
-  menu.showMenuAsync(juce::PopupMenu::Options(), [this, trackId, offered](int chosen) {
+  menu.showMenuAsync(juce::PopupMenu::Options(), [this, trackId, offered, instruments, pluginFx](int chosen) {
     const doc::Track* t = history_.current().findTrack(trackId);
     if (!t) return;
     const juce::String name = u8(t->name);
-    if (chosen >= kOfferedSampleId && chosen - kOfferedSampleId < (int)offered.size()) {
-      if (const doc::LibrarySample* s = hasSampleIndex_ ? sampleIndex_.findFile(offered[(size_t)(chosen - kOfferedSampleId)]) : nullptr) putSampleOnTrack(trackId, *s);
+    if (chosen >= 300 && chosen - 300 < (int)instruments.size()) {
+      fetchPluginStates();  // Undo brings a replaced plugin back as it sounded, not as last saved
+      const nlohmann::json plugin = instruments[(size_t)chosen - 300];
+      edit([&](doc::Document& d) { doc::replaceInstrumentWithPlugin(d, trackId, plugin); },
+           u8("Instrument: ") + u8(plugin.value("name", std::string("plugin"))));
+      session_->openPluginEditor(doc::pluginKey(trackId));
       return;
     }
-    if (chosen == 720) { chooseSampleFile(trackId); return; }
-    if (chosen >= 740 && chosen < 772) { sampleMaker().editLoop(trackId, (size_t)(chosen - 740)); return; }
+    if (chosen >= 4000 && chosen - 4000 < (int)pluginFx.size()) {
+      const nlohmann::json plugin = pluginFx[(size_t)chosen - 4000];
+      int at = -1;
+      edit([&](doc::Document& d) { at = doc::addPluginEffect(d, trackId, plugin); }, u8("Add ") + u8(plugin.value("name", std::string("plugin"))));
+      if (const doc::Track* now = history_.current().findTrack(trackId); now && at >= 0 && at < (int)now->effects.size())
+        session_->openPluginEditor(doc::pluginKey(trackId, now->effects[(size_t)at].value("id", std::string())));
+      return;
+    }
+    if (chosen >= 900 && chosen < 960) {
+      const int i = (chosen - 900) % 20;
+      if (i >= (int)t->effects.size()) return;
+      const std::string fxId = t->effects[(size_t)i].value("id", std::string());
+      if (chosen < 920) session_->openPluginEditor(doc::pluginKey(trackId, fxId));
+      else if (chosen < 940) { fetchPluginStates(); edit([&](doc::Document& d) { doc::removeEffect(d, trackId, i); }, u8("Remove effect")); }
+      else edit([&](doc::Document& d) { doc::setEffectBypass(d, trackId, i, !doc::effectBypassed(d.findTrack(trackId)->effects[(size_t)i])); }, u8("Effect on/off"));
+      return;
+    }
+    if (chosen == 6) { session_->openPluginEditor(doc::pluginKey(trackId)); return; }
     if (chosen >= 800 && chosen - 800 < (int)doc::builtinInstruments().size()) {
       const doc::InstrumentChoice choice = doc::builtinInstruments()[(size_t)chosen - 800];
       edit([&](doc::Document& d) { doc::replaceInstrument(d, trackId, choice.name); }, u8("Replace instrument: ") + u8(choice.label));
-      if (choice.name == std::string(doc::kWaveInstrument) || choice.name == std::string("bass")) openWave(trackId, {trackId});
-      if (choice.name == std::string(doc::kGlitchInstrument)) glitch_->open(trackId);
       return;
     }
     if (chosen == 1) askTrackName(trackId);
     if (chosen == 2) edit([&](doc::Document& d) { doc::duplicateTrack(d, trackId); }, "Duplicate " + name);
     if (chosen == 3) edit([&](doc::Document& d) { doc::removeTrack(d, trackId); }, "Remove " + name);  // undo brings it back
     if (chosen == 4) openAutomation(trackId, "gainDb");
-    if (chosen == 5) openEffects(trackId);
-    if (chosen == 7) {
-      const doc::Loop& l = history_.current().loop;
-      sampleMaker().renderRegion(trackId, l.startTick, l.endTick);
-    }
-    if (chosen == 10) sampleMaker().bounceTrack(trackId);
-    if (chosen == 11) openWave(trackId, tracksForPlugin(trackId));
   });
 }
 
@@ -4853,6 +4329,7 @@ void MainComponent::askTrackName(const std::string& trackId) {
 
 // mono: one channel, (L + R) / 2 (Diogo 2026-11-09: songs and passages as examples for the AI).
 void MainComponent::exportWav(int bits, bool mono) {
+  fetchPluginStates();  // the export makes its own plugins: from what they hold now, not the last save
   const juce::String name = history_.current().name.empty() ? juce::String("Song") : u8(history_.current().name);
   const juce::File folder = exportFolder();
   chooser_ = std::make_unique<juce::FileChooser>(u8("Export WAV"), folder.getChildFile(juce::File::createLegalFileName(name) + ".wav"), "*.wav");
@@ -5009,21 +4486,6 @@ void MainComponent::setupLibrary() {
   library_.document = [this]() -> const doc::Document* { return &history_.current(); };
   library_.projectFolder = [this] { return projectDir(); };
   library_.onRemoveUnused = [this] { removeUnusedAudio(); };
-  library_.onEditSample = [this](const doc::LibrarySample& sample) { sampleMaker().editLibrarySample(sample); };
-  library_.onAssetToTrack = [this](const std::string& assetId) { sampleMaker().assetToTrack(assetId); };
-  library_.onSaveAsset = [this](const std::string& assetId) { sampleMaker().saveAsset(assetId); };
-  // Every plugin's help window (PluginHelp.h) shows the library's samples with these.
-  helpHost().index = library_.index;
-  helpHost().onPreview = library_.onPreviewSample;
-  helpHost().onUse = library_.onUseSample;
-  helpHost().canUse = library_.trackTakesSamples;
-  helpHost().onChooseLibrary = library_.onChooseFolder;
-  helpHost().songStyle = [this] {
-    const doc::Document& d = history_.current();
-    if (d.extra.contains("template") && d.extra["template"].is_object()) return d.extra["template"].value("style", std::string());
-    return std::string();
-  };
-  helpHost().centreAround = this;
   library_.onEditMetadata = [this](const std::string& sha, const nlohmann::json& fields) -> std::string {
     if (!hasSampleIndex_) return "There is no sample library.";
     const doc::LibrarySample* s = sampleIndex_.findHash(sha);
@@ -5227,6 +4689,7 @@ bool MainComponent::previewLibrarySample(const doc::LibrarySample& sample, const
 
 namespace { enum MenuId { kMidiNone = 200, kMidiDevice = 201, kNewEmpty = 50, kOpen = 1, kSave, kSaveAs, kExport24, kExport32, kQuit, kUndo, kRedo, kImportAudio, kRelocate, kDevice = 100,
                        kMidiDevicesEnd = 400, kPluginCoreFirst = 420 /* + place in doc::corePlugins(), up to 20 */,
+                       kPluginScan = 460, kPluginFolder, kPluginRetry, kMasterFx = 2400 /* + 60 */, kMasterFxAdd = 2500 /* + 400 */,
                        kOpenLogs = 580, kAbout = 581, kExportMono = 590,
                        kSampleFolder = 1600, kSampleRescan, kSampleApply, kSampleAuto, kSampleShuffle, kSampleCatalogUndo,
                                               kRandomize = 1700 /* + strength 1..3; + 4: tempo per section; + 5: sound */, kViewLibrary = 1800, kViewInspector, kViewMixer, kViewScale = 1810 /* + 0 auto, + 1..5: 100..200 % */,
@@ -5297,28 +4760,45 @@ juce::PopupMenu MainComponent::getMenuForIndex(int index, const juce::String&) {
     menu.addItem(juce::PopupMenu::Item(u8("Export WAV 24-bit…")).setID(kExport24).setEnabled(!exporting));
     menu.addItem(juce::PopupMenu::Item(u8("Export WAV 32-bit float…")).setID(kExport32).setEnabled(!exporting));
     menu.addItem(juce::PopupMenu::Item(u8("Export WAV mono…")).setID(kExportMono).setEnabled(!exporting));
-    menu.addItem(juce::PopupMenu::Item(u8("Make training clips…")).setID(kTrainingClips));
     menu.addSeparator();
     menu.addItem(juce::PopupMenu::Item(u8("Settings…")).setID(kSettings));
     menu.addItem(juce::PopupMenu::Item(u8("Keyboard shortcuts…")).setID(kShortcuts));
     menu.addSeparator();
     menu.addItem(juce::PopupMenu::Item("Quit").setID(kQuit));
   } else if (index == 3) {
-    // Core's own plugins, read from doc::corePlugins() (the common plug): the song, the instruments, the gestures.
-    // Each opens its window on the selected track; the ones that live in an editor say where.
+    // The VST plugins of this PC (Diogo 2026-11-16: Core's sound comes from plugins). Each file is scanned and played
+    // on its own first, in its own process: one that hangs or crashes is set aside, never taking Core down.
+    menu.addItem(juce::PopupMenu::Item(plugins_->scanning() ? u8("Scanning: ") + plugins_->progress() : u8("Scan plugins (VST3)"))
+                     .setID(kPluginScan).setEnabled(!plugins_->scanning()));
+    menu.addItem(juce::PopupMenu::Item(u8("Add a plugin folder…")).setID(kPluginFolder));
+    const auto quarantine = plugins_->quarantine();
+    menu.addItem(juce::PopupMenu::Item(u8("Try the set-aside plugins again (") + juce::String((int)quarantine.size()) + ")")
+                     .setID(kPluginRetry).setEnabled(!quarantine.empty() && !plugins_->scanning()));
+    menu.addSectionHeader(u8("Found: ") + juce::String((int)plugins_->instruments().size()) + u8(" instruments, ") +
+                          juce::String((int)plugins_->effects().size()) + u8(" effects"));
+    for (const auto& f : plugins_->folders()) menu.addItem(juce::PopupMenu::Item(f).setEnabled(false));
+    menu.addSeparator();
+    // The master's plugin effects (after the master volume): open, on/off, remove, add.
     {
-      const auto& plugins = doc::corePlugins();
-      int shownLayer = -1;
-      for (size_t i = 0; i < plugins.size() && i < 20; ++i) {
-        const doc::CorePluginInfo& p = plugins[i];
-        if (p.layer != shownLayer) {
-          menu.addSectionHeader(p.layer >= 3 ? u8("The song") : p.layer == 2 ? u8("Instruments") : u8("Gestures (on the selected tracks)"));
-          shownLayer = p.layer;
-        }
-        juce::String label = u8(p.fullName) + u8(": ") + u8(p.about);  // menus: the plain name; the window keeps the X-Core title
-        if (!p.where.empty()) label += u8(" (in ") + u8(p.where) + ")";
-        menu.addItem(juce::PopupMenu::Item(label + (p.where.empty() ? u8("…") : juce::String())).setID(kPluginCoreFirst + (int)i).setEnabled(!p.opens.empty() && p.where.empty()));
+      const auto& chain = history_.current().masterEffects;
+      juce::PopupMenu master;
+      for (size_t i = 0; i < chain.size() && i < 16; ++i) {
+        const nlohmann::json& fx = chain[i];
+        if (fx.value("type", std::string()) != "plugin" || !fx.contains("plugin")) continue;
+        juce::PopupMenu one;
+        one.addItem(juce::PopupMenu::Item(u8("Open…")).setID(kMasterFx + (int)i));
+        one.addItem(juce::PopupMenu::Item(u8("On")).setID(kMasterFx + 40 + (int)i).setTicked(!doc::effectBypassed(fx)));
+        one.addItem(juce::PopupMenu::Item(u8("Remove")).setID(kMasterFx + 20 + (int)i));
+        master.addSubMenu(u8(fx["plugin"].value("name", std::string("Plugin"))), one);
       }
+      const auto effects = plugins_->effects();
+      juce::PopupMenu add;
+      for (size_t i = 0; i < effects.size() && i < 400; ++i)
+        add.addItem(kMasterFxAdd + (int)i, u8(effects[i].value("name", std::string("Plugin"))) + "  (" + u8(effects[i].value("vendor", std::string())) + ")");
+      if (effects.empty()) add.addItem(juce::PopupMenu::Item(u8("None found yet: Scan plugins")).setEnabled(false));
+      master.addSeparator();
+      master.addSubMenu(u8("Add a plugin effect"), add);
+      menu.addSubMenu(u8("Master effects"), master);
     }
   } else if (index == 4) {
     const juce::File folder = sampleLibraryFolder();
@@ -5354,30 +4834,11 @@ juce::PopupMenu MainComponent::getMenuForIndex(int index, const juce::String&) {
   } else if (index == 5) {  // AICORE: the same items as the AICORE button's right-click
     addAicoreItems(menu, aiAllowed_, realOutput_, aiAllowed_ ? (int)inbox_.size() : 0, aicoreState(aicore_, aiAllowed_));
   } else if (index == 6) {
-    // The same window as the small ring on each plugin (PluginHelp.h), without the "Try it" buttons.
-    const auto helps = pluginHelpIds();
-    if (!helps.empty()) {
-      menu.addSectionHeader(u8("How the plugins work"));
-      for (size_t i = 0; i < helps.size() && i < 100; ++i)
-        menu.addItem(juce::PopupMenu::Item(u8(pluginHelpFor(helps[i]).title) + u8("…")).setID(kPluginHelpFirst + (int)i));
-      menu.addSeparator();
-    }
     menu.addItem(juce::PopupMenu::Item(u8("Open the logs folder (problems, crash dumps)")).setID(kOpenLogs));
     menu.addSeparator();
     menu.addItem(juce::PopupMenu::Item(u8("About Core (version ") + CORE_VERSION + ")").setID(kAbout));
   } else if (index == 2) {
     // Cutting a song into a sample: import it (a new audio clip), click the clip, select, "Save the selection as a sample".
-    menu.addItem(juce::PopupMenu::Item(u8("Cut a sample from a song (import a WAV, then select in its clip)…")).setID(kImportAudio));
-    const bool canRender = history_.current().loop.enabled && !snap_.exportJob.active();
-    menu.addItem(juce::PopupMenu::Item(u8("Render the loop to a sample (the mix)…")).setID(kRenderMixToSample).setEnabled(canRender));
-    const doc::Track* sel = history_.current().findTrack(selectedTrack_);
-    menu.addItem(juce::PopupMenu::Item(u8("Render the loop to a sample (") + (sel ? u8(sel->name) : u8("the selected track")) + u8(")…"))
-                     .setID(kRenderTrackToSample).setEnabled(canRender && sel != nullptr));
-    // AB1: the mix of the loop as audio on a new muted track, to cut, reverse and process again.
-    menu.addItem(juce::PopupMenu::Item(u8("Resample the loop (the mix) to a new track")).setID(kResampleLoop).setEnabled(canRender));
-    menu.addItem(juce::PopupMenu::Item(u8("Bounce to audio (") + (sel ? u8(sel->name) : u8("the selected track")) + u8(")"))
-                     .setID(kBounceTrack).setEnabled(!snap_.exportJob.active() && sel != nullptr && doc::cannotBounce(history_.current(), selectedTrack_).empty()));
-    menu.addSeparator();
     if (snap_.devices.empty()) menu.addItem(juce::PopupMenu::Item(u8("(no audio outputs)")).setEnabled(false));
     for (size_t i = 0; i < snap_.devices.size(); ++i)
       menu.addItem(juce::PopupMenu::Item(u8(snap_.devices[i])).setID(kDevice + (int)i).setTicked(snap_.devices[i] == snap_.device));
@@ -5425,17 +4886,6 @@ void MainComponent::menuItemSelected(int id, int) {
     case kOpen: open(); break;
     case kSettings: openSettings(false); break;
     case kShortcuts: openSettings(true); break;
-    case kRenderMixToSample: case kRenderTrackToSample: {
-      const doc::Loop& l = history_.current().loop;
-      sampleMaker().renderRegion(id == kRenderTrackToSample ? selectedTrack_ : std::string(), l.enabled ? l.startTick : 0, l.enabled ? l.endTick : 0);
-      break;
-    }
-    case kResampleLoop: {
-      const doc::Loop& l = history_.current().loop;
-      sampleMaker().resample(l.enabled ? l.startTick : 0, l.enabled ? l.endTick : 0);
-      break;
-    }
-    case kBounceTrack: sampleMaker().bounceTrack(selectedTrack_); break;
     case kSave: save(false); break;
     case kSaveAs: save(true); break;
     case kQuit: juce::JUCEApplication::getInstance()->systemRequestedQuit(); break;
@@ -5479,16 +4929,38 @@ void MainComponent::menuItemSelected(int id, int) {
     case kExport24: exportWav(24); break;
     case kExport32: exportWav(32); break;
     case kExportMono: exportWav(24, true); break;
-    case kTrainingClips: openTrainingClips(); break;
     case kImportAudio: importAudio(); break;
     case kRelocate: relocateMissing(); break;
     case kMidiNone: openMidiInput({}); break;
+    case kPluginScan: scanPlugins(); break;
+    case kPluginRetry: plugins_->clearQuarantine(); scanPlugins(); break;
+    case kPluginFolder: {
+      chooser_ = std::make_unique<juce::FileChooser>(u8("A folder with VST3 plugins"), juce::File("C:\\Program Files\\Common Files\\VST3"));
+      juce::Component::SafePointer<MainComponent> safe(this);
+      chooser_->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectDirectories, [safe](const juce::FileChooser& fc) {
+        if (safe == nullptr || fc.getResult() == juce::File()) return;
+        safe->plugins_->addFolder(fc.getResult());
+        safe->scanPlugins();
+      });
+      break;
+    }
     default:
-      if (id >= kPluginCoreFirst && id < kPluginCoreFirst + 20) {
-        if (id - kPluginCoreFirst < (int)doc::corePlugins().size()) openCorePlugin(doc::corePlugins()[(size_t)(id - kPluginCoreFirst)]);
-      } else if (id >= kPluginHelpFirst && id < kPluginHelpFirst + 100) {
-        const auto helps = pluginHelpIds();
-        if (id - kPluginHelpFirst < (int)helps.size()) showPluginHelp(pluginHelpFor(helps[(size_t)(id - kPluginHelpFirst)]));
+      if (id >= kMasterFxAdd && id < kMasterFxAdd + 400) {
+        const auto effects = plugins_->effects();
+        if (id - kMasterFxAdd >= (int)effects.size()) break;
+        const nlohmann::json plugin = effects[(size_t)(id - kMasterFxAdd)];
+        int at = -1;
+        edit([&](doc::Document& d) { at = doc::addPluginEffect(d, "", plugin); }, u8("Master: add ") + u8(plugin.value("name", std::string("plugin"))));
+        const auto& chain = history_.current().masterEffects;
+        if (at >= 0 && at < (int)chain.size()) session_->openPluginEditor(doc::pluginKey("", chain[(size_t)at].value("id", std::string())));
+      } else if (id >= kMasterFx && id < kMasterFx + 60) {
+        const int i = (id - kMasterFx) % 20;
+        const auto& chain = history_.current().masterEffects;
+        if (i >= (int)chain.size()) break;
+        const std::string fxId = chain[(size_t)i].value("id", std::string());
+        if (id < kMasterFx + 20) session_->openPluginEditor(doc::pluginKey("", fxId));
+        else if (id < kMasterFx + 40) { fetchPluginStates(); edit([&](doc::Document& d) { doc::removeEffect(d, "", i); }, u8("Master: remove effect")); }
+        else edit([&](doc::Document& d) { doc::setEffectBypass(d, "", i, !doc::effectBypassed(d.masterEffects[(size_t)i])); }, u8("Master: effect on/off"));
       } else if (id >= kMidiDevice && id < kMidiDevicesEnd) {
         const auto inputs = juce::MidiInput::getAvailableDevices();
         if (id - kMidiDevice < inputs.size()) openMidiInput(inputs[id - kMidiDevice].identifier);
@@ -5508,21 +4980,13 @@ juce::Rectangle<int> MainComponent::workArea() const {
 
 void MainComponent::toggleSidePanel(bool library) {
   bool& shown = library ? showLibrary_ : showInspector_;
-  shown = library && showPlugins_ ? true : !shown;  // from the Plugins: back to the Library
-  if (library) showPlugins_ = false;
+  shown = !shown;
   settings_.getUserSettings()->setValue(library ? "showLibrary" : "showInspector", shown);
   resized();
   repaint();
   for (auto& row : rows_) row->repaint();
 }
 
-// The Plugins (the rail's button under the Library's): Core's plugins as cards, in the Library's place.
-void MainComponent::togglePlugins() {
-  showPlugins_ = !showPlugins_;
-  resized();
-  repaint();
-}
-bool MainComponent::pluginsShown() const { return showPlugins_ && !mixerOpen_; }
 
 juce::Rectangle<int> MainComponent::topBar() const { return workArea().removeFromTop(kTopBar); }
 juce::Rectangle<int> MainComponent::content() const { return workArea().withTrimmedTop(kTopBar + 4).reduced(16, 0).withTrimmedBottom(16); }
@@ -5530,7 +4994,7 @@ juce::Rectangle<int> MainComponent::content() const { return workArea().withTrim
 juce::Rectangle<int> MainComponent::body() const { return content().withTrimmedLeft(kRail + 8); }
 juce::Rectangle<int> MainComponent::centre() const {
   auto r = body();
-  if (libraryShown() || pluginsShown()) r.removeFromLeft(libraryWidth() + 8);
+  if (libraryShown()) r.removeFromLeft(libraryWidth() + 8);
   if (inspectorShown()) r.removeFromLeft(inspectorWidth() + 8);
   return r;
 }
@@ -5539,36 +5003,23 @@ int MainComponent::inspectorWidth() const { return inspector_ && inspector_->fol
 
 bool MainComponent::inspectorShown() const { return showInspector_ && !mixerOpen_; }
 // With the Mixer open the strips get the whole width, as on ref-3 (the Library comes back when it closes).
-bool MainComponent::libraryShown() const { return showLibrary_ && !mixerOpen_ && !showPlugins_; }
+bool MainComponent::libraryShown() const { return showLibrary_ && !mixerOpen_; }
 juce::Rectangle<int> MainComponent::libraryArea() const { return body().removeFromLeft(libraryWidth()); }
 // Every panel's edge is dragged (Diogo 2026-11-09: "não me deixa expandir ou encurtar nenhuma janela"): the Library's
 // right edge and the instrument dock's left edge, kept in the settings like the editor's height. Layout only.
 int MainComponent::libraryWidth() const { return juce::jlimit(200, std::max(200, body().getWidth() / 3), libraryWidth_ > 0 ? libraryWidth_ : kLibraryWidth); }
 juce::Rectangle<int> MainComponent::libraryEdge() const {
-  if (!libraryShown() && !pluginsShown()) return {};
+  if (!libraryShown()) return {};
   const auto l = libraryArea();
   return {l.getRight(), l.getY(), 8, l.getHeight()};
 }
-juce::Rectangle<int> MainComponent::dockEdge() const {
-  if (dockRoom() <= 0 || !dock_ || dock_->collapsed()) return {};
-  const auto d = dockArea();
-  return {d.getX() - 8, d.getY(), 8, d.getHeight()};
-}
 juce::Rectangle<int> MainComponent::inspectorArea() const {
   auto r = body();
-  if (libraryShown() || pluginsShown()) r.removeFromLeft(libraryWidth() + 8);
+  if (libraryShown()) r.removeFromLeft(libraryWidth() + 8);
   return r.removeFromLeft(inspectorWidth());
 }
-// The instrument editor on the right of the arrangement (Diogo 2026-11-09): the ruler and the tracks make room for it.
-int MainComponent::dockRoom() const {
-  if (!dock_ || dockWindow_ || !dockShown_ || mixerOpen_ || !dock_->hasEditor()) return 0;
-  return (dock_->collapsed() ? InstrumentDock::kCollapsedWidth : juce::jlimit(InstrumentDock::kMinWidth, std::max(InstrumentDock::kMinWidth, centre().getWidth() - 200), dockWidth_)) + 8;
-}
-juce::Rectangle<int> MainComponent::dockArea() const {
-  return centre().withTrimmedBottom(masterRow() + 8 + editorHeight() + 8).removeFromRight(std::max(0, dockRoom() - 8));
-}
-juce::Rectangle<int> MainComponent::timelineArea() const { return centre().withHeight(52).withTrimmedRight(dockRoom()); }
-juce::Rectangle<int> MainComponent::tracksArea() const { return centre().withTrimmedTop(52 + 8).withTrimmedBottom(masterRow() + 8 + editorHeight() + 8).withTrimmedRight(dockRoom()); }
+juce::Rectangle<int> MainComponent::timelineArea() const { return centre().withHeight(52); }
+juce::Rectangle<int> MainComponent::tracksArea() const { return centre().withTrimmedTop(52 + 8).withTrimmedBottom(masterRow() + 8 + editorHeight() + 8); }
 juce::Rectangle<int> MainComponent::editorArea() const { return centre().withTrimmedBottom(masterRow() + 8).removeFromBottom(editorHeight()); }
 
 // The tracks and the editor share the height: the divider between them is dragged (kept in the settings); by
@@ -5581,8 +5032,6 @@ int MainComponent::editorHeight() const {
   // (its own height, kept in the settings apart from the editor's).
   if (mixerOpen_)
     return juce::jlimit(std::min(kMixerMinHeight, std::max(120, room - 110)), std::max(kMixerMinHeight, room - 110), mixerHeight_ > 0 ? mixerHeight_ : kMixerHeight);
-  // The Core Chain minimised (▾): only its header; its open and minimised editors stay as they were (the brief).
-  if (editorCollapsed_ && effectsOpen_) return kEditorCollapsed;
   const int wanted = editorHeight_ > 0 ? editorHeight_ : room - juce::jlimit((int)(room * 0.3), (int)(room * 0.55), rowsNeeded);
   // Down to a short band (Diogo 2026-11-09: "não me deixa ir mais abaixo").
   return juce::jlimit(std::min(kEditorMinHeight, std::max(120, room - 140)), std::max(kEditorMinHeight, room - 140), wanted);
@@ -5617,7 +5066,6 @@ void MainComponent::resized() {
   constexpr int tabsFull = 96 + 80 + 64, transportMin = transport - 2 * 24 - 56;
   const bool roomy = top.getWidth() >= tabsFull + transportMin;
   arrangeButton_.setBounds(top.removeFromLeft(roomy ? 96 : 84).reduced(3, 7));
-  chainsButton_.setBounds(top.removeFromLeft(roomy ? 80 : 70).reduced(3, 7));
   mixerButton_.setBounds(top.removeFromLeft(roomy ? 64 : 52).reduced(3, 7));
   // The song's name on the right (as on the reference images), with what is left beyond the transport.
   // The listening level on the far right, while the transport still fits beside it.
@@ -5645,8 +5093,6 @@ void MainComponent::resized() {
   position_.setBounds(mid.removeFromLeft(std::max(positionWidth, 0)).reduced(2, 5));
   library_.setVisible(libraryShown());
   library_.setBounds(libraryArea());
-  pluginCards_.setVisible(pluginsShown());
-  pluginCards_.setBounds(libraryArea());
   if (inspector_) {
     inspector_->setVisible(inspectorShown());
     inspector_->setBounds(inspectorArea());
@@ -5680,17 +5126,6 @@ void MainComponent::resized() {
     for (auto& row : rows_) row->setBounds(inside.removeFromTop(kTrackRow));
     addTrack_.setBounds(inside.removeFromTop(36).removeFromLeft(110).reduced(0, 4));
   }
-  if (dock_ && !dockWindow_) {  // unpinned: it lives in its own window
-    dock_->setVisible(dockRoom() > 0);
-    dock_->setBounds(dockArea());
-  }
-  if (chains_) {  // over the ruler and the tracks, while it is open
-    const bool shown = chainsOpen_ && !mixerOpen_;
-    chains_->setVisible(shown);
-    chains_->setBounds(centre().withTrimmedBottom(masterRow() + 8 + editorHeight() + 8).withTrimmedRight(dockRoom()));
-    if (shown) chains_->toFront(false);
-  }
-  soundPage_.setBounds(editorArea());
   if (mixer_) mixer_->setBounds(editorArea());
   placeBottomPanels();
   {  // the page rail: the pages, then the side panels (as on the reference's left edge)
@@ -5700,8 +5135,6 @@ void MainComponent::resized() {
       rail_[i]->setBounds(rail.removeFromTop(kRail).reduced(4));
     }
   }
-  masterFx_.setVisible(!mixerOpen_);  // the Mixer has the master's strip; its row shows the CPU
-  masterFx_.setBounds(centre().removeFromBottom(64).reduced(12, 10).withTrimmedLeft(80).withWidth(44).reduced(0, 6));
 }
 
 // The Mixer's footer (ref-3): each track's CPU share, the engine's total as a bar, and the master's headroom.
@@ -6020,7 +5453,7 @@ bool MainComponent::keyPressed(const juce::KeyPress& key) {
     return true;
   }
   if (is("view.wholeSong")) { setView(0, viewSpan()); return true; }
-  if (key == juce::KeyPress::escapeKey && (effectsOpen_ || automationOpen_ || scoreOpen_ || soundOpen_)) { closePanels(); return true; }
+  if (key == juce::KeyPress::escapeKey && (automationOpen_ || scoreOpen_)) { closePanels(); return true; }
   if (is("edit.redo")) { redo(); return true; }
   if (is("edit.undo")) { undo(); return true; }
   if (is("file.saveAs")) { save(true); return true; }
@@ -6033,8 +5466,8 @@ bool MainComponent::keyPressed(const juce::KeyPress& key) {
   if (is("file.settings")) { openSettings(false); return true; }
   if (is("edit.addTrack")) { showAddTrackMenu(); return true; }
   if (is("view.mixer")) { setMixerOpen(!mixerOpen_); return true; }
-  if (is("view.effects")) {  // the selected track's effects (none: the master's)
-    openEffects(selectedTrack_.empty() ? editor_.track() : selectedTrack_);
+  if (is("view.effects")) {  // the selected track's plugins
+    if (const std::string id = selectedTrack_.empty() ? editor_.track() : selectedTrack_; !id.empty()) showTrackMenu(id);
     return true;
   }
   if (is("transport.loop")) { loop_.triggerClick(); return true; }
@@ -6092,7 +5525,7 @@ int MainComponent::loopEdgeAt(juce::Point<int> p) const {
 void MainComponent::mouseMove(const juce::MouseEvent& e) {
   if (e.eventComponent == &tracksHolder_) return;
   setMouseCursor(dividerArea().contains(e.getPosition()) ? juce::MouseCursor::UpDownResizeCursor
-                 : libraryEdge().contains(e.getPosition()) || dockEdge().contains(e.getPosition()) || loopEdgeAt(e.getPosition())
+                 : libraryEdge().contains(e.getPosition()) || loopEdgeAt(e.getPosition())
                      ? juce::MouseCursor::LeftRightResizeCursor : juce::MouseCursor::NormalCursor);
 }
 
@@ -6103,7 +5536,6 @@ void MainComponent::mouseDown(const juce::MouseEvent& e) {
     return;
   }
   if (libraryEdge().contains(e.getPosition())) { sideGrab_ = 1; return; }
-  if (dockEdge().contains(e.getPosition())) { sideGrab_ = 2; return; }
   if (dividerArea().contains(e.getPosition())) {
     // A double-click: the editor as tall as it gets, or back to the default share.
     if (e.getNumberOfClicks() >= 2 && mixerOpen_) {  // the Mixer: its shortest, or back to the default
@@ -6172,8 +5604,8 @@ void MainComponent::mouseDrag(const juce::MouseEvent& e) {
     return;
   }
   if (sideGrab_ > 0) {  // a side panel's edge follows the mouse
-    if (sideGrab_ == 1) { libraryWidth_ = e.x - libraryArea().getX() - 4; libraryWidth_ = libraryWidth(); }
-    else dockWidth_ = juce::jlimit(InstrumentDock::kMinWidth, std::max(InstrumentDock::kMinWidth, centre().getWidth() - 200), centre().getRight() - e.x - 4);
+    libraryWidth_ = e.x - libraryArea().getX() - 4;
+    libraryWidth_ = libraryWidth();
     resized();
     repaint();
     for (auto& row : rows_) row->repaint();
@@ -6186,7 +5618,7 @@ void MainComponent::mouseDrag(const juce::MouseEvent& e) {
       mixerHeight_ = h;
       mixerHeight_ = editorHeight();  // within the limits
     } else {
-      if (editorCollapsed_) { editorCollapsed_ = false; effects_.setCollapsed(false); }  // dragging it opens it again
+      editorCollapsed_ = false;
       editorHeight_ = h;
       editorHeight_ = editorHeight();
     }
@@ -6219,7 +5651,7 @@ void MainComponent::mouseUp(const juce::MouseEvent& e) {
     return;
   }
   if (sideGrab_ > 0) {
-    settings_.getUserSettings()->setValue(sideGrab_ == 1 ? "libraryWidth" : "instrumentDockWidth", sideGrab_ == 1 ? libraryWidth_ : dockWidth_);
+    settings_.getUserSettings()->setValue("libraryWidth", libraryWidth_);
     sideGrab_ = 0;
     return;
   }
@@ -6295,6 +5727,8 @@ void MainComponent::timerCallback() {
     grabKeyboardFocus();
   if (sendPending_) { sendPending_ = false; session_->setDocument(engineDocument()); }  // a drag's latest state
   snap_ = session_->snapshot();
+  // A plugin's own window changed its sound: the song has unsaved changes (its state is taken when it is saved).
+  if (snap_.pluginEdits != pluginEditsSeen_) { pluginEditsSeen_ = snap_.pluginEdits; pluginsDirty_ = true; }
   updatePlayTick();
   // The place just clicked stays shown until the engine reports it (or 2 s pass): never back to the old place
   // for a moment when the engine's report is late (paused, or the PC busy).
@@ -6423,11 +5857,10 @@ void MainComponent::timerCallback() {
     } else if (exporting) notice_ = job.files > 1 ? u8("Exporting ") + juce::String(job.files) + u8(" files...") : u8("Exporting ") + juce::File(path).getFileName() + "...";
   }
   if (test_) selfTestStep();
-  if (showcase_) showcaseStep();
-  arrangeButton_.setToggleState(!mixerOpen_ && !chainsOpen_, juce::dontSendNotification);
-  if (rail_.size() == 5) {
-    const bool states[] = {arrangeButton_.getToggleState(), mixerOpen_, libraryShown(), pluginsShown(), inspectorShown()};
-    for (size_t i = 0; i < 5; ++i) rail_[i]->setToggleState(states[i], juce::dontSendNotification);
+  arrangeButton_.setToggleState(!mixerOpen_, juce::dontSendNotification);
+  if (rail_.size() == 4) {
+    const bool states[] = {arrangeButton_.getToggleState(), mixerOpen_, libraryShown(), inspectorShown()};
+    for (size_t i = 0; i < 4; ++i) rail_[i]->setToggleState(states[i], juce::dontSendNotification);
   }
   repaint(timelineArea());
   editor_.playheadMoved();  // only the old and the new line, not the whole piano roll
@@ -6552,7 +5985,6 @@ void MainComponent::recoverAutosave(const doc::AutosaveInfo& a, const doc::Docum
   doc::Document moved = recovered;
   const int relinked = hasSampleIndex_ ? doc::relinkMovedSamples(moved, sampleIndex_) : 0;
   history_.reset(recovered);
-  AbSwitch::forgetAll();
   if (relinked) history_.amend(moved);
   selectedTrack_.clear();
   selectedClip_.clear();
@@ -6562,7 +5994,7 @@ void MainComponent::recoverAutosave(const doc::AutosaveInfo& a, const doc::Docum
   loadProblem_.clear();
   viewStart_ = viewLength_ = 0;
   recovered_ = true;
-  session_->newSong();
+  session_->newSong(); session_->releasePlugins();
   missing_.clear();
   session_->setAssetRoot(projectDir(), false);
   documentChanged(true);
@@ -6579,7 +6011,30 @@ void MainComponent::runSelfTest(juce::File picture, std::function<void(bool, juc
   test_ = std::make_unique<SelfTest>();
   test_->picture = std::move(picture);
   test_->done = std::move(done);
+  // Core's sound comes from plugins (2026-11-16): the self-test plays its own test synth (app/selftest-plugins).
+#ifdef CORE_TEST_SYNTH_VST3
+  juce::String problem;
+  const nlohmann::json found = PluginCatalog::scanFile(juce::File::getSpecialLocation(juce::File::currentExecutableFile).getSiblingFile("core-engine.exe"),
+                                                       juce::File(CORE_TEST_SYNTH_VST3), &problem);
+  if (found.is_array() && !found.empty()) test_->synth = found[0];
+  else logLine("Self-test: the test synth was not read: " + problem);
+#endif
+  selfTestSynth();
   test_->started = test_->stepStarted = juce::Time::getMillisecondCounterHiRes();
+}
+
+// Every track that plays notes with no plugin yet gets the self-test's synth (no undo step: the song as it was opened).
+void MainComponent::selfTestSynth() {
+  if (!test_ || test_->synth.is_null()) return;
+  doc::Document d = history_.current();
+  bool changed = false;
+  for (const auto& t : history_.current().tracks)
+    if (doc::playsPatterns(t) && t.instrument.kind != "plugin") { doc::replaceInstrumentWithPlugin(d, t.id, test_->synth); changed = true; }
+  if (!changed) return;
+  const bool wasModified = history_.modified();
+  history_.amend(d);
+  if (!wasModified) history_.markSaved();  // the song as it was opened, only played by the test synth
+  session_->setDocument(engineDocument());
 }
 
 // The path a user takes in M1b: play, drag the BPM, undo, seek, loop, mute and a volume drag, save,
@@ -6721,6 +6176,7 @@ void MainComponent::selfTestStep() {
       break;
     case 14:
       if (snap_.status == EngineStatus::Ready && applied && history_.current().tracks.size() == 3 && !history_.modified()) {
+        selfTestSynth();  // the template's tracks have no plugin yet: the test synth plays them
         edit([](doc::Document& d) { doc::addTrack(d, "bass"); }, "Add");
         edit([](doc::Document& d) { doc::duplicateTrack(d, "kick"); }, "Duplicate");
         edit([](doc::Document& d) { doc::renameTrack(d, "kick-2", "Kick layer"); }, "Rename");
@@ -6941,32 +6397,6 @@ void MainComponent::selfTestStep() {
       const std::string before = partClip()[0].assetId;
       audioEditor_->reverse();
       if (partClip()[0].assetId == before || history_.current().assets.size() != 2) return finish(false, "reverse");
-      {  // Save as sample > This project: silence cut (1 ms kept before the sound, 20 ms after), normalized, kept with no clip
-        SampleMaker::Audio a;
-        a.channels.assign(2, std::vector<float>(4800, 0.0f));
-        for (size_t i = 1200; i < 3600; ++i) a.channels[0][i] = a.channels[1][i] = 0.25f;
-        a.sampleRate = 48000;
-        a.name = "Self-test sample";
-        a.what = "Sample";
-        SampleMaker::Choice c;
-        c.name = a.name;
-        c.role = "perc";
-        c.destination = SampleMaker::Destination::Project;
-        c.normalize = true;
-        const juce::File saved = sampleMaker().save(std::move(a), c);
-        const doc::Asset* kept = history_.current().assets.size() == 3 ? &history_.current().assets.back() : nullptr;
-        juce::AudioFormatManager formats;
-        formats.registerBasicFormats();
-        std::unique_ptr<juce::AudioFormatReader> reader(saved.existsAsFile() ? formats.createReaderFor(saved) : nullptr);
-        juce::Range<float> level[1];
-        if (reader) reader->readMaxLevels(0, reader->lengthInSamples, level, 1);
-        const auto unused = doc::unusedAssets(history_.current());
-        if (!kept || !doc::isProjectSample(*kept) || kept->name != "Self-test sample.wav" || !reader || reader->lengthInSamples != 2400 + 48 + 960 ||
-            std::abs(level[0].getEnd() - 0.966f) > 0.01f || std::find(unused.begin(), unused.end(), kept->id) != unused.end())
-          return finish(false, "save as sample (this project)");
-        undo();
-        if (history_.current().assets.size() != 2) return finish(false, "save as sample: undo");
-      }
       {  // Tempo and pitch on a 220 Hz tone: the frequency (zero crossings) and the length
         dsp::Channels tone(2, std::vector<float>(48000));
         for (int i = 0; i < 48000; ++i) tone[0][(size_t)i] = tone[1][(size_t)i] = 0.5f * (float)std::sin(2 * juce::MathConstants<double>::pi * 220.0 * i / 48000.0);
@@ -7015,42 +6445,19 @@ void MainComponent::selfTestStep() {
         return finish(false, "shift pitch: too slow");
       }
       break;
-    case 29: {  // M4: a reverb on the bass (through the panel), a master limiter at -6 dB; play
-      openEffects("bass");
-      if (!effects_.isVisible() || editor_.isVisible() || audioEditor_->isVisible()) return finish(false, "effects panel not shown");
-      effects_.addEffect("corefx");
-      effects_.setParam(0, "amount", 0.4);
-      openEffects({});
-      effects_.addEffect("limiter");
-      effects_.setParam(0, "ceiling", -6);
-      const doc::Document& d = history_.current();
-      if (d.findTrack("bass")->effects.size() != 1 || d.findTrack("bass")->effects[0]["params"].value("amount", -1.0) != 0.4 || d.masterEffects.size() != 1)
-        return finish(false, "effects in the document");
-      edit([](doc::Document& x) { for (auto& tr : x.tracks) tr.mix.mute = false; x.masterGainDb = 6; }, "Volume");  // loud, into the limiter
-      session_->home();
-      session_->play();
-      next("effects added");
+    case 29:  // Core's own effects are gone (2026-11-16: plugins only); the plugin chain is checked by the render test
+      next("effects: plugins only");
       break;
-    }
-    case 30:  // the master never goes above -6 dB (0.501)
-      if (applied && snap_.playing && inStep > 1000) t.limited = std::max({t.limited, snap_.masterPeak[0], snap_.masterPeak[1]});  // meters of the new revision only
-      if (inStep > 2000) {
-        if (t.limited <= 0.05f || t.limited > 0.502f) return finish(false, "master limiter: peak " + juce::String(t.limited, 3));
-        undo();  // the master volume
-        next("limiter holds " + juce::String(t.limited, 3));
-      }
+    case 30:
+      next("no built-in limiter");
       break;
-    case 31: {  // automation: the bass volume falls over 4 bars; its reverb opens up over 2
+    case 31: {  // automation: the bass volume falls over 4 bars
       openAutomation("bass", "gainDb");
-      if (!automation_->isVisible() || effects_.isVisible() || editor_.isVisible()) return finish(false, "automation editor not shown");
+      if (!automation_->isVisible() || editor_.isVisible()) return finish(false, "automation editor not shown");
       automation_->addPoint(0, 0);
       automation_->addPoint(4 * kBar, -40);
-      const std::string fxId = history_.current().findTrack("bass")->effects[0]["id"];
-      openAutomation("bass", doc::effectParamKey(fxId, "amount"));
-      automation_->addPoint(0, 0);
-      automation_->addPoint(2 * kBar, 1);
       const doc::Track& bass = *history_.current().findTrack("bass");
-      if (bass.automation.size() != 2 || bass.automation[0].points.size() != 2 || bass.automation[1].points.back().value != 1.0)
+      if (bass.automation.empty() || bass.automation[0].points.size() != 2)
         return finish(false, "automation in the document");
       session_->home();
       session_->play();
@@ -7100,7 +6507,6 @@ void MainComponent::selfTestStep() {
       }
       if (!chosen.empty()) selectTrack(chosen);
       setMixerOpen(true);
-      mixer_->modulation().addLfo();  // an LFO on that track: the engine takes it
       next("picture");
       break;
     }
@@ -7111,8 +6517,6 @@ void MainComponent::selfTestStep() {
         if (!savePicture(mixer)) return finish(false, "cannot write " + mixer.getFullPathName());
         setMixerOpen(false);
         if (!shown) return finish(false, "mixer: not shown");
-        const doc::Track* lfoTrack = history_.current().findTrack(selectedTrack_);
-        if (!lfoTrack || lfoTrack->modulators.empty()) return finish(false, "modulation: no LFO added");
         // The song saved into a new folder takes its audio with it.
         const juce::File song = t.picture.getSiblingFile(t.picture.getFileNameWithoutExtension() + "-saved").getChildFile("song.core");
         song.getParentDirectory().deleteRecursively();
@@ -7120,7 +6524,7 @@ void MainComponent::selfTestStep() {
         if (writeTo(song) != SaveResult::Saved) return finish(false, "save to a new folder");
         if (!missing_.empty()) return finish(false, "the song's audio did not come with it to the new folder");
         session_->play();
-        next("mixer, LFO");
+        next("mixer");
       }
       break;
     case 38:
@@ -7129,7 +6533,7 @@ void MainComponent::selfTestStep() {
         // M6: this session's logs are there, with the engine's life in them.
         if (!engineLogFile().existsAsFile() || !appLogFile().loadFileAsString().contains("Engine: Ready"))
           return finish(false, "diagnostics: no log in " + logsFolder().getFullPathName());
-        return finish(true, "M1c + M2 path, live notes, audio clips, samples, mixer, LFO, save with audio");
+        return finish(true, "M1c + M2 path, live notes, audio clips, mixer, save with audio");
       }
       break;
   }

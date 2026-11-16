@@ -1,9 +1,4 @@
 #include "document.hpp"
-#include "../../../engine/src/dsp/bcore_legacy.hpp"
-#include "../../../engine/src/dsp/wave_legacy.hpp"
-#include "../../../engine/src/dsp/wave_mod.hpp"
-#include "../../../engine/src/dsp/sample_path_patch.hpp"
-#include "corefx_legacy.hpp"
 #include <algorithm>
 #include <climits>
 #include <cmath>
@@ -192,25 +187,9 @@ Track parseTrack(const json& v, const std::string& path, const std::set<std::str
       if (!it.value().is_number() || !std::isfinite(it.value().get<double>())) throw DocumentError(where, "must be a number");
       t.instrument.params[it.key()] = it.value().get<double>();
     }
-    // One kick only (2026-11-07, Diogo: "não deixamos nada antigo"). A kick saved with the old kick's sound (no shaped
-    // engine) starts from the new kick's sound; one saved with the shaped engine keeps its knobs, without the ones
-    // that went away.
-    // Version 2 is the one kick; a version 1 kick is migrated here.
-    if (t.instrument.name == "kick" && t.instrument.version < 2) {
-      auto& kp = t.instrument.params;
-      const auto engine = kp.find("engine");
-      if (engine == kp.end() || engine->second < 0.5) kp.clear();
-      for (const char* gone : {"punch", "engine", "attack", "release", "clickLength", "clip", "phase"}) kp.erase(gone);
-      t.instrument.version = 2;
-    }
+    // Core's own instruments left Core (2026-11-16: the sound comes from plugins). A song made with them still opens:
+    // the instrument is kept as it was saved (name, knobs, samples, synth), not played, until a plugin replaces it.
     const json samples = ir.array("samples", 128);
-    const bool glitch = t.instrument.name == "samplepath";  // Core Glitch · Sample Path: one sound per sampler, 0..3
-    if (!samples.empty() && t.instrument.name != "sampler" && t.instrument.name != "wave" && !glitch)
-      throw DocumentError(ir.at("samples"), "only a sampler plays samples (a W-Core takes one sound for its Grain, Core Glitch one per sampler)");
-    if (samples.size() > 4 && glitch) throw DocumentError(ir.at("samples"), "Core Glitch takes one sound per sampler (4 at most)");
-    // W-Core: one Grain sound per layer, its lowest key naming the layer 0..3 (wcore.cpp setWaveLayerSound). Audit
-    // 2026-11-07 #6: this said "one sound" and refused a song saved with two layers' sounds.
-    if (samples.size() > 4 && t.instrument.name == "wave") throw DocumentError(ir.at("samples"), "a W-Core takes one sound per layer (4 at most)");
     for (size_t si = 0; si < samples.size(); ++si) {
       Reader sr(samples[si], item(ir.at("samples"), si));
       SampleRef z;
@@ -232,36 +211,20 @@ Track parseTrack(const json& v, const std::string& path, const std::set<std::str
       if (z.loopEnd > 0 && z.loopEnd < z.loopStart + kMinSampleLoopSeconds) throw DocumentError(sr.at("loopEnd"), "must be at least 2 ms after loopStart");
       if (z.loopEnd == 0 && z.loopStart > 0) throw DocumentError(sr.at("loopEnd"), "is needed with loopStart (0: no loop)");
       z.extra = sr.rest();
-      if (t.instrument.name == "wave" || glitch) {
-        for (const auto& o : t.instrument.samples)  // the layer is the lowest key, 0..3 (above 3: layer 4)
-          if (std::clamp(o.loKey, 0, 3) == std::clamp(z.loKey, 0, 3))
-            throw DocumentError(sr.at("loKey"), glitch ? "a second sound for the same Core Glitch sampler" : "a second sound for the same W-Core layer");
-      }
       t.instrument.samples.push_back(std::move(z));
     }
-    if (t.instrument.name == "wave") {
-      const json synth = ir.take("synth");
-      if (!synth.is_null()) {
-        try { t.instrument.synth = wmod::patchToJson(wmod::parsePatch(synth, wmod::targets())); }
-        catch (const std::exception& e) { throw DocumentError(ir.at("synth"), e.what()); }
-      }
-    }
-    if (glitch) {  // its map: slices, nodes, links, patterns A..D (sample_path_patch.hpp), checked and clamped
-      const json synth = ir.take("synth");
-      try { t.instrument.synth = spath::patchToJson(spath::parsePatch(synth)); }
-      catch (const std::exception& e) { throw DocumentError(ir.at("synth"), e.what()); }
-    }
+    t.instrument.synth = ir.take("synth");
   } else if (t.instrument.kind == "plugin") {
-    // Core has no VST (2026-11-08): a VST track of an older song plays W-Core; its notes stay (dropVst).
-    ir.object("plugin");
-    t.instrument.kind = "builtin";
-    t.instrument.name = "wave";
-    t.instrument.version = 1;
-    t.instrument.extra = json::object();
-    t.instrument.params.clear();
-    t.instrument.extra["fromVst"] = true;
-  } else if (t.instrument.kind != "audio" && t.instrument.kind != "bus") {
-    throw DocumentError(ir.at("kind"), "must be builtin, audio or bus");
+    // A plugin plays the track (Diogo 2026-11-16: Core's sound comes from plugins): {format, id, name, vendor, file, state}.
+    t.instrument.plugin = ir.object("plugin");
+    const json& p = t.instrument.plugin;
+    const std::string format = p.value("format", std::string("vst3"));
+    if (format != "vst3" && format != "vst") throw DocumentError(join(ir.at("plugin"), "format"), "must be vst3 or vst");
+    if (!p.contains("id") || !p["id"].is_string() || p["id"].get<std::string>().empty()) throw DocumentError(join(ir.at("plugin"), "id"), "is required");
+    if (!p.contains("file") || !p["file"].is_string() || p["file"].get<std::string>().empty()) throw DocumentError(join(ir.at("plugin"), "file"), "is required");
+    t.instrument.plugin.erase("missing");
+  } else if (t.instrument.kind != "audio" && t.instrument.kind != "bus" && t.instrument.kind != "none") {
+    throw DocumentError(ir.at("kind"), "must be plugin, none, audio, bus or builtin");
   }
   {
     const bool fromVst = t.instrument.extra.is_object() && t.instrument.extra.contains("fromVst");
@@ -390,7 +353,8 @@ json mixJson(const Mix& m) {
 
 json trackJson(const Track& t) {
   json instrument = {{"kind", t.instrument.kind}};
-  if (t.instrument.kind != "audio" && t.instrument.kind != "bus") { instrument["name"] = t.instrument.name; instrument["version"] = t.instrument.version; instrument["params"] = t.instrument.params; }
+  if (t.instrument.kind == "plugin") instrument["plugin"] = t.instrument.plugin;
+  else if (t.instrument.kind == "builtin") { instrument["name"] = t.instrument.name; instrument["version"] = t.instrument.version; instrument["params"] = t.instrument.params; }
   if (!t.instrument.synth.is_null()) instrument["synth"] = t.instrument.synth;
   if (!t.instrument.samples.empty()) {
     json samples = json::array();
@@ -488,112 +452,12 @@ const Track* Document::findTrack(const std::string& id) const {
   return nullptr;
 }
 
-void migrateLegacyWave(Track& t) {
-  if (t.instrument.kind != "builtin" || t.instrument.name != "wave" || t.instrument.version != 1) return;
-  json old = json::object();
-  for (const auto& [k, v] : t.instrument.params) old[k] = v;
-  const auto c = wlegacy::convertV1(old);
-  t.instrument.params.clear();
-  for (auto it = c.params.begin(); it != c.params.end(); ++it) t.instrument.params[it.key()] = it.value().get<double>();
-  t.instrument.synth = c.synth;
-  t.instrument.version = 2;
-  std::vector<Automation> automation;
-  for (const auto& a : t.automation)
-    for (const auto& [name, scale] : wlegacy::renameParamV1(a.param)) {  // none: the knob is a link now
-      Automation b = a;
-      b.param = name;
-      for (auto& p : b.points) p.value *= scale;
-      automation.push_back(std::move(b));
-    }
-  t.automation = std::move(automation);
-  json modulators = json::array();
-  for (const auto& m : t.modulators) {
-    if (!m.is_object() || !m.contains("param") || !m["param"].is_string()) { modulators.push_back(m); continue; }
-    const auto to = wlegacy::renameParamV1(m["param"].get<std::string>());
-    for (size_t k = 0; k < to.size(); ++k) {
-      json n = m;
-      n["param"] = to[k].first;
-      if (n.contains("depth") && n["depth"].is_number()) n["depth"] = n["depth"].get<double>() * to[k].second;
-      if (k > 0 && n.contains("id") && n["id"].is_string()) n["id"] = n["id"].get<std::string>() + "-" + std::to_string(k + 1);
-      modulators.push_back(n);
-    }
-  }
-  t.modulators = modulators;
-}
-
-// B-Core ("elastic", removed 2026-11-09: Diogo "o b-core deixa de existir, vão para synth") and the older "bass"
-// synth (removed 2026-11-07) become W-Core: the closest B-Core preset's W-Core copy, Octave and Volume kept (the
-// engine's bcore_legacy.hpp, the same conversion as for project files). B-Core's mood effects stay on the track as
-// ordinary effects; automation and modulators of knobs W-Core has not go.
-void migrateLegacyBCore(Track& t) {
-  if (t.instrument.kind != "builtin" || (t.instrument.name != "bass" && t.instrument.name != "elastic")) return;
-  const bool oldBass = t.instrument.name == "bass";
-  json old = json::object();
-  for (const auto& [k, v] : t.instrument.params) old[k] = v;
-  const auto c = blegacy::convert(oldBass ? blegacy::oldBassToBCore(old) : old);
-  t.instrument.name = "wave";
-  t.instrument.version = 2;
-  t.instrument.params.clear();
-  for (auto it = c.params.begin(); it != c.params.end(); ++it) t.instrument.params[it.key()] = it.value().get<double>();
-  t.instrument.synth = c.synth;
-  auto renamed = [&](std::string param) -> std::pair<std::string, double> {
-    if (param == "gainDb" || param == "pan" || param.rfind("fx:", 0) == 0) return {param, 1};
-    if (oldBass) param = blegacy::oldBassName(param);
-    return blegacy::renameParam(param, c);
-  };
-  std::vector<Automation> automation;
-  for (auto a : t.automation) {
-    const auto [to, scale] = renamed(a.param);
-    if (to.empty()) continue;
-    if (scale != 1) for (auto& p : a.points) p.value *= scale;
-    a.param = to;
-    automation.push_back(std::move(a));
-  }
-  t.automation = std::move(automation);
-  json modulators = json::array();
-  for (auto m : t.modulators) {
-    if (!m.is_object() || !m.contains("param") || !m["param"].is_string()) { modulators.push_back(m); continue; }
-    const std::string from = m["param"].get<std::string>();
-    const auto [to, scale] = renamed(from);
-    if (to.empty()) continue;
-    if (scale != 1 && m.contains("depth") && m["depth"].is_number()) m["depth"] = m["depth"].get<double>() * scale;
-    m["param"] = to;
-    modulators.push_back(m);
-  }
-  t.modulators = modulators;
-  for (auto& fx : t.effects) if (fx.is_object()) fx.erase("bcoreMood");
-  if (t.extra.is_object()) t.extra.erase("bcoreMoodKnobs");
-}
-
-// Core has no VST (Diogo, 2026-11-08: Core does not use them). An older song's VST effects go from every chain with
-// their curves, and a VST track (W-Core now, see parseDocument) loses the curves of the plugin's own parameters.
+// A song saved between 2026-11-08 and 2026-11-16 turned its VST tracks into W-Core and marked them: the mark goes
+// (the plugin is not known any more; the track keeps its notes). Plugin effects and their curves stay: Core plays
+// plugins again (Diogo 2026-11-16).
 static void dropVst(Document& d) {
-  auto chain = [](json& effects, std::vector<Automation>& automation) {
-    if (!effects.is_array()) return;
-    std::set<std::string> gone;
-    for (size_t i = effects.size(); i-- > 0;) {
-      const json& fx = effects[i];
-      if (!fx.is_object() || fx.value("type", std::string()) != "plugin") continue;
-      if (fx.contains("id") && fx["id"].is_string()) gone.insert(fx["id"].get<std::string>());
-      effects.erase(effects.begin() + (std::ptrdiff_t)i);
-    }
-    automation.erase(std::remove_if(automation.begin(), automation.end(), [&](const Automation& a) {
-                       if (a.param.rfind("vst:", 0) == 0) return true;
-                       if (a.param.rfind("fx:", 0) != 0) return false;
-                       const size_t colon = a.param.find(':', 3);
-                       return colon != std::string::npos && gone.count(a.param.substr(3, colon - 3)) > 0;
-                     }), automation.end());
-  };
-  chain(d.masterEffects, d.masterAutomation);
-  for (auto& t : d.tracks) {
-    chain(t.effects, t.automation);
-    if (t.instrument.extra.is_object() && t.instrument.extra.contains("fromVst")) {
-      t.instrument.extra.erase("fromVst");
-      t.automation.erase(std::remove_if(t.automation.begin(), t.automation.end(), [](const Automation& a) {
-                           return a.param != "gainDb" && a.param != "pan" && a.param.rfind("fx:", 0) != 0;
-                         }), t.automation.end());
-    }
-  }
+  for (auto& t : d.tracks)
+    if (t.instrument.extra.is_object()) t.instrument.extra.erase("fromVst");
 }
 
 Document parseDocument(const json& input, int* migratedFrom) {
@@ -625,8 +489,10 @@ Document parseDocument(const json& input, int* migratedFrom) {
     Reader lr(loop, "transport.loop");
     d.loop.enabled = lr.boolean("enabled", false);
     d.loop.startTick = lr.integer("startTick", 0, 0, kMaxSongTicks - 1);
-    d.loop.endTick = lr.integer("endTick", 4 * 4 * kPpq, 1, kMaxSongTicks);
-    if (d.loop.endTick <= d.loop.startTick) throw DocumentError("transport.loop.endTick", "must be after startTick");
+    // "Remove loop" writes {enabled false, 0, 0} and deleting bars can fold a loop to nothing: an empty loop that is off
+    // is a song without a loop and must save and open (sweep 2026-11-14 D1: Save and autosave refused it).
+    d.loop.endTick = lr.integer("endTick", 4 * 4 * kPpq, 0, kMaxSongTicks);
+    if (d.loop.enabled && d.loop.endTick <= d.loop.startTick) throw DocumentError("transport.loop.endTick", "must be after startTick");
     d.loop.extra = lr.rest();
   }
   const json tempo = tr.array("tempoMap", kMaxTempoPoints);
@@ -703,10 +569,7 @@ Document parseDocument(const json& input, int* migratedFrom) {
   }
   d.ui = r.object("ui");
   d.extra = r.rest();
-  for (auto& t : d.tracks) { migrateLegacyBCore(t); migrateLegacyWave(t); }
   dropVst(d);
-  convertLegacyEffects(d);  // saturation, delay, reverb, space, echo, spiral, flux -> Core FX
-  upgradeOldVersions(d);
   return d;
 }
 
@@ -747,6 +610,31 @@ json toJson(const Document& d) {
   return withExtra(out, d.extra);
 }
 
+// What the engine plays (Diogo 2026-11-16: the sound comes from plugins): the plugin effects of a chain, and the curves of
+// the mixer and of plugin parameters. Core's own effects, instruments and their curves stay in the song, unplayed.
+namespace {
+json pluginChain(const json& chain) {
+  json out = json::array();
+  for (const auto& fx : chain) if (fx.is_object() && fx.value("type", std::string()) == "plugin") out.push_back(fx);
+  return out;
+}
+std::vector<Automation> playedCurves(const std::vector<Automation>& list, const json& chain) {
+  std::set<std::string> plugins;
+  for (const auto& fx : chain)
+    if (fx.is_object() && fx.value("type", std::string()) == "plugin" && fx.contains("id") && fx["id"].is_string()) plugins.insert(fx["id"].get<std::string>());
+  std::vector<Automation> out;
+  for (const auto& a : list) {
+    bool played = a.param == "gainDb" || a.param == "pan" || a.param.rfind("vst:", 0) == 0;
+    if (!played && a.param.rfind("fx:", 0) == 0) {
+      const size_t colon = a.param.find(':', 3);
+      played = colon != std::string::npos && plugins.count(a.param.substr(3, colon - 3)) && a.param.compare(colon + 1, 4, "vst:") == 0;
+    }
+    if (played) out.push_back(a);
+  }
+  return out;
+}
+}  // namespace
+
 json toProjection(const Document& d, const std::filesystem::path& assetRoot) {
   json tracks = json::array();
   for (const auto& t : d.tracks) {
@@ -764,9 +652,9 @@ json toProjection(const Document& d, const std::filesystem::path& assetRoot) {
       if (c.offsetTicks % p->lengthTicks) clip["offsetTicks"] = c.offsetTicks % p->lengthTicks;  // the pattern may have been shortened
       clips.push_back(clip);
     }
-    const json envelopes = envelopesJson(t.automation);
+    const json envelopes = envelopesJson(playedCurves(t.automation, t.effects));
     json track = {{"id", t.id}, {"gainDb", t.mix.gainDb}, {"pan", t.mix.pan}, {"mute", t.mix.mute}, {"solo", t.mix.solo},
-                  {"clips", clips}, {"envelopes", envelopes}, {"effects", t.effects}};
+                  {"clips", clips}, {"envelopes", envelopes}, {"effects", pluginChain(t.effects)}};
     if (t.instrument.kind == "audio") {
       track["instrument"] = "audio";
       track.erase("clips");
@@ -783,20 +671,8 @@ json toProjection(const Document& d, const std::filesystem::path& assetRoot) {
       }
       track["audioClips"] = audioClips;
     } else if (t.instrument.kind == "bus") { track["instrument"] = "bus"; track.erase("clips"); }
-    else { track["instrument"] = t.instrument.name; track["instrumentVersion"] = t.instrument.version; track["params"] = t.instrument.params; }
-    if (t.instrument.kind == "builtin" && !t.instrument.synth.is_null()) track["synth"] = t.instrument.synth;
-    if (t.instrument.kind == "builtin" && (t.instrument.name == "sampler" ||
-                                           ((t.instrument.name == "wave" || t.instrument.name == "samplepath") && !t.instrument.samples.empty()))) {
-      json samples = json::array();
-      for (const auto& z : t.instrument.samples)
-      {
-        json zone = {{"path", z.file}, {"rootKey", z.rootKey}, {"loKey", z.loKey}, {"hiKey", z.hiKey}};
-        if (z.loops()) { zone["loopStart"] = z.loopStart; zone["loopEnd"] = z.loopEnd; }
-        samples.push_back(zone);
-      }
-      track["samples"] = samples;
-    }
-    if (!t.modulators.empty()) track["modulators"] = t.modulators;
+    else if (t.instrument.kind == "plugin") { track["instrument"] = "plugin"; track["plugin"] = t.instrument.plugin; }
+    else track["instrument"] = "none";  // an old Core instrument, or no instrument yet: its notes wait for a plugin
     if (!t.mix.output.empty()) track["output"] = t.mix.output;
     if (!t.mix.sends.empty()) {
       json sends = json::array();
@@ -807,8 +683,8 @@ json toProjection(const Document& d, const std::filesystem::path& assetRoot) {
   }
   json project = {{"format", "core-project"}, {"version", 2}, {"bpm", d.bpm}, {"lengthTicks", d.lengthTicks},
                   {"masterGainDb", d.masterGainDb}, {"tracks", tracks}};
-  if (!d.masterEffects.empty()) project["masterEffects"] = d.masterEffects;
-  if (!d.masterAutomation.empty()) project["masterEnvelopes"] = envelopesJson(d.masterAutomation);
+  if (const json chain = pluginChain(d.masterEffects); !chain.empty()) project["masterEffects"] = chain;
+  if (const auto curves = playedCurves(d.masterAutomation, d.masterEffects); !curves.empty()) project["masterEnvelopes"] = envelopesJson(curves);
   if (!d.tempoMap.empty()) {
     json map = json::array();
     for (const auto& t : d.tempoMap) map.push_back(tempoPointJson(t));
@@ -958,12 +834,12 @@ Document importProjectV2(const json& project, ImportReport* report) {
     t["id"] = tr.string("id", "", 40);
     t["name"] = tr.string("name", t["id"].get<std::string>(), 80);
     const std::string instrument = tr.string("instrument", "", 40);
-    if (instrument == "plugin") {  // no VST in Core: the track plays W-Core, its notes kept
-      tr.object("plugin");
-      t["instrument"] = {{"kind", "builtin"}, {"name", "wave"}, {"version", 1}, {"params", json::object()}};
-      tr.take("params");
+    if (instrument == "plugin") {
+      json plugin = tr.object("plugin");
+      if (plugin.contains("missing")) { plugin.erase("missing"); rep.converted.push_back(where + ".plugin.missing: dropped (decided when the plugin loads)"); }
+      t["instrument"] = {{"kind", "plugin"}, {"plugin", plugin}};
+      if (tr.take("params").is_object()) rep.kept.push_back(where + ".params: ignored for a plugin track");
       tr.take("instrumentVersion");
-      rep.converted.push_back(where + ": a VST track, now W-Core (Core has no VST)");
     } else if (instrument == "bus") {
       t["instrument"] = {{"kind", "bus"}};
     } else {

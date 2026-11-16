@@ -916,9 +916,10 @@ void PatternsPanel::sendToArrange() {
   if (!s) return;
   const int64_t at = (int64_t)(host_.songTick ? host_.songTick() : 0.0);
   const std::string id = slotId_;
+  const int bars = s->bars;  // read now: the edit rebuilds slots_ and s points into the old one (sweep ED1, use after free)
   int placed = 0;
   change(u8("Send to Arrange"), [id, at, &placed](doc::Document& d) { placed = doc::sendRackSlotToArrange(d, id, at); });
-  say(placed ? u8("On the timeline from bar ") + juce::String(at / kBar + 1) + u8(", ") + juce::String(s ? s->bars : 0) + u8(" bars, ") +
+  say(placed ? u8("On the timeline from bar ") + juce::String(at / kBar + 1) + u8(", ") + juce::String(bars) + u8(" bars, ") +
                    juce::String(placed) + u8(" tracks.")
              : u8("Nothing to send: this pattern has no notes yet."));
 }

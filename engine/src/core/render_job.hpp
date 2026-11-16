@@ -13,6 +13,7 @@
 #include <thread>
 #include <vector>
 #include "assets.hpp"
+#include "plugins.hpp"
 #include "project.hpp"
 
 namespace core {
@@ -56,6 +57,7 @@ struct RenderJobRequest {
   // is played (not written) so held notes, effect tails and LFOs are where they would be.
   int64_t startTick = 0, endTick = -1;
   std::shared_ptr<AssetStore> assets;  // audio clip files (kept alive by the job's graph)
+  PluginProvider* plugins = nullptr;   // the job's own plugin instances come from here (offline)
 };
 
 class RenderJobs {

@@ -17,8 +17,6 @@ juce::String u8(const char* t) { return juce::String::fromUTF8(t); }
 // strip shows fewer insert rows; the fader takes whatever height is left.
 constexpr int kStripWidth = 112, kHeader = 20, kInsertRow = 17, kInsertRows = 4;
 constexpr int kCompactStripHeight = 170;  // the shortest strip (below it the strips scroll)
-constexpr int kModulationHeight = 140;  // the Modulation band under the strips
-constexpr int kModulationRoom = 250 + 8 + kModulationHeight;  // the strips and Modulation both, else a tab swaps them
 constexpr float kMinDb = -60.0f;
 
 // A level (linear peak) as a share of the meter's height: -60 dB at the bottom, +6 dB at the top.
@@ -359,7 +357,7 @@ private:
 
 // ---------------------------------------------------------------- the panel
 
-MixerPanel::MixerPanel(PatternEditor::Host& host) : host_(host), inserts_(host), modulation_(host) {
+MixerPanel::MixerPanel(PatternEditor::Host& host) : host_(host) {
   title_.setText("MIXER", juce::dontSendNotification);
   title_.setFont(juce::FontOptions(theme::kFontBody, juce::Font::bold).withKerningFactor(0.08f));
   title_.setColour(juce::Label::textColourId, kText);
@@ -376,22 +374,13 @@ MixerPanel::MixerPanel(PatternEditor::Host& host) : host_(host), inserts_(host),
   close_.setButtonText(u8("✕"));
   close_.setTooltip(u8("Close the mixer (back to the piano roll)"));
   close_.onClick = [this] { if (onClose) onClose(); };
-  modulationTab_.setButtonText("Modulation");
-  modulationTab_.setClickingTogglesState(true);
-  modulationTab_.setColour(juce::TextButton::buttonOnColourId, kPrimary);
-  modulationTab_.setTooltip(u8("Show the LFOs in place of the strips (the panel is too short for both: drag the divider up for more room)"));
-  modulationTab_.onClick = [this] { resized(); };
-  for (auto* b : {&addBus_, &close_, &modulationTab_}) {
+  for (auto* b : {&addBus_, &close_}) {
     b->setWantsKeyboardFocus(false);
     addAndMakeVisible(b);
   }
   view_.setViewedComponent(&strip_, false);
   view_.setScrollBarsShown(true, true);
   addAndMakeVisible(view_);
-  inserts_.knobs = true;  // the insert editor as knobs (ref-3)
-  inserts_.onClose = [this] { if (onClose) onClose(); };
-  addAndMakeVisible(inserts_);
-  addAndMakeVisible(modulation_);
   documentChanged();
 }
 
@@ -408,8 +397,6 @@ void MixerPanel::documentChanged() {
   if (!selected_.empty() && !d.findTrack(selected_)) select({});
   if (shapeOf() != shape_) { triggerAsyncUpdate(); return; }
   for (auto& s : strips_) s->update();
-  inserts_.documentChanged();
-  modulation_.documentChanged();
 }
 
 void MixerPanel::handleAsyncUpdate() {
@@ -421,17 +408,13 @@ void MixerPanel::handleAsyncUpdate() {
   }
   strips_.push_back(std::make_unique<Strip>(*this, std::string()));  // the master, last: beside the strips, never scrolled away
   addAndMakeVisible(*strips_.back());
-  inserts_.setTarget(selected_);
-  modulation_.setTarget(selected_);
   resized();
 }
 
 void MixerPanel::select(const std::string& trackId) {
   selected_ = trackId;
-  inserts_.setTarget(trackId);
-  modulation_.setTarget(trackId);
   for (auto& s : strips_) s->repaint();
-  resized();  // Modulation shows under the strips for an audio track or a bus only
+  resized();
 }
 
 void MixerPanel::setLevels(const std::map<std::string, std::pair<float, float>>& tracks, float masterLeft, float masterRight) {
@@ -462,34 +445,7 @@ void MixerPanel::resized() {
   close_.setBounds(head.removeFromRight(28).reduced(2));
   title_.setBounds(head.removeFromLeft(90));
   addBus_.setBounds(head.removeFromLeft(70).reduced(2));
-  head.removeFromLeft(8);
-  modulationTab_.setBounds(head.removeFromLeft(100).reduced(2));
   r.removeFromTop(4);
-  // Modulation along the bottom when there is room for it and whole strips; else a tab swaps the two. Only for an
-  // audio track or a bus: a track that plays notes has its modulation with its sound, on its instrument's page
-  // (Diogo 2026-11-07: "isto nao pode estar numa pagina separada da criaçao").
-  const doc::Track* chosenTrack = selected_.empty() ? nullptr : host_.currentDocument().findTrack(selected_);
-  const bool here = chosenTrack && !doc::playsPatterns(*chosenTrack);
-  if (!here) modulationTab_.setToggleState(false, juce::dontSendNotification);
-  const bool both = here && r.getHeight() >= kModulationRoom;
-  modulationTab_.setVisible(here && !both);
-  const bool modulationOnly = !both && modulationTab_.getToggleState();
-  modulation_.setVisible(both || modulationOnly);
-  view_.setVisible(!modulationOnly);
-  inserts_.setVisible(!modulationOnly);
-  addBus_.setVisible(!modulationOnly);
-  if (!strips_.empty()) strips_.back()->setVisible(!modulationOnly);  // the master strip is outside the scrolled view
-  if (modulationOnly) { modulation_.setBounds(r); return; }
-  if (both) {
-    modulation_.setBounds(r.removeFromBottom(kModulationHeight));
-    r.removeFromBottom(8);
-  }
-  // The chosen strip's chain at the right; the strips scroll sideways in the rest.
-  // The chain gives up width (down to one knob card, 312 + margins) before a strip is cut at the edge.
-  const int need = (int)(strips_.size() - 1) * (kStripWidth + 6) + 10 + kStripWidth + 10;
-  const int detail = juce::jlimit(340, 760, std::min(r.getWidth() / 4, std::max(r.getWidth() - need, 340)));
-  inserts_.setBounds(r.removeFromRight(detail));
-  r.removeFromRight(10);
   auto masterColumn = r.removeFromRight(kStripWidth);  // the master strip stays in view while the others scroll
   r.removeFromRight(10);
   // When the strips scroll, the view shows only whole strips (the spare pixels go to the gap).
@@ -500,7 +456,6 @@ void MixerPanel::resized() {
   view_.setBounds(r);
   masterColumn.setX(r.getRight() + 10);  // right after the last whole strip
   masterColumn.setWidth(kStripWidth);
-  inserts_.setBounds(inserts_.getBounds().withLeft(masterColumn.getRight() + 10));  // the chain takes the spare width
   const int bar = view_.getScrollBarThickness();
   const int width = (int)(strips_.size() - 1) * (kStripWidth + 6);
   const bool tall = r.getHeight() - (width > r.getWidth() ? bar : 0) >= kCompactStripHeight;

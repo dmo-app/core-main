@@ -5,9 +5,13 @@
 //   core-engine demo [bpm]                      prints the demo project
 //   core-engine devices
 //   core-engine --version                       the build: version + git commit
+//   core-engine scan <file.vst3>                 what a plugin file holds (JSON), run by the app per file
+//   core-engine qualify <file.vst3> [--sr 48000] each plugin of the file played on its own (JSON); exit 3 = unsafe
+//   core-engine matrix <file.vst3> [--sr 48000] [--tail 20]  M10: latency, tail, repeatability, call sizes,
+//                    live vs offline and mono input of each plugin of the file (JSON; see qualify.hpp)
 //   core-engine soak <project.json> [--minutes 120] [--block 128] [--exclusive] [--device name] [--backend wasapi] [--live-threads n]
 //                    [--no-edits]  M10: plays the song in a loop through the device, with edits, and reports
-//                    every minute (JSON lines); exit 0 = no overrun, starvation, NaN or callback error
+//                    every minute (JSON lines); exit 0 = no overrun, starvation, NaN, callback error or failed plugin
 //   core-engine loopcheck <project.json> [--passes 4] [--bars 8] [--out live.wav] [--block n] [--device name]
 //                    the loop played through the device and recorded: is every pass the same (and the same as offline)?
 #include <atomic>
@@ -21,6 +25,7 @@
 #include <vector>
 #include "app/measure.hpp"
 #include "app/protocol.hpp"
+#include "core/qualify.hpp"
 #include "core/server.hpp"
 #include "io/device.hpp"
 #include "io/wav.hpp"
@@ -59,6 +64,25 @@ static double residentMb() {
   return (double)resident * (double)sysconf(_SC_PAGESIZE) / 1048576.0;
 }
 #endif
+#ifdef CORE_ENGINE_PLUGINS
+#include "plugins/juce_host.hpp"
+// The JUCE host as the server's plugin host.
+class EnginePlugins final : public core::PluginHost {
+public:
+  std::shared_ptr<core::PluginProcessor> get(const std::string& key, const core::json& plugin, double sr, bool offline, std::string* why) override {
+    return host_.get(key, plugin, sr, offline, why);
+  }
+  void keepOnly(const std::vector<std::string>& keys) override { host_.keepOnly(keys); }
+  core::json captureStates() override { return host_.captureStates(); }
+  bool showEditor(const std::string& key, bool open, std::string* why) override { return host_.showEditor(key, open, why); }
+  bool takeChanged() override { return host_.takeChanged(); }
+  void releaseAll() override { host_.releaseAll(); }
+  core::json parameters(const std::string& key) override { return host_.parameters(key); }
+  void resetAll() override { host_.resetAll(); }
+private:
+  core::plugins::JuceHost host_;
+};
+#endif
 
 using namespace core;
 
@@ -78,8 +102,8 @@ static bool flag(const std::vector<std::string>& args, const std::string& name) 
   return false;
 }
 
-// The JSON answer (serve, soak) keeps the real stdout; anything else printed there goes to stderr (the
-// engine's log) and never into the JSON.
+// The JSON answer (serve, scan, qualify) keeps the real stdout; anything else printed there, such as the
+// banner Dexed prints when it is loaded to play, goes to stderr (the engine's log) and never into the JSON.
 static FILE* g_protocol = stdout;
 static void keepStdoutForProtocol() {
   std::cout.flush();
@@ -97,9 +121,12 @@ static void emit(const std::string& line) {
   std::fflush(g_protocol);
 }
 
-static int serve() {
+static std::string g_pluginLog;  // serve --plugin-log <file>: plugin failures, one JSON line each
+
+static int serve(PluginHost* plugins) {
   std::ios::sync_with_stdio(false);
-  Server server(makeMiniaudioOutput, 48000);
+  Server server(makeMiniaudioOutput, 48000, plugins);
+  server.setFailureLog(g_pluginLog);
   std::mutex lock;  // one command or state tick at a time
   std::atomic<bool> running{true};
   // stdout carries the protocol only (one JSON object per line); diagnostics go to stderr.
@@ -120,6 +147,8 @@ static int serve() {
       // discarding 24 out of 25 snapshots also discarded short piano/MIDI attacks.
       send(server.stateEvent());
       if (server.takeEnded()) send({{"event", "ended"}});
+      server.checkPluginLatency();  // a plugin that changed its latency: the tracks are lined up again
+      if (plugins && plugins->takeChanged()) send({{"event", "pluginsChanged"}});  // the app asks for the states before saving
       for (json job : server.takeJobUpdates()) { job["event"] = "job"; send(job); }
     }
   });
@@ -142,18 +171,151 @@ static int serve() {
   return 0;
 }
 
+// knobcheck: a knob moved and put back must sound the same as never touching it (Diogo 2026-11-16: "mexer num
+// knob e voltá-lo ao mesmo sítio não devolve o mesmo som"). Offline, exactly as the app does it: the song plays,
+// at --edit-at s the knob goes to another value (one project.load, as EngineSession sends every edit), at
+// --back-at s it goes back (another project.load with the original project), and the output from
+// --back-at + --settle s to the end is compared with the same song never touched. One JSON line per knob:
+// the largest sample difference and the difference's level against the song's level (dB). Exit 1 = a knob
+// that does not come back (worse than --limit-db, default -90 dB).
+static int64_t g_knobStart = 0;  // knobcheck --start: where in the song it plays from (samples)
+static std::vector<float> knobRun(const json& original, const json* edited, double sr, int64_t total, int64_t at, int64_t back) {
+  Server s(nullptr, sr, nullptr);
+  auto load = [&](const json& p) {
+    json r = s.handle({{"cmd", "project.load"}, {"args", {{"project", p}}}});
+    if (!r.value("ok", false)) throw std::runtime_error("project.load: " + r.value("error", std::string("failed")));
+  };
+  load(original);
+  s.engine().setListenDb(0);
+  s.engine().setEarGuard(false);
+  if (g_knobStart > 0) s.engine().seek(g_knobStart);
+  s.engine().play();
+  std::vector<float> out;
+  out.reserve((size_t)total * 2);
+  float bl[256], br[256];
+  for (int64_t done = 0; done < total; done += 256) {
+    if (edited && done == at) load(*edited);
+    if (edited && done == back) load(original);
+    s.engine().process(bl, br, 256);
+    for (int i = 0; i < 256; ++i) { out.push_back(bl[i]); out.push_back(br[i]); }
+  }
+  return out;
+}
+
+static int knobcheck(const std::vector<std::string>& args) {
+  json project;
+  if (args[1] == "demo") project = demoProject(190);
+  else {
+    std::ifstream in(args[1]);
+    if (!in) throw std::runtime_error("Cannot read " + args[1]);
+    project = json::parse(in);
+  }
+  project = toJson(fromJson(project));  // normalized: every track as the engine keeps it
+  const double sr = 48000;
+  auto blocks = [&](double seconds) { return (int64_t)std::llround(seconds * sr / 256) * 256; };
+  const int64_t at = blocks(std::stod(option(args, "--edit-at", "2"))), back = blocks(std::stod(option(args, "--back-at", "3")));
+  const int64_t from = back + blocks(std::stod(option(args, "--settle", "2")));
+  const int64_t total = std::max(from + blocks(2), blocks(std::stod(option(args, "--seconds", "10"))));
+  const double limitDb = std::stod(option(args, "--limit-db", "-90"));
+  const std::string only = option(args, "--only", "");
+  g_knobStart = blocks(std::stod(option(args, "--start", "0")));
+  const std::vector<float> ref = knobRun(project, nullptr, sr, total, at, back);
+  double refEnergy = 0;
+  for (size_t i = (size_t)from * 2; i < ref.size(); ++i) refEnergy += (double)ref[i] * ref[i];
+  const double refRms = std::sqrt(refEnergy / std::max<double>(1, (double)(ref.size() - (size_t)from * 2)));
+  {  // the same run twice must be identical, or nothing below means anything
+    const std::vector<float> again = knobRun(project, nullptr, sr, total, at, back);
+    double worst = 0;
+    for (size_t i = 0; i < ref.size(); ++i) worst = std::max(worst, (double)std::fabs(ref[i] - again[i]));
+    std::cout << json({{"check", "repeatable"}, {"maxDifference", worst}, {"songRmsDb", 20 * std::log10(std::max(1e-12, refRms))}}).dump() << std::endl;
+    if (worst > 0) return 2;
+  }
+  // The same song loaded again, nothing changed (what every edit does to the tracks it does not touch): it must
+  // go on exactly as before. If not, which track carries it: each one alone (the others muted, buses kept).
+  auto reloadDb = [&](const json& p) {
+    const std::vector<float> a = knobRun(p, nullptr, sr, total, at, back), b = knobRun(p, &p, sr, total, at, back);
+    double e = 0, ea = 0;
+    for (size_t i = (size_t)at * 2; i < a.size(); ++i) { const double d = (double)b[i] - a[i]; e += d * d; ea += (double)a[i] * a[i]; }
+    return e > 0 ? 10 * std::log10(e / std::max(1e-24, ea)) : -999.0;
+  };
+  if (const double db = reloadDb(project); db > limitDb) {
+    std::cout << json({{"check", "reload"}, {"differenceDb", db}}).dump() << std::endl;
+    for (size_t ti = 0; ti < project["tracks"].size(); ++ti) {
+      if (project["tracks"][ti].value("instrument", std::string()) == "bus") continue;
+      json alone = project;
+      for (size_t k = 0; k < alone["tracks"].size(); ++k)
+        if (k != ti && alone["tracks"][k].value("instrument", std::string()) != "bus") alone["tracks"][k]["mute"] = true;
+      alone["tracks"][ti]["mute"] = false;
+      std::cout << json({{"check", "reload, one track"}, {"track", project["tracks"][ti].value("id", std::string())},
+                         {"instrument", project["tracks"][ti].value("instrument", std::string())}, {"differenceDb", reloadDb(alone)}}).dump() << std::endl;
+    }
+    if (!flag(args, "--all")) return 1;
+  }
+  int bad = 0, tried = 0;
+  auto tryKnob =[&](const std::string& track, const std::string& what, const std::string& param, double was, double to, const json& edited) {
+    const std::vector<float> got = knobRun(project, &edited, sr, total, at, back);
+    double worst = 0, energy = 0;
+    for (size_t i = (size_t)from * 2; i < ref.size(); ++i) {
+      const double d = (double)got[i] - ref[i];
+      worst = std::max(worst, std::fabs(d));
+      energy += d * d;
+    }
+    const double rms = std::sqrt(energy / std::max<double>(1, (double)(ref.size() - (size_t)from * 2)));
+    const double db = rms > 0 ? 20 * std::log10(rms / std::max(1e-12, refRms)) : -999;
+    double heard = 0;  // the move itself must be heard while it is there, or the knob was not tested
+    for (size_t i = (size_t)at * 2; i < (size_t)back * 2; ++i) heard = std::max(heard, (double)std::fabs(got[i] - ref[i]));
+    const bool same = db <= limitDb;
+    ++tried;
+    if (!same) ++bad;
+    std::cout << json({{"track", track}, {"unit", what}, {"param", param}, {"value", was}, {"movedTo", to},
+                       {"heardWhileMoved", heard}, {"maxDifference", worst}, {"differenceDb", db}, {"comesBack", same}}).dump() << std::endl;
+  };
+  auto other = [](const ParamSpec& p, double was) {  // far from where it is, inside its range
+    return std::fabs(p.max - was) > std::fabs(was - p.min) ? p.max : p.min;
+  };
+  for (size_t ti = 0; ti < project["tracks"].size(); ++ti) {
+    const json& t = project["tracks"][ti];
+    const std::string id = t.value("id", std::string());
+    if (!only.empty() && id != only) continue;
+    const std::string instrument = t.value("instrument", std::string());
+    for (const ParamSpec& p : instrumentParams(instrument)) {
+      const double was = t.contains("params") && t["params"].contains(p.name) ? t["params"][p.name].get<double>() : p.def;
+      const double to = other(p, was);
+      if (to == was) continue;
+      json edited = project;
+      edited["tracks"][ti]["params"][p.name] = to;
+      tryKnob(id, instrument, p.name, was, to, edited);
+    }
+    if (t.contains("effects"))
+      for (size_t ei = 0; ei < t["effects"].size(); ++ei) {
+        const json& fx = t["effects"][ei];
+        const std::string name = fx.value("name", std::string());
+        for (const ParamSpec& p : effectParams(name)) {
+          const double was = fx.contains("params") && fx["params"].contains(p.name) ? fx["params"][p.name].get<double>() : p.def;
+          const double to = other(p, was);
+          if (to == was) continue;
+          json edited = project;
+          edited["tracks"][ti]["effects"][ei]["params"][p.name] = to;
+          tryKnob(id, name + "#" + std::to_string(ei), p.name, was, to, edited);
+        }
+      }
+  }
+  std::cout << json({{"knobs", tried}, {"notComingBack", bad}}).dump() << std::endl;
+  return bad ? 1 : 0;
+}
+
 // loopcheck: does the song sound the same on every pass of the loop, through the real device? (Diogo
 // 2026-11-06: "after 8 bars, when it starts again, it sounds different".) The song loops through the device
 // (as the app plays it) and the output is recorded; then the same loop is rendered offline. For each pass:
 // its loudness, its share of highs (above ~2 kHz: a muffled pass has less) and how far it is from pass 2 and
 // from the offline render of the same pass. --out writes the device recording as a WAV.
-static int loopcheck(const std::vector<std::string>& args) {
+static int loopcheck(PluginHost* plugins, const std::vector<std::string>& args) {
   std::ifstream in(args[1]);
   if (!in) throw std::runtime_error("Cannot read " + args[1]);
   const json project = json::parse(in);
   const int passes = std::max(2, std::stoi(option(args, "--passes", "4")));
   const int64_t bars = std::stoll(option(args, "--bars", "0"));  // 0: the whole song
-  Server live(makeMiniaudioOutput, 48000);
+  Server live(makeMiniaudioOutput, 48000, plugins);
   auto call = [](Server& server, const std::string& cmd, const json& a = json::object()) {
     json r = server.handle({{"cmd", cmd}, {"args", a}});
     if (!r.value("ok", false)) throw std::runtime_error(cmd + ": " + r.value("error", std::string("failed")));
@@ -195,7 +357,7 @@ static int loopcheck(const std::vector<std::string>& args) {
   size_t first = 0;
   while (first < L.size() && std::fabs(L[first]) < 1e-6f && std::fabs(R[first]) < 1e-6f) ++first;
   // The same loop, offline.
-  Server offline(nullptr, sr);
+  Server offline(nullptr, sr, plugins);
   call(offline, "project.load", {{"project", project}});
   call(offline, "transport.loop", {{"enabled", true}, {"startTick", 0}, {"endTick", endTick}});
   call(offline, "transport.seek", {{"tick", 0}});
@@ -271,11 +433,11 @@ static int loopcheck(const std::vector<std::string>& args) {
 
 // M10 soak: the song looping on the device for minutes or hours, with an edit every 10 s (a fader, the tempo
 // and back, the whole song loaded again as an undo does), one JSON line per minute and a summary at the end.
-static int soak(const std::vector<std::string>& args) {
+static int soak(PluginHost* plugins, const std::vector<std::string>& args) {
   std::ifstream in(args[1]);
   if (!in) throw std::runtime_error("Cannot read " + args[1]);
   const json project = json::parse(in);
-  Server server(makeMiniaudioOutput, 48000);
+  Server server(makeMiniaudioOutput, 48000, plugins);
   auto call = [&](const std::string& cmd, const json& a = json::object()) {
     json r = server.handle({{"cmd", cmd}, {"args", a}});
     if (!r.value("ok", false)) throw std::runtime_error(cmd + ": " + r.value("error", std::string("failed")));
@@ -306,7 +468,7 @@ static int soak(const std::vector<std::string>& args) {
                 {"starvations", stats["starvations"]}, {"callbackErrors", stats["callbackErrors"]}, {"nonFiniteBlocks", stats["nonFiniteBlocks"]},
                 {"avgLoadPct", stats["avgLoadPct"]}, {"loadP50Pct", stats["loadP50Pct"]}, {"loadP95Pct", stats["loadP95Pct"]},
                 {"loadP99Pct", stats["loadP99Pct"]}, {"maxLoadPct", stats["maxLoadPct"]}, {"maxEditToAudioMs", stats["maxEditToAudioMs"]},
-                {"droppedNotes", stats["droppedNotes"]}, {"leakedGraphs", stats["leakedGraphs"]},
+                {"droppedNotes", stats["droppedNotes"]}, {"leakedGraphs", stats["leakedGraphs"]}, {"failedPlugins", stats["failedPlugins"]},
                 {"deviceDriftPpm", stats["deviceDriftPpm"]}, {"rssMb", residentMb()},
                 {"liveThreads", stats["liveThreads"]}, {"liveFallback", stats["liveFallback"]}, {"liveStalls", stats["liveStalls"]}};
   };
@@ -335,7 +497,7 @@ static int soak(const std::vector<std::string>& args) {
   json end = summary(elapsed);
   call("engine.stop");
   const bool pass = end["overruns"] == 0 && end["starvations"] == 0 && end["callbackErrors"] == 0 && end["nonFiniteBlocks"] == 0 &&
-                    end["leakedGraphs"] == 0;
+                    end["leakedGraphs"] == 0 && end["failedPlugins"].empty();
   end["event"] = "end";
   end["pass"] = pass;
   emit(end.dump());
@@ -371,6 +533,10 @@ static void dumpsInto(const std::string& folderUtf8) {
   if (n <= 0) return;
   wcscat_s(dumpPath, name);
   SetUnhandledExceptionFilter(writeDump);
+#ifdef CORE_ENGINE_PLUGINS
+  // A plugin may put its own crash handler in (some do when they load): ours goes back after each call.
+  core::plugins::setAfterPluginCode([] { SetUnhandledExceptionFilter(writeDump); });
+#endif
 }
 #else
 static void dumpsInto(const std::string&) {}
@@ -380,24 +546,94 @@ int main(int argc, char** argv) {
   std::vector<std::string> args(argv + 1, argv + argc);
   const std::string mode = args.empty() ? "help" : args[0];
   if (mode == "--version" || mode == "version") { std::cout << "core-engine " << CORE_BUILD_ID << '\n'; return 0; }
-  if (mode == "serve") dumpsInto(option(args, "--dumps", ""));
-  if (mode == "serve" || mode == "soak") keepStdoutForProtocol();
+  if (mode == "serve") { dumpsInto(option(args, "--dumps", "")); g_pluginLog = option(args, "--plugin-log", ""); }
+  if (mode == "serve" || mode == "scan" || mode == "qualify" || mode == "matrix" || mode == "soak") keepStdoutForProtocol();
   try {
-    if (mode == "serve") return serve();
-    if (mode == "soak" && args.size() >= 2) return soak(args);
-    if (mode == "loopcheck" && args.size() >= 2) return loopcheck(args);
+#ifdef CORE_ENGINE_PLUGINS
+    // Plugins live on the JUCE message thread (this one): the protocol runs on its own thread and the
+    // message loop here, until stdin closes.
+    if (mode == "serve") {
+      core::plugins::Runtime juce;
+      EnginePlugins plugins;
+      return core::plugins::runWithMessageLoop([&] { return serve(&plugins); });
+    }
+    if (mode == "soak" && args.size() >= 2) {
+      core::plugins::Runtime juce;
+      EnginePlugins plugins;
+      return core::plugins::runWithMessageLoop([&] { return soak(&plugins, args); });
+    }
+    if (mode == "loopcheck" && args.size() >= 2) {
+      core::plugins::Runtime juce;
+      EnginePlugins plugins;
+      return core::plugins::runWithMessageLoop([&] { return loopcheck(&plugins, args); });
+    }
+    if (mode == "scan" && args.size() >= 2) {
+      core::plugins::Runtime juce;
+      emit(core::plugins::scanFile(args[1]).dump());
+      return 0;
+    }
+    if (mode == "qualify" && args.size() >= 2) {  // each plugin of the file plays on its own (see qualify.hpp)
+      core::plugins::Runtime juce;
+      const double sr = std::stod(option(args, "--sr", "48000"));
+      json results = json::array();
+      int status = 0;
+      core::plugins::runWithMessageLoop([&] {
+        core::plugins::JuceHost host;
+        for (const auto& p : core::plugins::scanFile(args[1])) {
+          json r = core::qualifyPlugin(host, p, sr);
+          r["id"] = p.value("id", "");
+          if (r["verdict"] != "ok") status = 3;
+          results.push_back(std::move(r));
+          host.releaseAll();
+        }
+        return 0;
+      });
+      emit(results.dump());
+      return status;
+    }
+    if (mode == "matrix" && args.size() >= 2) {
+      core::plugins::Runtime juce;
+      const double sr = std::stod(option(args, "--sr", "48000")), tail = std::stod(option(args, "--tail", "20"));
+      json results = json::array();
+      core::plugins::runWithMessageLoop([&] {
+        core::plugins::JuceHost host;
+        for (const auto& p : core::plugins::scanFile(args[1])) {
+          json r = core::pluginMatrix(host, p, sr, tail);
+          r["id"] = p.value("id", "");
+          results.push_back(std::move(r));
+          host.releaseAll();
+        }
+        return 0;
+      });
+      emit(results.dump());
+      return 0;
+    }
+#else
+    if (mode == "serve") return serve(nullptr);
+    if (mode == "soak" && args.size() >= 2) return soak(nullptr, args);
+    if (mode == "loopcheck" && args.size() >= 2) return loopcheck(nullptr, args);
+    if (mode == "scan" || mode == "qualify" || mode == "matrix") { emit("[]"); return 0; }  // no plugin support in this build
+#endif
+    if (mode == "knobcheck" && args.size() >= 2) return knobcheck(args);
     if (mode == "demo") { std::cout << demoProject(args.size() > 1 ? std::stod(args[1]) : 145).dump(2) << '\n'; return 0; }
     if (mode == "devices") { std::cout << makeMiniaudioOutput()->devices(json::object()).dump(2) << '\n'; return 0; }
     if (mode == "render" && args.size() >= 3) {
       std::ifstream in(args[1]);
       if (!in) throw std::runtime_error("Cannot read " + args[1]);
       json project = json::parse(in);
+#ifdef CORE_ENGINE_PLUGINS
+      core::plugins::Runtime juce;  // this thread is the message thread: plugins load here
+      EnginePlugins plugins;
+      Server server(nullptr, std::stod(option(args, "--sr", "48000")), &plugins);
+#else
       Server server(nullptr, std::stod(option(args, "--sr", "48000")));
+#endif
       json r = server.handle({{"cmd", "project.load"}, {"args", {{"project", project}}}});
       if (!r["ok"]) throw std::runtime_error(r["error"].get<std::string>());
-      // A render with a sample that did not load still renders (it is silent), but says so.
+      // A render with a plugin or a sample that did not load still renders (they are silent), but says so.
       const json loaded = r.value("result", json::object());
-      const json missingAssets = loaded.value("missingAssets", json::array());
+      const json missing = loaded.value("missing", json::array()), missingAssets = loaded.value("missingAssets", json::array());
+      for (const auto& m : missing) std::cerr << "missing plugin: " << m.dump() << '\n';
       for (const auto& m : missingAssets) std::cerr << "missing audio: " << m.dump() << '\n';
       json renderArgs = {{"path", args[2]}, {"stems", flag(args, "--stems")}, {"bits", std::stoi(option(args, "--bits", "24"))},
                          {"mono", flag(args, "--mono")}};
@@ -406,7 +642,7 @@ int main(int argc, char** argv) {
       if (const std::string e = option(args, "--end-tick", ""); !e.empty()) renderArgs["endTick"] = std::stoll(e);
       if (const std::string t = option(args, "--tail-ms", ""); !t.empty()) renderArgs["tailMs"] = std::stod(t);
       r = server.handle({{"cmd", "render"}, {"args", renderArgs}});
-      if (r["ok"] && r.contains("result") && r["result"].is_object()) r["result"]["missingAssets"] = missingAssets;
+      if (r["ok"] && r.contains("result") && r["result"].is_object()) { r["result"]["missing"] = missing; r["result"]["missingAssets"] = missingAssets; }
       std::cout << r.dump(2) << '\n';
       return r["ok"] ? 0 : 1;
     }
@@ -424,7 +660,7 @@ int main(int argc, char** argv) {
       std::cout << report.dump(2) << '\n';
       return 0;
     }
-    std::cerr << "usage: core-engine serve | render <project.json> <out.wav> [--stems] [--mono] [--start-tick N --end-tick N --tail-ms MS] | measure [--out dir] [--realtime] | demo [bpm] | devices | soak <project.json> [--minutes 120] | loopcheck <project.json> [--passes 4] [--bars 8] [--out wav]\n";
+    std::cerr << "usage: core-engine serve | render <project.json> <out.wav> [--stems] [--mono] [--start-tick N --end-tick N --tail-ms MS] | measure [--out dir] [--realtime] | demo [bpm] | devices | scan <file.vst3> | qualify <file.vst3> | matrix <file.vst3> | soak <project.json> [--minutes 120] | loopcheck <project.json> [--passes 4] [--bars 8] [--out wav]\n";
     return mode == "help" ? 0 : 2;
   } catch (const std::exception& e) {
     std::cerr << "error: " << e.what() << '\n';

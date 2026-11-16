@@ -87,8 +87,6 @@ public:
   // last take changed (when nothing was edited since) and writes another. tempoTo > 0: the song's tempo glides from
   // the build-up (or roll) to the drop. Returns what happened.
   void showBuildup();
-  void showAttach();
-  void showAttachPlan();
   juce::String buildupTake(const doc::PCoreSettings& settings, int64_t from, int64_t to, double tempoTo, bool again);
   // The Patterns window (P-Core's channel rack, a window of its own): the menus' "Patterns…" open it.
   std::function<void()> onOpenPatterns;

@@ -242,7 +242,7 @@ void RenderJobs::run(std::shared_ptr<Job> job) {
     job->threads = workers.threads();
     for (size_t f = 0; f < count && !job->cancel.load(); ++f) {
       job->file = (int)f;
-      Graph graph(r.project, r.sampleRate, r.assets.get(), true);  // the job's own instruments; audio buffers are read-only
+      Graph graph(r.project, r.sampleRate, r.assets.get(), r.plugins, true);  // the job's own instruments and plugins; audio buffers are read-only
       graph.setSolo(r.outputs[f].track, r.outputs[f].withoutMasterGain);
       // Audio the song needs and cannot be read (moved, deleted, unreadable since the song was loaded): the job
       // fails before any file is written, so an export with holes never replaces the previous one (audit of main

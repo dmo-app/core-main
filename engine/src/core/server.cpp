@@ -13,7 +13,6 @@
 #include <stdexcept>
 #include <chrono>
 #include <thread>
-#include "../dsp/oversample_simd.hpp"
 #include "../io/wav.hpp"
 #include "tempo_map.hpp"
 
@@ -51,6 +50,14 @@ const char* kCommands[][2] = {
   {"render.start", "{path | files: [{path, track?: id (none = the mix), withoutMasterGain?: bool (a stem for a bounce)}], startTick?, endTick?, bits?: 24|32, tailMs?, sampleRate?, revision?} -> job status; runs in the background, sends job events. Stems are taken before the master chain; a region plays the song before it (not written) and cuts it at endTick, tails ring out"},
   {"render.status", "{jobId} -> {jobId, state: queued|running|cancelling|succeeded|cancelled|failed, progress, ...}"},
   {"render.cancel", "{jobId}: stops the job and leaves the target file as it was (cancelRefused if the file is already being put in place)"},
+  {"plugins.missing", "Plugin tracks/effects that are not loaded -> [{key, plugin, why}] (UI: 'Missing instrument')"},
+  {"plugins.failed", "Plugins that failed while playing (M3b: exception, crash, NaN/Inf or runaway level) -> [{key, plugin, why}]: each is silent (its track mutes; on the master the mix goes through) until plugin.retry, the song is loaded again or the plugin replaced"},
+  {"plugin.retry", "{key} a failed plugin gets a new instance from the song's state -> {retried, loaded}"},
+  {"plugins.versions", "Plugins whose installed version is not the one the song was saved with -> [{key, plugin, saved, installed}]"},
+    {"plugins.states", "The state of every loaded plugin -> {key: base64} (saved in the document)"},
+    {"plugin.editor", "{key, open} opens or closes a plugin's own editor window"},
+    {"plugins.release", "Another song: every loaded plugin is let go (the next load starts from that song's states)"},
+    {"plugin.params", "{key} the parameters of a loaded plugin that can be automated -> [{id, name, value, default, steps, text}]"},
   {"commands.list", "This list"},
 };
 
@@ -97,15 +104,15 @@ int liveThreadsFromEnv() {
 } // namespace
 
 RenderResult renderProject(const Project& project, double sampleRate, int blockSize, bool stems, double tailSeconds, EventLog* log, AssetStore* assets,
-                           int threads, bool stemsWithoutMasterGain) {
+                           PluginProvider* plugins, int threads, bool stemsWithoutMasterGain) {
   RenderResult out;
   const uint64_t t0 = nowNs();
   WorkerPool workers(threads < 0 ? WorkerPool::forExport() : threads);
   auto renderOnce = [&](int solo, std::vector<float>& L, std::vector<float>& R, EventLog* lg) {
-    Graph g(project, sampleRate, assets, true);  // an export
+    Graph g(project, sampleRate, assets, plugins, true);  // an export: its own plugin instances
     g.setSolo(solo, stemsWithoutMasterGain);
     g.useWorkers(&workers);
-    g.preroll();  // effect latency: the song starts on sample 0 of the file
+    g.preroll();  // plugin latency: the song starts on sample 0 of the file
     const int64_t total = g.songSamples() + (int64_t)(tailSeconds * sampleRate);
     L.assign((size_t)total, 0.0f); R.assign((size_t)total, 0.0f);
     for (int64_t pos = 0; pos < total; pos += blockSize) {
@@ -124,8 +131,8 @@ RenderResult renderProject(const Project& project, double sampleRate, int blockS
   return out;
 }
 
-Server::Server(OutputFactory makeOutput, double sampleRate)
-    : makeOutput_(std::move(makeOutput)), sampleRate_(sampleRate), engine_(std::make_unique<Engine>(sampleRate)) {
+Server::Server(OutputFactory makeOutput, double sampleRate, PluginHost* plugins)
+    : makeOutput_(std::move(makeOutput)), sampleRate_(sampleRate), engine_(std::make_unique<Engine>(sampleRate)), plugins_(plugins) {
   engine_->setListenDb(listenDb_);
   // A new id for every engine process: replies and state from an old session can never be mistaken
   // for this one after a restart.
@@ -138,7 +145,7 @@ Server::Server(OutputFactory makeOutput, double sampleRate)
 }
 
 // What a note played now waits before it is heard (audit 48c9c38 I2): the tracks lined up with the
-// slowest one (limiter: 39, saturation 2: 16), the master
+// slowest one (plugin blocks of 128 + what plugins declare, limiter 2: 39, saturation 2: 16), the master
 // chain, and the device's buffers.
 json Server::latencyJson() const {
   const double deviceMs = outputInfo_.is_object() ? outputInfo_.value("latencyMs", 0.0) : 0.0;
@@ -167,7 +174,7 @@ json Server::hello() const {
           {"limits", {{"maxMessageBytes", kMaxMessageBytes}, {"maxTracks", Engine::kMaxTracks}, {"maxNotesPerTrack", 4096},
                       {"liveNoteQueue", 255}, {"timedNoteOffs", 32}}},
           {"capabilities", {"revisions", "renderJobs", "clips", "tempoMap"}},  // what this engine understands
-          {"dsp", dspPathName(dspPath())},  // saturation 2's up-sampler: "avx" or "scalar" (CORE_DSP_SIMD=scalar)
+          {"dsp", "plugins"},  // Core's own DSP left (2026-11-16): the sound comes from plugins
           {"commands", commandList()}};
 }
 
@@ -191,12 +198,17 @@ json Server::commandList() {
 
 void Server::rebuild(bool keepTails) {
   const uint64_t t0 = nowNs();
-  auto graph = std::make_unique<Graph>(project_, sampleRate_, assets_.get(), false);
+  auto graph = std::make_unique<Graph>(project_, sampleRate_, assets_.get(), plugins_, false);
   missingAssets_ = graph->missingAssets();
+  missingPlugins_ = graph->missingPlugins();
+  latencies_ = graph->pluginLatencies();
+  loadedPlugins_ = graph->plugins();
   cpu_ = graph->cpu();
   cpuBuiltNs_ = nowNs();
+  ++cpuBuilt_;
   trackLatency_ = graph->latency();
   masterLatency_ = graph->masterLatency();
+  if (plugins_) plugins_->keepOnly(graph->pluginKeys());  // plugins no longer in the song are released
   graph->revision = revision_;
   graph->keepTails = keepTails;
   std::vector<std::string> ids;
@@ -209,8 +221,8 @@ void Server::rebuild(bool keepTails) {
 }
 
 // Stop silences everything, delay and reverb tails too: an echo ringing on after Stop sounds like a fault
-// (2026-11-05). The output fades out first, so cutting the tails is never heard; then a graph that takes
-// none from the old one plays from silence.
+// (2026-11-05). The output fades out first, so cutting the tails is never heard; then the plugins drop
+// their tails, and a graph that takes none from the old one plays from silence.
 void Server::stopTransport(bool rewind) {
   engine_->stop(rewind, true);
   if (output_) {
@@ -219,6 +231,7 @@ void Server::stopTransport(bool rewind) {
   }
   uint64_t serial = 0;  // should the rebuild fail: sound again at once
   try {
+    if (plugins_) plugins_->resetAll();
     rebuild(false);
     serial = published_.back().first;
   } catch (...) {
@@ -226,6 +239,12 @@ void Server::stopTransport(bool rewind) {
     throw;
   }
   engine_->unmuteAt(serial);
+}
+
+bool Server::checkPluginLatency() {
+  for (const auto& [processor, used] : latencies_)
+    if (processor->latencySamples() != used) { rebuild(); return true; }
+  return false;
 }
 
 Track Server::buildTrack(const Source& s) {
@@ -356,18 +375,37 @@ json Server::execute(const std::string& cmd, const json& args) {
     return {{"callbacks", s.callbacks.load()}, {"overruns", s.overruns.load()}, {"starvations", s.lateCallbacks.load()},
             {"maxRenderMs", s.maxRenderNs.load() / 1e6}, {"avgRenderMs", s.totalRenderNs.load() / calls / 1e6},
             {"graphSwaps", s.graphSwaps.load()}, {"minCallbackFrames", s.minFrames.load() == UINT64_MAX ? 0 : s.minFrames.load()}, {"maxCallbackFrames", s.maxFrames.load()}, {"maxEditToAudioMs", s.maxSwapDelayNs.load() / 1e6},
-            {"lastRebuildMs", lastRebuildNs_ / 1e6}, {"leakedGraphs", s.leakedGraphs.load()},
+            {"lastRebuildMs", lastRebuildNs_ / 1e6}, {"leakedGraphs", s.leakedGraphs.load()}, {"pluginNotesDropped", pluginNotesDropped()},
             {"liveNotesRejected", s.liveNotesRejected.load()}, {"liveOffOverflows", s.liveOffOverflows.load()}, {"liveOffAllTracks", s.liveOffAllTracks.load()},
             {"auditionSteals", s.auditionSteals.load()}, {"denseEventBlocks", s.denseEventBlocks.load()}, {"droppedNotes", s.droppedNotes.load()}, {"callbackErrors", s.callbackErrors.load()},
             {"avgLoadPct", s.totalBudgetNs.load() ? 100.0 * s.totalRenderNs.load() / s.totalBudgetNs.load() : 0.0}, {"maxLoadPct", s.maxLoadPpm.load() / 1e4},
             {"loadP50Pct", s.loadPercentile(50)}, {"loadP95Pct", s.loadPercentile(95)}, {"loadP99Pct", s.loadPercentile(99)},
             {"nonFiniteBlocks", s.nonFiniteBlocks.load()}, {"deviceDriftPpm", s.deviceDriftPpm.load()},
-            {"nativeFailures", nativeFailures()}, {"failedUnits", failedUnits()},
+            {"pluginFailures", pluginFailures()}, {"nativeFailures", nativeFailures()}, {"failedUnits", failedUnits()}, {"failedPlugins", failedPlugins()},
             {"liveThreads", engine_->liveThreads()}, {"liveFallback", engine_->liveFallback()},
             {"liveStalls", s.liveStalls.load()}, {"liveStallBlocks", s.liveStallBlocks.load()},
             {"device", outputInfo_}, {"latency", latencyJson()}};
   }
   if (cmd == "project.get") return toJson(project_);
+  if (cmd == "plugins.missing") return missingPlugins();
+  if (cmd == "plugins.failed") { logFailures(); return failedPlugins(); }
+  if (cmd == "plugins.versions") return pluginVersions();
+  if (cmd == "plugin.retry") {
+    // A new instance of a failed plugin, from the song's state: the host lets the old one go first.
+    const std::string key = strArg(args, "key");
+    auto it = std::find_if(loadedPlugins_.begin(), loadedPlugins_.end(), [&](const Graph::LoadedPlugin& p) { return p.key == key; });
+    if (it == loadedPlugins_.end()) throw std::runtime_error("No plugin '" + key + "' in this song.");
+    if (!it->processor->failed()) return {{"retried", false}};
+    logFailures();
+    if (plugins_) {
+      std::vector<std::string> keep;
+      for (const auto& p : loadedPlugins_) if (p.key != key) keep.push_back(p.key);
+      plugins_->keepOnly(keep);
+    }
+    rebuild();
+    auto again = std::find_if(loadedPlugins_.begin(), loadedPlugins_.end(), [&](const Graph::LoadedPlugin& p) { return p.key == key; });
+    return {{"retried", true}, {"loaded", again != loadedPlugins_.end() && !again->processor->failed()}};
+  }
   if (cmd == "engine.cpu") return cpu();
   if (cmd == "project.load") {
     if (!args.contains("project")) throw std::runtime_error("'project' is required.");
@@ -385,7 +423,8 @@ json Server::execute(const std::string& cmd, const json& args) {
     sources_ = std::move(sources);
     projectFromV1_ = p.value("version", 0) == 1;
     commit(revision);
-    json loaded = {{"tracks", project_.tracks.size()}, {"missingAssets", missingAssets_}, {"lengthSamples", tempo().sampleOfTick(project_.lengthTicks)}};
+    json loaded = {{"tracks", project_.tracks.size()}, {"missing", missingPlugins()}, {"missingAssets", missingAssets_}, {"lengthSamples", tempo().sampleOfTick(project_.lengthTicks)}};
+    if (json versions = pluginVersions(); !versions.empty()) loaded["versionChanged"] = std::move(versions);  // never silent
     if (!project_.renamedEffects.empty()) loaded["renamedEffects"] = project_.renamedEffects;  // ids with ':' (E6)
     if (!project_.conversionNotes.empty()) loaded["converted"] = project_.conversionNotes;  // what an old version lost
     return loaded;
@@ -498,6 +537,24 @@ json Server::execute(const std::string& cmd, const json& args) {
     return json::object();
   }
   if (cmd == "render") return render(args);
+  if (cmd == "plugins.states") {
+    if (!plugins_) return json::object();
+    return plugins_->captureStates();
+  }
+  if (cmd == "plugins.release") {
+    if (plugins_) plugins_->releaseAll();
+    return json::object();
+  }
+  if (cmd == "plugin.params") {
+    if (!plugins_) return json::array();
+    return plugins_->parameters(strArg(args, "key"));
+  }
+  if (cmd == "plugin.editor") {
+    if (!plugins_) throw std::runtime_error("Plugins are not available in this engine.");
+    std::string why;
+    if (!plugins_->showEditor(strArg(args, "key"), args.value("open", true), &why)) throw std::runtime_error(why);
+    return json::object();
+  }
   if (cmd == "render.start") {
     // Exports a validated revision: the one asked for must be the accepted one (or none given).
     if (args.contains("revision") && !args["revision"].is_null() && args["revision"] != json(revision_))
@@ -529,6 +586,7 @@ json Server::execute(const std::string& cmd, const json& args) {
     request.startTick = integerArg(args, "startTick", 0, 0, project_.lengthTicks);
     request.endTick = integerArg(args, "endTick", -1, -1, project_.lengthTicks);
     request.assets = assets_;
+    request.plugins = plugins_;
     return jobs_.start(std::move(request));
   }
   if (cmd == "render.status") return jobs_.status((uint64_t)integerArg(args, "jobId", 0, 0, INT64_C(9007199254740991)));
@@ -571,7 +629,7 @@ json Server::render(const json& args) {
     }
   }
   validateRenderOutputs(outputs);
-  RenderResult r = renderProject(project, sr, 512, stems, tail / 1000.0, nullptr, assets_.get());
+  RenderResult r = renderProject(project, sr, 512, stems, tail / 1000.0, nullptr, assets_.get(), plugins_);
   if (skip > 0) {
     auto cut = [skip](std::vector<float>& v) { v.erase(v.begin(), v.begin() + std::min<int64_t>(skip, (int64_t)v.size())); };
     cut(r.L);
@@ -610,6 +668,14 @@ json Server::render(const json& args) {
   return {{"path", path}, {"stems", stemPaths}, {"seconds", seconds}, {"channels", channels}, {"sampleRate", sr}, {"peak", r.peak},
           {"renderMs", r.renderMs}, {"realtimeFactor", seconds * 1000 / std::max(0.001, r.renderMs)},
           {"denseEventBlocks", r.denseEventBlocks}};
+}
+
+// Plugins (tracks and effects) that could not be loaded: {key, plugin, why}. Their tracks keep their
+// notes and the effects their state; they are silent ("Missing instrument").
+json Server::missingPlugins() const {
+  json out = json::array();
+  for (const auto& m : missingPlugins_) out.push_back(m);
+  return out;
 }
 
 json Server::stateEvent() {
@@ -653,10 +719,55 @@ json Server::stateEvent() {
     for (const float db : engine_->effectAnalyzer().spectrum()) bands.push_back(rounded(db, "%.1f"));
     state["effectSpectrum"] = std::move(bands);
   }
+  json failed = failedPlugins();
+  if (!failed.empty()) { state["failedPlugins"] = std::move(failed); logFailures(); }  // only when a plugin failed (M3b)
   // Built-in instruments and effects that failed (non-finite or runaway audio) and went silent: the app says
   // which, instead of a track that just goes quiet (Diogo's report 2026-11-06, "the engine never says so").
   if (const auto units = failedUnits(); !units.empty()) state["failedUnits"] = units;
   return state;
+}
+
+json Server::failedPlugins() const {
+  json list = json::array();
+  for (const auto& p : loadedPlugins_)
+    if (p.processor && p.processor->failed())
+      list.push_back({{"key", p.key}, {"plugin", p.name}, {"why", PluginProcessor::failureName(p.processor->failure())}});
+  return list;
+}
+
+json Server::pluginVersions() const {
+  json list = json::array();
+  for (const auto& p : loadedPlugins_) {
+    if (!p.processor) continue;
+    const std::string installed = p.processor->installedVersion(), saved = p.ref.value("version", std::string());
+    if (!installed.empty() && !saved.empty() && installed != saved)
+      list.push_back({{"key", p.key}, {"plugin", p.name}, {"saved", saved}, {"installed", installed}});
+  }
+  return list;
+}
+
+void Server::logFailures() {
+  for (const auto& p : loadedPlugins_) {
+    if (!p.processor || !p.processor->failed()) continue;
+    if (std::find(logged_.begin(), logged_.end(), p.processor.get()) != logged_.end()) continue;
+    logged_.push_back(p.processor.get());
+    if (failureLog_.empty()) continue;
+    const std::time_t now = std::time(nullptr);
+    std::tm local{};
+#ifdef _WIN32
+    localtime_s(&local, &now);
+#else
+    localtime_r(&now, &local);
+#endif
+    char when[32] = {};
+    std::strftime(when, sizeof when, "%Y-%m-%dT%H:%M:%S", &local);
+    const json line = {{"time", when}, {"key", p.key}, {"plugin", p.name}, {"vendor", p.ref.value("vendor", "")},
+                       {"version", p.ref.value("version", "")}, {"installed", p.processor->installedVersion()},
+                       {"why", PluginProcessor::failureName(p.processor->failure())}};
+    const std::filesystem::path file(std::u8string(reinterpret_cast<const char8_t*>(failureLog_.data()), failureLog_.size()));
+    std::ofstream out(file, std::ios::app);
+    if (out) out << line.dump() << '\n';
+  }
 }
 
 json Server::cpu() {
@@ -669,8 +780,8 @@ json Server::cpu() {
   json out = {{"load", {{"avgPct", avgPct}, {"maxPct", maxPct}, {"marginPct", std::max(0.0, 100.0 - maxPct)}}}};
   if (!cpu_) { out["intervalMs"] = 0; out["totalPct"] = 0; out["tracks"] = json::array(); out["master"] = {{"cpuPct", 0}, {"effects", json::array()}}; return out; }
   const auto& entries = cpu_->entries;
-  if (cpuRead_ != cpu_.get()) {  // another graph since the last call: its time counts from when it was built
-    cpuRead_ = cpu_.get();
+  if (cpuRead_ != cpuBuilt_ || cpuPrev_.size() != entries.size()) {  // another graph since the last call: from when it was built
+    cpuRead_ = cpuBuilt_;
     cpuPrev_.assign(entries.size(), 0);
     cpuReadNs_ = cpuBuiltNs_;
   }

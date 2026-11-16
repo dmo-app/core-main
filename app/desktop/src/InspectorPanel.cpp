@@ -4,8 +4,6 @@
 #include <cmath>
 #include <cstring>
 #include "Theme.h"
-#include "PluginHelp.h"
-#include "attach.hpp"
 #include "edit.hpp"
 
 namespace core::app {
@@ -172,7 +170,9 @@ juce::StringArray effectsOf(const doc::Track& t, juce::StringArray* off = nullpt
     if (fx.contains("attach")) continue;
     const std::string id = doc::effectName(fx);
     const doc::EffectInfo* info = doc::findEffect(id);
-    const juce::String name = info ? u8(info->label) : u8(id);
+    const juce::String name = fx.value("type", std::string()) == "plugin" && fx.contains("plugin")
+                                  ? u8(fx["plugin"].value("name", std::string("Plugin")))
+                                  : info ? u8(info->label) : u8(id);
     if (doc::effectBypassed(fx)) { if (off) off->add(name); }
     else on.add(name);
   }
@@ -207,19 +207,11 @@ juce::String valueText(double v, const char* unit, double max, double step, cons
   return u.isEmpty() ? n : n + " " + u;
 }
 
-// What a sound is, in one sentence to learn it by: the help file's summary when Core has one, else these words.
-juce::String helpSummary(const std::string& id) {
-  static const std::vector<std::string> ids = pluginHelpIds();
-  if (std::find(ids.begin(), ids.end(), id) == ids.end()) return {};
-  return u8(pluginHelpFor(id).summary);
-}
-
 juce::String soundDescription(const doc::Track& t) {
   const doc::Instrument& i = t.instrument;
   if (i.kind == "audio") return "Plays audio files as they are, placed on the timeline.";
   if (i.kind == "bus") return "A bus: other tracks send their sound here, so one set of effects plays on all of them.";
-  const juce::String fromHelp = helpSummary(i.name);
-  if (fromHelp.isNotEmpty()) return fromHelp;
+  if (i.kind == "plugin") return "Played by a plugin: double-click the track's name to open its window.";
   if (i.name == "kick") return "Core's own kick: a sine that falls fast from Start pitch to End pitch. The fall is the punch, the low end is the body, "
                                "Click adds the attack and Decay sets how long it sounds.";
   if (i.name == "hats") return "Core's own hats: bright filtered noise. Closed hats are short, open hats ring longer; Tone sets how bright.";
@@ -230,8 +222,6 @@ juce::String soundDescription(const doc::Track& t) {
 }
 
 juce::String effectDescription(const std::string& id) {
-  const juce::String fromHelp = helpSummary(id);
-  if (fromHelp.isNotEmpty()) return fromHelp;
   if (id == "eq") return "EQ: turns the lows, mids and highs up or down.";
   if (id == "filter") return "Filter: cuts the highs (low-pass) or the lows (high-pass) above or below the cutoff.";
   if (id == "compressor") return "Compressor: brings loud parts down so the sound is more even and sits forward.";
@@ -304,9 +294,6 @@ void InspectorPanel::update(const std::string& selectedTrack, const std::string&
     for (const auto& c : t->clips)
       if (c.id == selectedClip) {
         sig << "|" << (int)c.startTick << ":" << (int)c.lengthTicks << ":" << u8(c.patternId);
-        for (int place = 0; place < 3; ++place) sig << ":" << u8(doc::clipAttach(c, place));
-        if (const doc::Pattern* p = t->findPattern(c.patternId))
-          for (const auto& n : p->notes) for (int place = 0; place < 3; ++place) sig << u8(doc::noteAttach(n, place));
       }
   }
   if (sig.toStdString() == seen_) return;
@@ -351,24 +338,7 @@ void InspectorPanel::update(const std::string& selectedTrack, const std::string&
         fact(facts_, "Pattern", (p ? u8(p->name) : juce::String("?")));
         fact(facts_, "Start", "bar " + barBeat(c.startTick));
         fact(facts_, "Length", juce::String(c.lengthTicks / (4.0 * doc::kPpq), 2).trimCharactersAtEnd("0").trimCharactersAtEnd(".") + " bars");
-        // Everything that plays on it: the track's filters and effects, then the attachments on the clip and its notes.
-        describeEffects(facts_, *t);
-        static const char* places[] = {"Start", "Middle", "End"};
-        juce::StringArray attached;
-        for (int place = 0; place < 3; ++place) {
-          const std::string a = doc::clipAttach(c, place);
-          if (!a.empty()) attached.add(juce::String(places[place]) + ": " + u8(a));
-        }
-        if (!attached.isEmpty()) addList(facts_, "Attached", attached);
-        if (p) {
-          juce::StringArray onNotes;
-          for (const auto& n : p->notes)
-            for (int place = 0; place < 3; ++place) {
-              const std::string a = doc::noteAttach(n, place);
-              if (!a.empty()) onNotes.addIfNotAlreadyThere(u8(a));
-            }
-          if (!onNotes.isEmpty()) addList(facts_, "On notes", onNotes);
-        }
+        describeEffects(facts_, *t);  // everything that plays on it: the track's plugin effects
       }
     for (const auto& c : t->audioClips)
       if (c.id == selectedClip) {
