@@ -29,8 +29,9 @@ function Get-JuceVersion([string]$dir) {
   $h = Join-Path $dir "modules\juce_core\system\juce_StandardHeader.h"
   if (-not (Test-Path $h)) { return $null }
   $t = Get-Content -Raw $h
-  $v = @("MAJOR", "MINOR", "BUILDNUMBER") | ForEach-Object {
-    if ($t -match "#define\s+JUCE_${_}_VERSION\s+(\d+)") { $Matches[1] } else { "?" } }
+  # juce_StandardHeader.h: JUCE_MAJOR_VERSION, JUCE_MINOR_VERSION e JUCE_BUILDNUMBER (este sem _VERSION).
+  $v = @("JUCE_MAJOR_VERSION", "JUCE_MINOR_VERSION", "JUCE_BUILDNUMBER") | ForEach-Object {
+    if ($t -match "#define\s+${_}\s+(\d+)") { $Matches[1] } else { "?" } }
   return ($v -join ".")
 }
 $juceDir = ""
