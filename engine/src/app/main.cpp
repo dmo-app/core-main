@@ -583,7 +583,7 @@ int main(int argc, char** argv) {
           std::string why;
           const std::string key = "params:" + p.value("id", std::string());
           json r = {{"id", p.value("id", "")}, {"name", p.value("name", "")}};
-          if (host.get(key, p, 48000, true, &why)) r["params"] = host.parameters(key);
+          if (host.get(key, p, 48000, false, &why)) r["params"] = host.parameters(key);  // live: parameters() reads the live instances
           else r["problem"] = why;
           results.push_back(std::move(r));
           host.releaseAll();

@@ -1808,7 +1808,9 @@ void PatternEditor::noteTool(const std::string& kind, int value) {
     // Shuffling swaps pitches (drums: loudness) between notes: it needs two notes that differ.
     std::set<int> kinds;
     const std::set<std::string> ids = editIds();
-    for (const auto& n : pattern()->notes) if (ids.count(n.id)) kinds.insert(drum ? (int)std::lround(n.velocity * 100) : n.pitch);
+    const doc::Pattern* shown = pattern();
+    if (!shown) return;  // the track or the pattern went (sweep: null dereference)
+    for (const auto& n : shown->notes) if (ids.count(n.id)) kinds.insert(drum ? (int)std::lround(n.velocity * 100) : n.pitch);
     if (!ids.empty() && kinds.size() < 2) {
       say(juce::String(drum ? u8("Shuffle the loudness") : u8("Shuffle the pitches")) + u8(": needs 2 or more notes with different ") +
           (drum ? u8("loudness") : u8("pitches")) + u8(" in the bars shown (") + juce::String((int)ids.size()) +

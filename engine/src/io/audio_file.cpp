@@ -130,7 +130,7 @@ AudioData readWav(const std::string& path, int64_t maxFrames) {
       if (channels == 1) out.R = out.L;
       return out;
     }
-    in.ignore(size + (size & 1));  // another chunk (LIST, bext...)
+    in.ignore((std::streamsize)size + (std::streamsize)(size & 1));  // another chunk (LIST, bext...); 64-bit: 0xFFFFFFFF + 1 is not 0 (sweep)
   }
 }
 

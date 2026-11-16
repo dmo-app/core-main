@@ -316,15 +316,16 @@ json Server::execute(const std::string& cmd, const json& args) {
   if (cmd == "commands.list") return commandList();
   if (cmd == "devices.list") { auto out = makeOutput_(); return out ? out->devices(args) : json::array(); }
   if (cmd == "engine.start") {
-    if (output_) { output_->stop(); output_.reset(); }
+    // The arguments are checked before the sound stops: a refused start changes nothing (sweep: it used to leave
+    // the device stopped).
     double sr = numArg(args, "sampleRate", sampleRate_);
     if (!(sr >= 8000 && sr <= 384000)) throw std::runtime_error("sampleRate must be 8000-384000.");
     // M5: tracks on several cores while playing. {liveThreads: n} or CORE_LIVE_THREADS; default 4 (0 = serial).
     const int live = (int)std::clamp(numArg(args, "liveThreads", (double)liveThreadsFromEnv()), 0.0, 32.0);
-    if (args.contains("listenDb")) {
-      if (!args["listenDb"].is_number()) throw std::runtime_error("listenDb must be a number (dB).");
+    if (args.contains("listenDb") && !args["listenDb"].is_number()) throw std::runtime_error("listenDb must be a number (dB).");
+    if (output_) { output_->stop(); output_.reset(); }
+    if (args.contains("listenDb"))
       listenDb_ = std::clamp(args["listenDb"].get<double>(), OutputGuard::kListenMinDb, OutputGuard::kListenMaxDb);
-    }
     if (sr != sampleRate_ || !engine_ || live != engine_->liveThreads()) {
       sampleRate_ = sr;
       engine_ = std::make_unique<Engine>(sampleRate_, live);

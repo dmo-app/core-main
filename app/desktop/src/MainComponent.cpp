@@ -2569,7 +2569,7 @@ bool MainComponent::copyClips() {
         CopiedClip x; x.trackId = trackId; x.audio = true; x.audioClip = c;
         copied.push_back(x);
         from = std::min(from, c.startTick);
-        to = std::max(to, c.startTick + (int64_t)std::llround(c.durationSeconds * d.bpm / 60.0 * kPpq));
+        to = std::max(to, audioEndTick(d, c));  // through the tempo map (sweep: the first BPM only)
       }
   }
   if (copied.empty()) {
@@ -2610,9 +2610,8 @@ void MainComponent::pasteClips(int64_t at) {
         ++skipped;  // its track or pattern is gone, or the track is full
       }
     }
-    int64_t end = 0;
-    for (const auto& t : d.tracks) for (const auto& c : t.clips) end = std::max(end, c.startTick + c.lengthTicks);
-    d.lengthTicks = std::max(d.lengthTicks, end);
+    // The song grows to hold what was pasted, audio clips too (sweep: only note clips counted).
+    for (const auto& [trackId, clipId] : pasted) fitSong(d, trackId, clipId);
   }, pasted.size() == 1 ? u8("Paste clip") : u8("Paste clips"));
   boxClips_ = pasted;
   if (pasted.size() == 1) selectClip(pasted.begin()->first, pasted.begin()->second);

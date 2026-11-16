@@ -37,7 +37,7 @@ std::string str(const json& j, const char* key, const std::string& fallback = ""
   return j.contains(key) && j[key].is_string() ? j[key].get<std::string>() : fallback;
 }
 
-long noteNumber(const std::string& id) { return id.size() > 1 && id[0] == 'n' ? std::strtol(id.c_str() + 1, nullptr, 10) : 0; }
+long noteNumber(const std::string& id) { return id.size() > 1 && id[0] == 'n' ? idNumber(id.c_str() + 1) : 0; }
 
 // A note being made: ticks from the start of the range.
 struct Hit { int64_t tick = 0, length = 0; int pitch = 60; double velocity = 0.8; };
@@ -1433,11 +1433,17 @@ PCoreLayers pcoreLayersFromJson(const json& j) {
   l.quantize = num("quantize", 0);
   l.shuffle = j.value("shuffle", false);
   l.reverse = j.value("reverse", false);
-  l.variationEvery = (int)num("variationEvery", 0);
-  l.rollBeats = (int)num("rollBeats", 0);
+  // Whole numbers kept inside int before the cast (sweep: a huge or NaN value was undefined); checkPCoreLayers then
+  // refuses what is out of its own range.
+  const auto whole = [&](const char* k) {
+    const double v = num(k, 0);
+    return v == v ? (int)std::clamp(v, -1.0e6, 1.0e6) : 0;
+  };
+  l.variationEvery = whole("variationEvery");
+  l.rollBeats = whole("rollBeats");
   l.seed = j.contains("seed") && (j["seed"].is_number_unsigned() || (j["seed"].is_number_integer() && j["seed"].get<int64_t>() >= 0)) ? j["seed"].get<uint64_t>() : 1;
   l.breakFeel = str(j, "breakFeel");
-  l.breakSpacing = (int)num("breakSpacing", 0);
+  l.breakSpacing = whole("breakSpacing");
   l.breakLength = num("breakLength", 0);
   l.align = str(j, "align");
   l.alignOnly = j.value("alignOnly", false);

@@ -218,7 +218,7 @@ std::string importAudio(Document& doc, const fs::path& file, const fs::path& pro
   place(file, projectDir / fromUtf8(rel), hash);
   Asset a;
   long highest = 0;
-  for (const auto& x : doc.assets) if (x.id.rfind("a", 0) == 0) highest = std::max(highest, std::strtol(x.id.c_str() + 1, nullptr, 10));
+  for (const auto& x : doc.assets) if (x.id.rfind("a", 0) == 0) highest = std::max(highest, idNumber(x.id.c_str() + 1));
   a.id = "a" + std::to_string(highest + 1);
   a.name = cutUtf8(name, 200);
   a.path = rel;

@@ -6,6 +6,8 @@
 #include "support/signals.hpp"
 #include "app/measure.hpp"
 #include "core/assets.hpp"
+#include "core/engine.hpp"
+#include "core/graph.hpp"
 #include "core/project.hpp"
 #include "core/server.hpp"
 #include "io/audio_file.hpp"
@@ -189,6 +191,30 @@ TEST("render: ficheiro em falta nao parte o render") {
   RenderResult r = renderProject(p, kSr, 512, false, 0.1, nullptr, &assets, nullptr, 0);
   CHECK(allFinite(r.L));
   CHECK_NEAR(r.peak, 0, 0);
+}
+
+// --- Loop e mudanca de tempo (sweep: o loop era convertido duas vezes) ------------------------------------------
+
+TEST("loop: posto no tempo novo antes de o audio aplicar o grafo novo nao e convertido outra vez") {
+  Engine e(kSr);
+  std::vector<float> L(256), R(256);
+  e.publish(std::make_unique<Graph>(fromJson(demoProject(120)), kSr));
+  e.process(L.data(), R.data(), 256);  // o audio tem o grafo a 120
+  e.setLoop(true, 48000, 96000);
+  e.publish(std::make_unique<Graph>(fromJson(demoProject(240)), kSr));
+  e.setLoop(true, 24000, 48000);  // a app manda o loop ja no tempo novo (metade das amostras)
+  e.process(L.data(), R.data(), 256);
+  CHECK_EQ(e.loopStart(), (int64_t)24000);
+  CHECK_EQ(e.loopEnd(), (int64_t)48000);
+  // Sem loop novo, a mudanca de tempo continua a levar o loop consigo.
+  e.publish(std::make_unique<Graph>(fromJson(demoProject(120)), kSr));
+  e.process(L.data(), R.data(), 256);
+  CHECK_EQ(e.loopStart(), (int64_t)48000);
+  CHECK_EQ(e.loopEnd(), (int64_t)96000);
+  // O fim conta a partir do inicio ja limitado a 0.
+  e.setLoop(true, -500, -100);
+  CHECK_EQ(e.loopStart(), (int64_t)0);
+  CHECK(e.loopEnd() >= 1);
 }
 
 CORE_TEST_MAIN

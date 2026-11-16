@@ -107,6 +107,8 @@ public:
   void unmuteAt(uint64_t serial) { unmuteSerial_.store(serial, std::memory_order_release); }
   void seek(int64_t sample) { seekTo_.store(sample); }
   void setLoop(bool enabled, int64_t start, int64_t end);
+  int64_t loopStart() const { return loopStart_.load(); }  // samples (tests, diagnostics)
+  int64_t loopEnd() const { return loopEnd_.load(); }
   // Queues a live note for the next block. false = refused (note-on with the queue full, or an id too
   // long); a note-off is never refused: if it does not fit, every note is released instead.
   bool liveNote(const std::string& trackId, int pitch, double velocity, bool on, int64_t offAfterSamples = 0);
@@ -195,6 +197,9 @@ private:
   std::atomic<double> positionTicks_{0};
   std::atomic<bool> loopEnabled_{false};
   std::atomic<int64_t> loopStart_{0}, loopEnd_{0};
+  // The loop was set (in samples of the new tempo) after a new graph was published and before the audio thread took
+  // it: that graph's tempo change must not move it again (sweep: the loop was converted twice).
+  std::atomic<bool> loopForPending_{false};
   std::atomic<float> masterPeak_[2] = {};
   std::atomic<float> masterReduction_{0};
   LoudnessMeter loudness_;  // measured by the audio thread on the master output

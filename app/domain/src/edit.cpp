@@ -354,7 +354,7 @@ Track& trackById(Document& doc, const std::string& trackId) { return find(doc, t
 std::string newNoteId(const Pattern& pattern) {
   long highest = 0;
   for (const auto& n : pattern.notes)
-    if (n.id.size() > 1 && n.id[0] == 'n') highest = std::max(highest, std::strtol(n.id.c_str() + 1, nullptr, 10));
+    if (n.id.size() > 1 && n.id[0] == 'n') highest = std::max(highest, idNumber(n.id.c_str() + 1));
   return "n" + std::to_string(highest + 1);
 }
 
@@ -436,7 +436,7 @@ template <typename List>
 std::string nextId(const List& items, const std::string& prefix) {
   long highest = 0;
   for (const auto& x : items)
-    if (x.id.rfind(prefix, 0) == 0) highest = std::max(highest, std::strtol(x.id.c_str() + prefix.size(), nullptr, 10));
+    if (x.id.rfind(prefix, 0) == 0) highest = std::max(highest, idNumber(x.id.c_str() + prefix.size()));
   return prefix + std::to_string(highest + 1);
 }
 Clip& clipById(Track& t, const std::string& clipId) {
@@ -450,6 +450,8 @@ void sortClips(Track& t) {
 
 std::string addPattern(Track& track, int64_t lengthTicks) {
   if (track.patterns.size() >= 64) throw DocumentError("patterns", "the track has the maximum of 64 patterns");
+  // The reader's range (1/32 .. 64 bars): a 0 length divided by zero in the projection (sweep).
+  if (lengthTicks < kPpq / 8 || lengthTicks > 64LL * 4 * kPpq) throw DocumentError("patterns", "a pattern is 1/32 to 64 bars long");
   Pattern p;
   p.id = nextId(track.patterns, "p");
   p.name = std::to_string(track.patterns.size() + 1);
@@ -566,8 +568,7 @@ RegionIsolation isolateRegion(Document& doc, const std::string& trackId, int64_t
         second.lengthTicks = c.startTick + c.lengthTicks - at;
         const Pattern* p = t.findPattern(c.patternId);
         const int64_t len = p ? std::max<int64_t>(1, p->lengthTicks) : 1;
-        second.offsetTicks = (c.offsetTicks + (at - c.startTick)) % len;
-        second.extra = json::object();
+        second.offsetTicks = (c.offsetTicks + (at - c.startTick)) % len;  // its other fields stay (sweep: they were wiped)
         c.lengthTicks = at - c.startTick;
         added.push_back(second);
       }
@@ -601,8 +602,12 @@ RegionIsolation isolateRegion(Document& doc, const std::string& trackId, int64_t
     } else {
       copy.id = nextId(t.patterns, "p");
     }
-    copy.name = (copy.name + " region").substr(0, 40);
-    copy.extra = json::object();
+    copy.name = copy.name + " region";
+    if (copy.name.size() > 40) {  // never cut inside a character (a broken name made the song unsavable)
+      size_t cut = 40;
+      while (cut > 0 && ((unsigned char)copy.name[cut] & 0xC0) == 0x80) --cut;
+      copy.name.resize(cut);
+    }
     t.patterns.push_back(copy);
     for (auto& c : t.clips) if (inside(c) && c.patternId == pid) c.patternId = copy.id;
     out.patterns.emplace_back(pid, copy.id);
@@ -1270,7 +1275,7 @@ std::string nextEffectId(const json& chain) {
   long highest = 0;
   for (const auto& fx : chain)
     if (fx.is_object() && fx.contains("id") && fx["id"].is_string() && fx["id"].get<std::string>().rfind("fx", 0) == 0)
-      highest = std::max(highest, std::strtol(fx["id"].get<std::string>().c_str() + 2, nullptr, 10));
+      highest = std::max(highest, idNumber(fx["id"].get<std::string>().c_str() + 2));
   return "fx" + std::to_string(highest + 1);
 }
 

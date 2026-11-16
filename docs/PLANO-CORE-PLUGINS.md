@@ -57,14 +57,35 @@ Verificado: compila, self-test 53/53, e verificação à parte de D1, D2, D6, PL
 
 O `.core` guarda as pistas, os clips, as secções, o tempo, a automação e o estado de cada plugin. O Core abre e toca isso sozinho.
 
-## Falta fazer (por ordem)
+## Feito a 2026-11-16 (ramo `claude/project-thread-rl6ita`)
 
-1. **Mapa de papéis.** Em Settings escolhe-se uma vez o plugin para cada papel: reverb → Valhalla, delay, filtro, sidechain, bass → Serum, etc.
-2. **Tools a usar os plugins.** SUCK, PUM, ROLL e os build-ups inserem o plugin do papel e automatizam os parâmetros dele.
-3. **Presets do Serum.** Carregar `.SerumPreset` por nome numa pista, com a ferramenta que já está em `D:\SERUM 2`.
-4. **MIDI.** Importar `.mid` para padrões, e exportar `.mid` com os rolls expandidos tal como tocam.
-5. **VST2.** Precisa da autorização do Diogo para descarregar o VST SDK 3.6.12 (hoje está `JUCE_VST3_CAN_REPLACE_VST2=0`).
-6. **Bugs médios e pequenos.** Refazer a lista, porque muitos desapareceram com a limpeza.
+### 7. Mapa de papéis (passo 1)
+
+- **Settings > Roles:** um plugin por papel: efeitos (reverb, delay, filter, sidechain, drive) e instrumentos (bass, lead, pad, pluck, drums). Guardado em `%APPDATA%\Core\roles.json`, fora das músicas.
+- Ao escolher o plugin, o Core lê os parâmetros dele (`core-engine params <ficheiro> --id <id>`, no seu próprio processo) e adivinha as macros pelo nome (mix, size, cutoff, volume...). "Parameters..." muda qualquer uma.
+- Domínio sem JUCE (`app/domain/src/roles.hpp`), para as tools e para a AI: `ensureRoleEffect`, `roleParamKey`, `addRoleTrack`, `setTrackRole`. O efeito fica marcado com `"role"` na música.
+
+### 8. Tools pelos plugins dos papéis (passo 2)
+
+- **Piano roll > Plugin tools:** SUCK para o drop (1, 2 ou 4 compassos), PUM a partir de outra pista (compassos mostrados ou a música toda) e efeitos do build-up (filtro + reverb, + delay, + drive).
+- **Painel do build-up:** linha "Effects", no mesmo passo de undo que as notas.
+- Tudo é automação normal dos plugins (`app/domain/src/role_tools.hpp`): undo, gravar e exportar funcionam como sempre.
+
+### 9. MIDI (passo 4)
+
+- **File > Import MIDI:** cada pista do ficheiro vira uma pista sem instrumento, com padrões de 4 compassos (compassos iguais são o mesmo padrão).
+- **File > Export MIDI:** a música como toca, com os rolls expandidos como no motor, uma pista MIDI por pista e o tempo com as rampas.
+
+### 10. Bugs médios e pequenos (passo 6, 1.º lote)
+
+Da lista revista do sweep (`sweep-qwen-revisto.md`, 45 por corrigir). Corrigidos, com teste em `tests/bug_tests.cpp` ou `tests/engine_tests.cpp`:
+`engine.start` recusado já não pára o som; loop convertido duas vezes numa mudança de tempo; `setLoop` com início negativo; `measure` "filter" media silêncio; `readWav` com chunk 0xFFFFFFFF; `isolateRegion` apagava `extra` e cortava o nome a meio de um carácter; STUTTER ignorava as repetições de um clip em loop; FOLLOW não gravava o corte; `addPattern` com comprimento 0; ids enormes (`strtol` + 1); `schemaVersion` 2^32+1; `nextSlotId` com `stoi`; `approval` dos padrões; id de padrão com sufixo > 80; casts do P-Core; `noteTool("random")` sem pista; colar áudio no fim não fazia crescer a música; `copyClips` com o BPM inicial.
+
+## Falta fazer
+
+- **Bugs ainda abertos da lista do sweep:** gesto de undo aberto quando as linhas se refazem a meio de um arrasto; Reverse / Normalize / Cut silence no thread da UI; Align dos hats não idempotente; `swingNote` em notas pares; `setModulator` perde `source`; `sliceAudioClip` e `insertTime` com cortes < 1 ms; `scoreArrange` com secções não alinhadas; `importProjectV2` com pistas de áudio; `placeBounce` parcial; `readFolder` fora do try; nomes `.saving-N`; `applySuggestedSamples`; `bassFollow` no kick seguinte; `stretchPreset`; `humanizeNotes` entre compiladores; motion "random" em leads; duplo clique no Patterns window; estado "a tocar" falso; autosave no fecho; fecho lento; `boxClips_`; `adoptFile`; `liveFallback` (por decidir).
+- **VST2:** já não é preciso (o Serum 2 original é VST3).
+- **Presets do Serum por nome:** retirado pelo Diogo.
 
 ### Por juntar / por confirmar
 
