@@ -12,6 +12,12 @@
 namespace core::doc {
 
 namespace {
+// Cut a UTF-8 string to at most max bytes without splitting a character.
+std::string cutUtf8(const std::string& s, size_t max) {
+  if (s.size() <= max) return s;
+  while (max > 0 && ((unsigned char)s[max] & 0xC0) == 0x80) --max;
+  return s.substr(0, max);
+}
 // W-Core knobs every layer takes from Wave 1 (engine WaveStack::sync).
 constexpr const char* kWaveSharedKnobs[] = {"mode", "glide", "driftHz", "bend", "modWheel", "polyVoices", "legato", "glideAlways"};
 
@@ -315,7 +321,7 @@ std::string addTrack(Document& doc, const std::string& role, const std::string& 
   std::string label = name;
   if (label.empty())
     for (const auto& c : builtinInstruments()) if (role == c.name) label = c.label;
-  t.name = (label.empty() ? (role.empty() ? std::string("Track") : role) : label).substr(0, 80);
+  t.name = cutUtf8(label.empty() ? (role.empty() ? std::string("Track") : role) : label, 80);  // never half a character
   t.instrument.kind = "none";
   // One 1-bar pattern played over the whole song: edit it and hear it at once.
   Pattern p;
@@ -341,12 +347,25 @@ std::string duplicateTrack(Document& doc, const std::string& trackId) {
   return doc.tracks[(size_t)at].id;
 }
 
+std::string shownAfterRemoval(const Document& now, const std::vector<std::string>& orderBefore, const std::string& removed,
+                              std::set<std::string>& alsoSelected) {
+  for (auto it = alsoSelected.begin(); it != alsoSelected.end();) it = now.findTrack(*it) ? std::next(it) : alsoSelected.erase(it);
+  for (const auto& t : now.tracks)
+    if (alsoSelected.count(t.id)) { alsoSelected.erase(t.id); return t.id; }
+  const auto at = std::find(orderBefore.begin(), orderBefore.end(), removed);
+  if (at != orderBefore.end()) {
+    for (auto it = at + 1; it != orderBefore.end(); ++it) if (now.findTrack(*it)) return *it;
+    for (auto it = at; it != orderBefore.begin();) if (now.findTrack(*--it)) return *it;
+  }
+  return now.tracks.empty() ? std::string() : now.tracks.front().id;
+}
+
 void renameTrack(Document& doc, const std::string& trackId, const std::string& name) {
   std::string clean = name;
   clean.erase(0, clean.find_first_not_of(" \t"));
   clean.erase(clean.find_last_not_of(" \t") + 1);
   if (clean.empty()) throw DocumentError("name", "cannot be empty");
-  if (clean.size() > 80) throw DocumentError("name", "is longer than 80 characters");
+  if (clean.size() > 80) throw DocumentError("name", "is longer than 80 bytes (an accented letter counts as 2)");
   find(doc, trackId).name = clean;  // the id stays: it is what links meters, history and the engine
 }
 
@@ -1828,12 +1847,6 @@ void setAutomationInRange(Document& doc, const std::string& trackId, const std::
 // ---- audio
 
 namespace {
-// Cut a UTF-8 string to at most max bytes without splitting a character.
-std::string cutUtf8(const std::string& s, size_t max) {
-  if (s.size() <= max) return s;
-  while (max > 0 && ((unsigned char)s[max] & 0xC0) == 0x80) --max;
-  return s.substr(0, max);
-}
 
 AudioClip& audioClipById(Track& t, const std::string& id) {
   for (auto& c : t.audioClips) if (c.id == id) return c;

@@ -63,6 +63,13 @@ target_link_libraries(ai_tests PRIVATE core_ai)
 target_compile_definitions(ai_tests PRIVATE CORE_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 add_test(NAME ai_tests COMMAND ai_tests)
 
+# The deep bug hunt (2026-11-16, RELATORIO-CAÇA-PROFUNDA.md, P01-P06): each case of the report.
+add_executable(hunt_tests hunt_tests.cpp)
+target_include_directories(hunt_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/engine/src)
+target_link_libraries(hunt_tests PRIVATE core_domain core_engine_lib)
+target_compile_definitions(hunt_tests PRIVATE CORE_TEMPLATES_DIR="${CMAKE_SOURCE_DIR}/templates")
+add_test(NAME hunt_tests COMMAND hunt_tests)
+
 # The command line: what the app and the scripts call.
 add_test(NAME cli_version COMMAND core-engine --version)
 set_tests_properties(cli_version PROPERTIES PASS_REGULAR_EXPRESSION "core-engine ${CORE_VERSION}")
@@ -74,7 +81,7 @@ add_test(NAME cli_measure COMMAND ${CMAKE_COMMAND} -DENGINE=$<TARGET_FILE:core-e
 add_test(NAME cli_unicode COMMAND ${CMAKE_COMMAND} -DENGINE=$<TARGET_FILE:core-engine> -DWORK=${CMAKE_CURRENT_BINARY_DIR}/cli
                                   -P ${CMAKE_CURRENT_SOURCE_DIR}/cli_unicode.cmake)
 
-set_tests_properties(engine_tests domain_tests ai_tests role_tests midi_tests bug_tests audit_tests audit2_tests bitwig_tests cli_version cli_demo_render cli_measure cli_unicode
+set_tests_properties(engine_tests domain_tests ai_tests role_tests midi_tests bug_tests audit_tests audit2_tests hunt_tests bitwig_tests cli_version cli_demo_render cli_measure cli_unicode
                      PROPERTIES LABELS merge TIMEOUT 300)
 
 # The app's own end-to-end test (play, undo, save/reopen, export... on the null device, with its test plugins).

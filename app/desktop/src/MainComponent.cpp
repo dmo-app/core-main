@@ -3202,10 +3202,11 @@ void MainComponent::redo() { if (history_.redo()) documentChanged(false); }
 
 void MainComponent::buildRows() {
   if (!selectedTrack_.empty() && !history_.current().findTrack(selectedTrack_)) {
-    selectedTrack_ = history_.current().tracks.empty() ? std::string() : history_.current().tracks.front().id;
+    // Deep hunt P06: not tracks.front(), which Stage Core then acted on with the rest of the selection.
+    std::vector<std::string> before;
+    for (const auto& row : rows_) before.push_back(row->id());
+    selectedTrack_ = doc::shownAfterRemoval(history_.current(), before, selectedTrack_, alsoSelected_);
     selectedClip_.clear();
-    for (auto it = alsoSelected_.begin(); it != alsoSelected_.end();)
-      it = history_.current().findTrack(*it) ? std::next(it) : alsoSelected_.erase(it);
     editor_.setTrack(selectedTrack_);
     std::lock_guard<std::mutex> g(liveMutex_);
     liveTrack_ = selectedTrack_;

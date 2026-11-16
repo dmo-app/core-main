@@ -575,7 +575,7 @@ json Server::execute(const std::string& cmd, const json& args) {
     request.sampleRate = numArg(args, "sampleRate", sampleRate_);
     if (!(request.sampleRate >= 8000 && request.sampleRate <= 384000)) throw std::runtime_error("sampleRate must be 8000-384000.");
     request.bits = (int)integerArg(args, "bits", 24, 24, 32);
-    request.tailSeconds = numArg(args, "tailMs", 2000) / 1000.0;
+    request.tailSeconds = numArg(args, "tailMs", kDefaultTailMs) / 1000.0;
     if (args.contains("files")) {
       if (!args["files"].is_array()) throw std::runtime_error("'files' must be a list.");
       for (const auto& f : args["files"]) {
@@ -614,7 +614,7 @@ json Server::render(const json& args) {
   const int channels = args.value("mono", false) ? 1 : 2;  // mono: (L + R) / 2 in every file
   double sr = numArg(args, "sampleRate", sampleRate_);
   if (!(sr >= 8000 && sr <= 384000)) throw std::runtime_error("sampleRate must be 8000-384000.");
-  const double tail = numArg(args, "tailMs", 1500);
+  const double tail = numArg(args, "tailMs", kDefaultTailMs);
   if (!(tail >= 0 && tail <= 60000)) throw std::runtime_error("tailMs must be 0-60000.");
   // A region (startTick/endTick), as render.start does it but on this thread (the CLI): the song is played from its start up to endTick (held notes, tails and LFOs are where they would
   // be), then cut there; the file starts at startTick.
