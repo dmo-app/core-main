@@ -3,7 +3,6 @@
 #include "follow.hpp"
 #include "Language.h"
 #include "Keymap.h"
-#include "AttachPanel.h"
 #include "BuildupPanel.h"
 #include <algorithm>
 #include <cmath>
@@ -1626,8 +1625,6 @@ void PatternEditor::showTools() {
   build.addItem(kBuildupWindow, u8("Build-up → roll → drop…"));
   m.addSubMenu("Build-up", build);
 
-  m.addItem(kAttach, u8("Attachments… (Start · Middle · End)"));
-  m.addItem(kAttachPlan, u8("Apply attachments… (Same · Alternate · Random)"));
   m.addSeparator();
   m.addItem(kPCore, u8("Patterns window…"));
   m.addItem(juce::PopupMenu::Item(u8("Save the bars shown as a pattern…")).setID(kSave).setEnabled(onSavePattern != nullptr && to > from));
@@ -1636,8 +1633,6 @@ void PatternEditor::showTools() {
     auto& self = *safe;
     if (r == kPCore) { if (self.onOpenPatterns) self.onOpenPatterns(); return; }
     if (r == kBuildupWindow) { self.showBuildup(); return; }
-    if (r == kAttach) { self.showAttach(); return; }
-    if (r == kAttachPlan) { self.showAttachPlan(); return; }
     if (r == kQuantize) { self.quantize(); return; }
     if (r >= kStrength && r <= kStrength + 100) {
       self.quantizeStrength = (r - kStrength) / 100.0;
@@ -1818,61 +1813,7 @@ bool sameTempo(const std::vector<doc::TempoPoint>& a, const std::vector<doc::Tem
 }
 }  // namespace
 
-// Attachments on the notes (doc::attach): the selected notes, else the ones in the bars shown.
-void PatternEditor::showAttach() {
-  if (!currentTrack()) { say(u8("Select a note track first.")); return; }
-  const std::set<std::string> ids = editIds();
-  if (ids.empty()) { say(u8("Attachments: no notes in the bars shown.")); return; }
-  AttachPanel::Start start;
-  start.what = juce::String((int)ids.size()) + (ids.size() == 1 ? u8(" note") : u8(" notes"));
-  const doc::Note* first = nullptr;
-  for (const auto& n : pattern()->notes) if (ids.count(n.id) && (!first || n.tick < first->tick)) first = &n;
-  for (int i = 0; i < 3 && first; ++i) start.places[i] = doc::noteAttach(*first, i);
-  auto panel = std::make_unique<AttachPanel>(start);
-  const std::string trackId = trackId_, patternId = patternId_;
-  juce::Component::SafePointer<PatternEditor> safe(this);
-  panel->attaches = [safe, trackId] {
-    return safe ? doc::trackAttaches(safe->host_.currentDocument(), trackId) : std::vector<doc::AttachInfo>{};
-  };
-  panel->onCreate = [safe, trackId](const std::string& recipe, const std::string& name) {
-    std::string made;
-    if (safe) safe->host_.applyEdit([&](doc::Document& d) { made = doc::addAttach(d, trackId, recipe, name); }, u8("New attachment"));
-    return made;
-  };
-  panel->onSet = [safe, trackId, patternId, ids](int place, const std::string& name) {
-    if (!safe) return juce::String(u8("The piano roll closed."));
-    doc::AttachSides sides;
-    (place == doc::kAttachStart ? sides.start : place == doc::kAttachMiddle ? sides.middle : sides.end) = name;
-    static const char* places[] = {"Start", "Middle", "End"};
-    const juce::String label = u8(places[std::clamp(place, 0, 2)]) + u8(": ") + (name.empty() ? u8("none") : u8(name));
-    safe->host_.applyEdit([&](doc::Document& d) { doc::attachNotes(doc::patternById(doc::trackById(d, trackId), patternId), ids, sides); },
-                          u8("Attachment ") + label);
-    return label + u8(" on ") + juce::String((int)ids.size()) + (ids.size() == 1 ? u8(" note") : u8(" notes")) + u8(" (Ctrl+Z undoes).");
-  };
-  dockTool(std::move(panel), u8("ATTACHMENTS"), nullptr);
-}
 
-// Many notes at once: the selected notes, else the ones in the bars shown, in time order.
-void PatternEditor::showAttachPlan() {
-  if (!currentTrack()) { say(u8("Select a note track first.")); return; }
-  const std::set<std::string> ids = editIds();
-  if (ids.empty()) { say(u8("Apply attachments: no notes in the bars shown.")); return; }
-  const std::string trackId = trackId_, patternId = patternId_;
-  auto panel = std::make_unique<AttachPlanPanel>(juce::String((int)ids.size()) + (ids.size() == 1 ? u8(" note") : u8(" notes")),
-                                                 attachChoices(host_.currentDocument(), trackId));
-  juce::Component::SafePointer<PatternEditor> safe(this);
-  panel->onApply = [safe, trackId, patternId, ids](const doc::AttachPlan& asked, const std::vector<std::string>& recipes) {
-    if (!safe) return juce::String(u8("The piano roll closed."));
-    int changed = 0;
-    safe->host_.applyEdit([&](doc::Document& d) {
-      doc::AttachPlan plan = asked;
-      for (const auto& r : recipes) plan.names.push_back(doc::ensureAttach(d, trackId, r));
-      changed = doc::applyAttachPlan(doc::patternById(doc::trackById(d, trackId), patternId), ids, plan);
-    }, u8("Apply attachments"));
-    return juce::String(changed) + (changed == 1 ? u8(" note") : u8(" notes")) + u8(" changed (Ctrl+Z undoes).");
-  };
-  dockTool(std::move(panel), u8("APPLY ATTACHMENTS"), nullptr);
-}
 
 void PatternEditor::showBuildup() {
   const doc::Track* t = currentTrack();
