@@ -198,6 +198,9 @@ public:
     buf_[0].swap(o.buf_[0]); buf_[1].swap(o.buf_[1]);
     pos_ = o.pos_; lp_[0] = o.lp_[0]; lp_[1] = o.lp_[1]; ring_ = o.ring_; song_ = o.song_; hzAt_ = o.hzAt_; dc_[0] = o.dc_[0]; dc_[1] = o.dc_[1];
     sub_[0] = o.sub_[0]; sub_[1] = o.sub_[1];
+    // The crush's sample-and-hold goes on in step: started again from 0, every hold after an edit fell on other
+    // samples and the sound never came back (knobcheck 2026-11-16: hitech "perc", -13 dB of difference for good).
+    held_[0] = o.held_[0]; held_[1] = o.held_[1]; holdAt_ = o.holdAt_;
   }
 private:
   std::vector<float> buf_[2];
