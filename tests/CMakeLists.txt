@@ -20,6 +20,19 @@ target_link_libraries(domain_tests PRIVATE core_domain core_engine_lib)
 target_compile_definitions(domain_tests PRIVATE CORE_TEMPLATES_DIR="${CMAKE_SOURCE_DIR}/templates")
 add_test(NAME domain_tests COMMAND domain_tests)
 
+# The AI inside Core: the song's calls, the chat (canned answers, no network), the knowledge base, the providers.
+add_executable(ai_tests ai_tests.cpp)
+target_include_directories(ai_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(ai_tests PRIVATE core_ai)
+target_compile_definitions(ai_tests PRIVATE CORE_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+add_test(NAME ai_tests COMMAND ai_tests)
+
+# Core AI Gate (app/aifx): the gate's sound, its role, toolGate and the AI's "gate" call.
+add_executable(aifx_tests aifx_tests.cpp)
+target_include_directories(aifx_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(aifx_tests PRIVATE core_ai core_domain core_engine_lib)
+add_test(NAME aifx_tests COMMAND aifx_tests)
+
 # The role map (Settings > Roles) and the tools that play through it (SUCK, PUM, build-up effects).
 add_executable(role_tests role_tests.cpp)
 target_include_directories(role_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
@@ -63,6 +76,21 @@ target_link_libraries(hunt_tests PRIVATE core_domain core_engine_lib core_previe
 target_compile_definitions(hunt_tests PRIVATE CORE_TEMPLATES_DIR="${CMAKE_SOURCE_DIR}/templates" CORE_LANG_DIR="${CMAKE_SOURCE_DIR}/lang")
 add_test(NAME hunt_tests COMMAND hunt_tests)
 
+# The Vital presets of the AI (presets/vital): index, VST3 state with the 4 macros, preset on a track, user variants.
+add_executable(vital_tests vital_tests.cpp)
+target_include_directories(vital_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(vital_tests PRIVATE core_domain core_engine_lib)
+target_compile_definitions(vital_tests PRIVATE CORE_PRESETS_DIR="${CMAKE_SOURCE_DIR}/presets/vital")
+add_test(NAME vital_tests COMMAND vital_tests)
+# Windows only, by hand, with Vital installed: does the real Vital take Core's preset state? (see vital_check.cpp)
+add_executable(vital_check vital_check.cpp)
+target_link_libraries(vital_check PRIVATE core_domain core_engine_lib)
+# The arrangement's time selection (2026-11-16): copy, clear, paste and duplicate a piece of time on several tracks.
+add_executable(time_range_tests time_range_tests.cpp)
+target_include_directories(time_range_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(time_range_tests PRIVATE core_domain core_engine_lib)
+add_test(NAME time_range_tests COMMAND time_range_tests)
+
 # The command line: what the app and the scripts call.
 add_test(NAME cli_version COMMAND core-engine --version)
 set_tests_properties(cli_version PROPERTIES PASS_REGULAR_EXPRESSION "core-engine ${CORE_VERSION}")
@@ -74,7 +102,7 @@ add_test(NAME cli_measure COMMAND ${CMAKE_COMMAND} -DENGINE=$<TARGET_FILE:core-e
 add_test(NAME cli_unicode COMMAND ${CMAKE_COMMAND} -DENGINE=$<TARGET_FILE:core-engine> -DWORK=${CMAKE_CURRENT_BINARY_DIR}/cli
                                   -P ${CMAKE_CURRENT_SOURCE_DIR}/cli_unicode.cmake)
 
-set_tests_properties(engine_tests domain_tests role_tests midi_tests bug_tests audit_tests audit2_tests hunt_tests bitwig_tests cli_version cli_demo_render cli_measure cli_unicode
+set_tests_properties(engine_tests domain_tests ai_tests aifx_tests role_tests midi_tests bug_tests audit_tests audit2_tests hunt_tests bitwig_tests vital_tests time_range_tests cli_version cli_demo_render cli_measure cli_unicode
                      PROPERTIES LABELS merge TIMEOUT 300)
 
 # The app's own end-to-end test (play, undo, save/reopen, export... on the null device, with its test plugins).

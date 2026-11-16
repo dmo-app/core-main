@@ -2,6 +2,7 @@
 // Library's, shows Core's tools as cards in the Library's place (doc::corePlugins()). A click opens the tool: the
 // Patterns window, or the tool's menu (where it works, then it writes) on the selected tracks. The AI calls the
 // same tools by the same ids. A card whose roles have no plugin yet is grey and says which to choose.
+// Compact layout (2026-11-16): one line per tool (name and kind); what it does is in its tooltip.
 #pragma once
 #include <functional>
 #include <memory>
@@ -39,18 +40,18 @@ public:
     g.fillRoundedRectangle(getLocalBounds().toFloat(), theme::kCorner);
     g.setColour(theme::kTitle);
     g.setFont(juce::FontOptions(theme::kFontBody, juce::Font::bold));
-    g.drawText("TOOLS", getLocalBounds().removeFromTop(kHead).reduced(14, 0), juce::Justification::centredLeft, false);
+    g.drawText("TOOLS", getLocalBounds().removeFromTop(kHead).reduced(10, 0), juce::Justification::centredLeft, false);
   }
   void resized() override {
-    view_.setBounds(getLocalBounds().withTrimmedTop(kHead).reduced(8, 0).withTrimmedBottom(8));
+    view_.setBounds(getLocalBounds().withTrimmedTop(kHead).reduced(4, 0).withTrimmedBottom(4));
     const int w = view_.getWidth() - view_.getScrollBarThickness();
     int y = 0;
-    for (auto& c : cards_) { c->setBounds(0, y, w, kCardH); y += kCardH + 6; }
+    for (auto& c : cards_) { c->setBounds(0, y, w, kCardH); y += kCardH + 2; }
     list_.setSize(w, y);
   }
 
 private:
-  static constexpr int kHead = 40, kCardH = 74;
+  static constexpr int kHead = 28, kCardH = 28;
   class Card final : public juce::Component, public juce::SettableTooltipClient {
   public:
     Card(PluginCards& o, const doc::CorePluginInfo& p) : owner_(o), info_(p) {
@@ -74,18 +75,13 @@ private:
       g.fillRoundedRectangle(r, theme::kCorner);
       g.setColour(grey_ ? theme::kDim : theme::kAccent);
       g.fillRoundedRectangle(r.withWidth(3.0f), 1.5f);
-      auto b = getLocalBounds().reduced(12, 8);
+      const auto title = getLocalBounds().reduced(10, 0);
       g.setColour(grey_ ? theme::kMuted : theme::kText);
-      g.setFont(juce::FontOptions(theme::kFontTitle, juce::Font::bold));
-      auto title = b.removeFromTop(20);
-      g.drawText(juce::String::fromUTF8(info_.shortName.c_str()), title, juce::Justification::centredLeft, false);
+      g.setFont(juce::FontOptions(theme::kFontBody, juce::Font::bold));
+      g.drawText(juce::String::fromUTF8(info_.shortName.c_str()), title, juce::Justification::centredLeft, true);
       g.setColour(theme::kDim);
       g.setFont(juce::FontOptions(theme::kFontSmall));
-      g.drawText(juce::String::fromUTF8(info_.word.c_str()), title, juce::Justification::centredRight, false);
-      g.setColour(theme::kMuted);
-      const juce::String text = grey_ ? juce::String::fromUTF8("Settings > Roles: choose the plugin of ") + missing_
-                                      : juce::String::fromUTF8(info_.about.c_str());
-      g.drawFittedText(text, b, juce::Justification::topLeft, 3, 0.9f);
+      g.drawText(juce::String::fromUTF8(grey_ ? "no plugin" : info_.word.c_str()), title, juce::Justification::centredRight, false);
     }
     void mouseEnter(const juce::MouseEvent&) override { repaint(); }
     void mouseExit(const juce::MouseEvent&) override { repaint(); }

@@ -12,10 +12,14 @@
 // The library is copied from --samples <folder>, else a Samples folder beside this program, else D:\Samples
 // (Diogo's PC). The source is only read; its _core-plan folder (scripts and notes) is not copied.
 // Songs, settings, plugins lists, autosaves and logs are never touched: they live in the user's folders.
+// The AI's synth, Vital, cannot ship inside the package: after installing, Setup looks for it where Vital's own
+// installer puts it (ai/synth.hpp) and, when it is not there, says so and offers its download page. Core installs
+// either way.
 #include <cstdio>
 #include <algorithm>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include "CoreSetupData.h"
+#include "synth.hpp"
 
 namespace {
 
@@ -158,6 +162,36 @@ bool removeInstalledAppFiles(const juce::File& folder) {
   return ok;
 }
 
+// %LOCALAPPDATA%\Programs\Common\VST3: the VST3 folder of the current user (no administrator rights needed).
+juce::File userVst3Folder() {
+  return juce::File::getSpecialLocation(juce::File::windowsLocalAppData).getChildFile("Programs").getChildFile("Common").getChildFile("VST3");
+}
+
+// The AI's Vital presets (presets/vital in the package) go where Vital's own preset browser finds them:
+// <Vital data folder>\User\Presets\Core AI. The data folder is Vital.config's "data_directory" when Vital has one,
+// else Documents\Vital (Vital's default). Only that "Core AI" folder is written; a file there is replaced by the
+// newer one. Never fatal: Core works without it (the AI loads the presets from the app folder).
+juce::File vitalPresetsFolder() {
+  juce::File data = juce::File::getSpecialLocation(juce::File::userDocumentsDirectory).getChildFile("Vital");
+  const juce::File config = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory).getChildFile("vital").getChildFile("Vital.config");
+  if (config.existsAsFile()) {
+    const juce::var j = juce::JSON::parse(config.loadFileAsString());
+    const juce::String dir = j.getProperty("data_directory", "").toString();
+    if (dir.isNotEmpty() && juce::File::isAbsolutePath(dir)) data = juce::File(dir);
+  }
+  return data.getChildFile("User").getChildFile("Presets").getChildFile("Core AI");
+}
+
+juce::String installVitalPresets(const juce::File& app) {
+  const auto files = app.getChildFile("presets").getChildFile("vital").getChildFile("presets").findChildFiles(juce::File::findFiles, false, "*.vital");
+  if (files.isEmpty()) return {};
+  const juce::File to = vitalPresetsFolder();
+  if (!to.createDirectory()) return "Cannot create " + to.getFullPathName();
+  int failed = 0;
+  for (const auto& f : files) if (!f.copyFileTo(to.getChildFile(f.getFileName()))) ++failed;
+  return failed ? juce::String(failed) + " Vital presets could not be copied to " + to.getFullPathName() : juce::String();
+}
+
 // Unpacks this program's package into app-<version> (a .part folder first, renamed when complete), makes
 // it the current version and keeps the one before it for going back. Older versions are removed.
 juce::String install(const juce::File& folder, bool withShortcuts, bool desktop) {
@@ -185,9 +219,17 @@ juce::String install(const juce::File& folder, bool withShortcuts, bool desktop)
   const juce::String keep = folder.getChildFile("previous.txt").loadFileAsString().trim();
   for (const auto& old : folder.findChildFiles(juce::File::findDirectories, false, "app-*"))
     if (old != target && old.getFileName() != "app-" + keep) removeInstalledAppFiles(old);
+  // Core's own plugins (app/aifx: Core AI Gate) into the user's VST3 folder, where Core and other hosts find them.
+  for (const auto& bundle : target.getChildFile("vst3").findChildFiles(juce::File::findDirectories, false, "*.vst3")) {
+    const juce::File dest = userVst3Folder().getChildFile(bundle.getFileName());
+    dest.deleteRecursively();  // fails while a host has it open: the one there stays (Core still finds it)
+    userVst3Folder().createDirectory();
+    bundle.copyDirectoryTo(dest);
+  }
   const juce::File self = juce::File::getSpecialLocation(juce::File::currentExecutableFile);
   if (self != folder.getChildFile("Uninstall.exe")) self.copyFileTo(folder.getChildFile("Uninstall.exe"));
   if (withShortcuts) integrate(folder, kVersion, desktop);
+  if (const juce::String p = installVitalPresets(target); p.isNotEmpty()) std::fputs((p + "\n").toRawUTF8(), stderr);
   return {};
 }
 
@@ -225,6 +267,9 @@ juce::String uninstall(const juce::File& folder, bool withShortcuts) {
     desktopLink().deleteFile();
     juce::WindowsRegistry::deleteKey(kUninstallKey.dropLastCharacters(1));
   }
+  // Core's own plugins that the install put in the user's VST3 folder (by the names in its package).
+  for (const auto& bundle : appFolder(folder, installedVersion(folder)).getChildFile("vst3").findChildFiles(juce::File::findDirectories, false, "*.vst3"))
+    userVst3Folder().getChildFile(bundle.getFileName()).deleteRecursively();
   const juce::File self = juce::File::getSpecialLocation(juce::File::currentExecutableFile);
   bool ok = removeSamples(folder), othersLeft = false;
   for (const auto& f : folder.findChildFiles(juce::File::findFilesAndDirectories, false)) {
@@ -260,7 +305,7 @@ public:
       const juce::String problem = install(folder_, true, desktop_.getToggleState());
       if (problem.isNotEmpty()) return report(problem, {});
       const juce::File source = samplesSource({});
-      if (source == juce::File()) return report({}, "Core " + kVersion + " is installed (no sample library found to copy).");
+      if (source == juce::File()) return report({}, "Core " + kVersion + " is installed (no sample library found to copy).", true);
       // The library is large (the first copy takes minutes): it is copied on its own thread, with the count shown.
       for (auto* b : {&install_, &back_, &remove_, &open_}) b->setEnabled(false);
       juce::Component::SafePointer<SetupComponent> self(this);
@@ -272,7 +317,7 @@ public:
           });
         });
         juce::MessageManager::callAsync([self, copyProblem] {
-          if (self != nullptr) self->report(copyProblem, "Core " + kVersion + " is installed, with its sample library.");
+          if (self != nullptr) self->report(copyProblem, "Core " + kVersion + " is installed, with its sample library.", true);
         });
       });
     };
@@ -329,8 +374,18 @@ private:
     desktop_.setVisible(installed.isEmpty());
   }
 
-  void report(const juce::String& problem, const juce::String& done) {
+  void report(const juce::String& problem, const juce::String& done, bool installed = false) {
     refresh();
+    if (problem.isEmpty() && installed && !core::ai::findSynth()) {
+      const auto& s = core::ai::synth();
+      juce::AlertWindow::showAsync(juce::MessageBoxOptions().withIconType(juce::MessageBoxIconType::InfoIcon).withTitle("Core Setup")
+                                       .withMessage(done + "\n\nCore's AI plays its instruments with the " + juce::String(s.name) +
+                                                    " synth (free), which is not on this PC. Install it from " + s.download +
+                                                    ", then scan the plugins in Core.")
+                                       .withButton("Get " + juce::String(s.name), 1).withButton("OK", 0),
+                                   [](int r) { if (r == 1) juce::URL(core::ai::synth().download).launchInDefaultBrowser(); });
+      return;
+    }
     juce::AlertWindow::showAsync(juce::MessageBoxOptions().withIconType(problem.isEmpty() ? juce::MessageBoxIconType::InfoIcon : juce::MessageBoxIconType::WarningIcon)
                                      .withTitle("Core Setup").withMessage(problem.isEmpty() ? done : problem).withButton("OK", 0), nullptr);
   }
@@ -375,6 +430,8 @@ public:
       if (problem.isEmpty() && args.contains("--install") && !args.contains("--no-samples"))
         problem = copySamples(samplesSource(option(args, "--samples")), folder, nullptr);
       if (problem.isNotEmpty()) std::fputs((problem + "\n").toRawUTF8(), stderr);
+      else if (args.contains("--install") && !core::ai::findSynth())
+        std::printf("Note: the AI's synth (%s) is not installed; get it at %s\n", core::ai::synth().name, core::ai::synth().download);
       setApplicationReturnValue(problem.isEmpty() ? 0 : 1);
       quit();
       return;

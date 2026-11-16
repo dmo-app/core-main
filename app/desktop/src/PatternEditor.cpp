@@ -1016,6 +1016,16 @@ void PatternEditor::mouseDown(const juce::MouseEvent& e) {
     eraseAt(e.getPosition());
     return;
   }
+  // Shift+drag on an empty place: the rectangle that selects notes, with any tool (as in the arrangement, 2026-11-16).
+  if (e.mods.isShiftDown() && !hit) {
+    drag_ = Drag::Marquee;
+    marqueeStart_ = e.getPosition();
+    marqueeBase_ = {};
+    selected_.clear();
+    marquee_ = {};
+    repaint();
+    return;
+  }
   if (tool_ == Tool::Select && (!hit || drums())) {
     if (hit) {  // drums: a click selects the step (the draw tool turns it off)
       if (!e.mods.isCtrlDown()) selected_.clear();

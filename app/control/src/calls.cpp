@@ -6,6 +6,7 @@
 #include <sstream>
 #include <string_view>
 #include "edit.hpp"
+#include "song_calls.hpp"
 #include "stutter.hpp"
 
 namespace core::control {
@@ -234,7 +235,7 @@ const FunctionArg* CoreFunction::findArg(const std::string& id) const {
 }
 
 // What AICORE can call since Core's own sound left (2026-11-16): STUTTER, VOICE STUTTER, the mixer and opening windows.
-std::vector<CoreFunction> buildFunctions() {
+std::vector<CoreFunction> buildFunctions(const doc::PCoreCatalog* pcore) {
   std::vector<CoreFunction> out;
   for (const auto& pc : pluginCalls())
     if (auto f = pc.describe()) out.push_back(std::move(*f));
@@ -254,6 +255,7 @@ std::vector<CoreFunction> buildFunctions() {
                      "\"mixer\", \"score\" (Stage Core, the song's parts), or an effect's id or name (a plugin effect's window). Changes nothing";
   open.tags = {"open", "window", "plugin", "abrir"};
   out.push_back(std::move(open));
+  songcalls::addFunctions(out, pcore);  // the AI inside Core (2026-11-16): tracks, P-Core, S-Core
   return out;
 }
 
@@ -451,6 +453,119 @@ std::string str(const json& o, const char* k) { return o.is_object() && o.contai
 
 }  // namespace
 
+const char* const kZoneSection = "Sele\xC3\xA7\xC3\xA3o";
+
+bool isZoneSection(const std::string& name) {
+  const std::string l = lowerCopy(name);
+  return l == "sele\xC3\xA7\xC3\xA3o" || l == "sele\xC3\xA7\xC3\x83o" || l == "selecao" || l == "selection" || sameName(name, kZoneSection);
+}
+
+json Zone::toJson() const { return {{"tracks", tracks}, {"startTick", startTick}, {"endTick", endTick}}; }
+
+Zone zoneFrom(const json& raw) {
+  Zone z;
+  if (!raw.is_object() || !raw.contains("zone") || !raw["zone"].is_object()) return z;
+  const json& j = raw["zone"];
+  if (j.contains("tracks") && j["tracks"].is_array())
+    for (const auto& t : j["tracks"])
+      if (t.is_string() && !t.get<std::string>().empty()) z.tracks.push_back(t.get<std::string>());
+  if (j.contains("startTick") && j["startTick"].is_number_integer()) z.startTick = j["startTick"].get<int64_t>();
+  if (j.contains("endTick") && j["endTick"].is_number_integer()) z.endTick = j["endTick"].get<int64_t>();
+  if (z.startTick < 0 || z.endTick <= z.startTick) z = Zone{};
+  return z;
+}
+
+namespace {
+
+std::string barsText(int64_t a, int64_t b) {
+  const int64_t bar = 4 * doc::kPpq;
+  return "bars " + std::to_string(a / bar + 1) + "-" + std::to_string((b + bar - 1) / bar);
+}
+
+// What a proposal with a zone may keep (calls.hpp Zone): the rest is left out, with why.
+void fitZone(Proposal& p, const doc::Document& song) {
+  const Zone& z = p.zone;
+  if (!z.active()) return;
+  const int64_t bar = 4 * doc::kPpq;
+  const std::string where = " (the selection: " + barsText(z.startTick, z.endTick) + ")";
+  std::vector<Call> kept;
+  for (auto& call : p.calls) {
+    const std::string fam = call.fn->family;
+    auto leave = [&](const std::string& why) { p.problems.push_back(describeCall(call) + ": " + why + where + ": left out"); };
+    if (fam == "track") {  // a new track for the zone: what goes on it is checked like the rest
+      kept.push_back(call);
+      continue;
+    }
+    if (fam == "shape") {
+      leave("the song shape changes the whole song");
+      continue;
+    }
+    const bool newTrack = call.trackId.rfind("new:", 0) == 0;
+    if (call.trackId.empty() || call.trackId == "song" || call.trackId == "master") {
+      leave(call.trackId == "master" ? "the master is not selected" : "say which selected track (\"on\")");
+      continue;
+    }
+    if (!newTrack && std::find(z.tracks.begin(), z.tracks.end(), call.trackId) == z.tracks.end()) {
+      leave(call.trackName + " is not selected");
+      continue;
+    }
+    const doc::Section* section = nullptr;
+    if (!call.zoneSection && !call.sectionName.empty())
+      for (const auto& s : song.sections)
+        if (sameName(s.name, call.sectionName)) section = &s;
+    if (fam == "arrange" || fam == "plays") {
+      if (!section) {
+        leave(fam == "arrange" ? "Arrange works on whole sections: name a section inside the selection" : "Plays works on whole sections");
+        continue;
+      }
+      if (section->startTick < z.startTick || section->startTick + section->lengthTicks > z.endTick) {
+        leave(section->name + " is not inside the selection");
+        continue;
+      }
+      kept.push_back(call);
+      continue;
+    }
+    if (call.fn->rises || fam == "pcore" || fam == "gate" || (fam == "songtool" && call.fn->id != "space")) {
+      int64_t a = z.startTick, b = z.endTick;
+      if (section) {
+        a = std::max(a, section->startTick);
+        b = std::min(b, section->startTick + section->lengthTicks);
+        if (b <= a) {
+          leave(section->name + " is outside the selection");
+          continue;
+        }
+      }
+      call.startTick = a;
+      call.endTick = b;
+      if (!section) call.sectionName = kZoneSection;
+      call.warnings.erase(std::remove_if(call.warnings.begin(), call.warnings.end(),
+                                         [](const std::string& w) { return w.find("no section given") != std::string::npos ||
+                                                                           w.find("does not rise over a section") != std::string::npos; }),
+                          call.warnings.end());
+      if (fam == "pcore") {
+        const int bars = (int)std::max<int64_t>(1, (b - a + bar - 1) / bar);
+        if (bars > 64) {
+          leave("P-Core writes 64 bars at most");
+          continue;
+        }
+        const auto given = call.args.find("bars");
+        if (given == call.args.end()) call.args["bars"] = bars;
+        else if (given->second > bars) {
+          call.warnings.push_back("bars " + std::to_string((int)given->second) + " cut to the " + std::to_string(bars) + " selected");
+          given->second = bars;
+        }
+      }
+      kept.push_back(call);
+      continue;
+    }
+    call.warnings.push_back(call.fn->name + " changes the whole track, not only the selected bars");
+    kept.push_back(call);
+  }
+  p.calls = std::move(kept);
+}
+
+}  // namespace
+
 Proposal validateProposal(const json& raw, const std::vector<CoreFunction>& functions, const doc::Document& song,
                           const doc::SampleIndex* samples) {
   Proposal p;
@@ -467,7 +582,19 @@ Proposal validateProposal(const json& raw, const std::vector<CoreFunction>& func
     return p;
   }
   const std::string style = songStyleKey(song);
-  for (const auto& c : calls) {
+  songcalls::Pending pending = songcalls::startPending(song);
+  p.zone = zoneFrom(raw);
+  // Which calls named the zone as their section (it is not a section of the song): marked as they join p.calls.
+  size_t marked = 0;
+  bool zoneSection = false;
+  auto mark = [&] {
+    for (; marked < p.calls.size(); ++marked) p.calls[marked].zoneSection = zoneSection;
+  };
+  for (const auto& original : calls) {
+    mark();
+    json c = original;
+    zoneSection = p.zone.active() && c.is_object() && isZoneSection(str(c, "section"));
+    if (zoneSection) c.erase("section");
     const std::string fnId = str(c, "fn");
     const CoreFunction* f = fnId.empty() ? nullptr : findFunction(functions, fnId);
     if (!f) {
@@ -497,10 +624,21 @@ Proposal validateProposal(const json& raw, const std::vector<CoreFunction>& func
         if (track) {
           call.trackId = track->id;
           call.trackName = track->name;
+        } else if (const auto* nt = pending.newTrack(on)) {  // made by an earlier "track" call of this proposal
+          call.trackId = "new:" + nt->first;
+          call.trackName = nt->first;
         } else {
           call.warnings.push_back("no track called \"" + on + "\": choose one when applying");
         }
       }
+    }
+    if (songcalls::isSongFamily(f->family)) {
+      if (songcalls::validate(c, *f, song, track, call, pending, p.problems)) p.calls.push_back(std::move(call));
+      continue;
+    }
+    if (call.trackId.rfind("new:", 0) == 0) {
+      p.problems.push_back(f->name + " on the new track " + call.trackName + ": only P-Core, Arrange and Plays can use it in the same proposal: left out");
+      continue;
     }
     // "set": the effect already there, its preset and knobs (checked against what that effect is).
     if (f->family == "setting") {
@@ -720,10 +858,13 @@ Proposal validateProposal(const json& raw, const std::vector<CoreFunction>& func
       call.warnings.push_back(f->name + " is version " + std::to_string(f->version) + " now (the proposal named " + std::to_string(c["version"].get<int>()) + ")");
     p.calls.push_back(std::move(call));
   }
+  mark();
+  fitZone(p, song);
   return p;
 }
 
 std::string describeCall(const Call& c) {
+  if (songcalls::isSongFamily(c.fn->family)) return songcalls::describe(c);
   std::string out = c.fn->name;
   if (c.fn->family == "sample") out += " " + c.sampleName;
   if (c.fn->family == "setting") out = "Set " + c.effectName;
@@ -749,7 +890,13 @@ std::string describeCall(const Call& c) {
 
 std::vector<std::string> applyProposal(doc::Document& song, const Proposal& p, const std::string& chosenTrack, const ApplyEnv& env) {
   std::vector<std::string> lines;
-  for (const auto& c : p.calls) {
+  std::map<std::string, std::string> made;  // new tracks of this proposal: name -> id
+  for (size_t i = 0; i < p.calls.size();) {
+    if (songcalls::isSongFamily(p.calls[i].fn->family)) {
+      for (auto& line : songcalls::apply(song, p, i, made, env)) lines.push_back(std::move(line));
+      continue;
+    }
+    const Call& c = p.calls[i++];
     const std::string where = c.trackId.empty() ? chosenTrack : c.trackId;
     if (where.empty()) throw doc::DocumentError("calls", "choose a track for " + c.fn->name);
     const bool master = where == "master";

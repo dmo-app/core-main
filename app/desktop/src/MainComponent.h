@@ -10,6 +10,7 @@
 #include <atomic>
 #include <mutex>
 #include <set>
+#include "time_range.hpp"
 #include <juce_audio_devices/juce_audio_devices.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include "EngineSession.h"
@@ -20,6 +21,7 @@
 #include "InspectorPanel.h"
 #include "LibraryPanel.h"
 #include "PatternEditor.h"
+#include "AiPanel.h"
 #include "PatternsWindow.h"
 #include "PluginCards.h"
 #include "Plugins.h"
@@ -165,6 +167,8 @@ private:
   std::vector<control::CoreFunction> callableFunctions() const;
   void pollBridge();          // the timer: the state written when it changed, the inbox read when it changed
   void showProposals();       // the AI button
+  void openAiChat();          // AI > AI chat: Core's own AI (AiPanel), docked in this window
+  std::vector<std::string> applyAiProposal(const nlohmann::json& proposal);  // one undo step; throws when refused
   void applyProposal(int index, juce::Component* button);
   void finishProposal(int index, const std::string& status, const json& result);
   int indexOf(const std::string& proposalId) const;
@@ -259,6 +263,13 @@ private:
   bool showPlugins_ = false;
   void openPatterns();
   std::unique_ptr<PatternsWindow> patternsWindow_;
+  std::unique_ptr<ai::Knowledge> aiKnowledge_;  // the AI's style knowledge base (ai/ beside Core.exe), opened with the chat
+  // Core's own AI chat (AI > AI chat, or the "AI" button at the bottom right), docked at the right side or the bottom.
+  std::unique_ptr<AiPanel> aiPanel_;
+  juce::TextButton aiChatButton_{"AI"};
+  bool aiPanelShown() const { return aiPanel_ && aiPanel_->isVisible(); }
+  juce::Rectangle<int> aiPanelArea() const;
+  void toggleAiChat();
   struct PatternPlay { std::string slot; std::optional<doc::Document> preview; int64_t openTick = 0; };
   std::optional<PatternPlay> patternPlay_;
   int64_t patternSongTick_ = 0;  // where the song was when the pattern started playing
@@ -325,7 +336,19 @@ private:
   void buildupTrack(int bars, bool roll, bool gap);  // a sampler track with a snare of the library, ending at the next section
   juce::Rectangle<int> timelineArea() const;
   juce::Rectangle<int> tracksArea() const;
-  int masterRow() const { return mixerOpen_ ? 30 : 64; }
+  int masterRow() const;
+  juce::Rectangle<int> masterArea() const;  // the master's row under the tracks (the CPU footer under the Mixer)
+  juce::Rectangle<int> tracksInner() const;  // where the rows go inside the tracks panel
+  // The tracks' height (Diogo 2026-11-16, compact layout): 0 Compact, 1 Normal, 2 Large; kept in the settings.
+  int trackSize_ = 1;
+  int trackRow() const;
+  void setTrackSize(int size);
+  // The panels on and off with one key each (Ctrl+1..4), and Focus (Ctrl+B): every panel away, then back as they were.
+  void toggleEditorCollapsed();
+  void toggleFocus();
+  struct PanelState { bool library = false, plugins = false, inspector = false, editorCollapsed = false; };
+  std::optional<PanelState> beforeFocus_;
+  juce::Rectangle<int> editorBar() const;  // the folded editor's bar (a click opens it)
   void paintCpuFooter(juce::Graphics& g, juce::Rectangle<int> r) const;
   int64_t tickAt(int x, int64_t snap, bool pastEnd = false) const;  // pastEnd: up to the room after the song's end
   double viewSpan() const;
@@ -380,7 +403,10 @@ private:
   juce::TextButton home_, play_, stop_, loop_, restart_, undo_, redo_, addTrack_;
   theme::BarSlider bpm_;     // drag to change, double-click to type
   theme::BarSlider listen_;  // the listening level (EngineSession::setListenLevel), saved in the user settings
-  juce::Label bpmLabel_, position_, status_, message_;
+  juce::Label bpmLabel_, position_, status_, message_, hint_;
+  // The hint line in the footer (2026-11-16, as on the reference): what the mouse does where it is, e.g.
+  // "DRAG time selection · SHIFT+DRAG rectangle". Set by the rows and the ruler on mouse move.
+  void setHint(const juce::String& text);
   // Minimise, maximise and close, at the top bar's right end (Windows draws no title bar for Core).
   class WindowButton;
   std::unique_ptr<WindowButton> minimise_, maximise_, close_;
@@ -460,6 +486,8 @@ private:
   void dragBox(const juce::MouseEvent& e);
   void endBox(const juce::MouseEvent& e);
   bool clipBoxed(const std::string& trackId, const std::string& clipId) const { return boxClips_.count({trackId, clipId}) > 0; }
+  control::Zone aiZone_;                 // the box's tracks and bars, for the AI (UI state, never saved)
+  control::Zone aiZoneNow() const;
   void beginBoxMove();
   void moveBox(int64_t delta);
   void endBoxMove();
@@ -475,6 +503,26 @@ private:
   void pasteClips(int64_t at);    // the copies' first clip at `at`, the others at the same distances
   void cutClips();
   void duplicateClips();
+  // The time selection (Diogo 2026-11-16: "seleção, andar no timeline, copiar colar, quanto mais próximo do Bitwig"):
+  // a drag on an empty part of the lanes selects a piece of time on the tracks it crosses (Shift+drag: the rectangle of
+  // clips, as before). Ctrl+C / X / V / D and Delete act on it (doc::copyRange & co., time_range.hpp); Ctrl+Shift+Delete
+  // removes the time from the song, Ctrl+Shift+I inserts as much empty time; Ctrl+L loops it; Ctrl+9 zooms to it.
+  // UI state, never saved.
+  doc::TimeRange timeSel_;
+  bool timeSelecting_ = false;
+  int64_t timeAnchor_ = 0;
+  int timeAnchorRow_ = 0;
+  doc::RangeCopy rangeCopy_;
+  bool rangeCopyNewer_ = false;  // Ctrl+V pastes the piece of time (true) or the copied clips (false): the last copied
+  void startTimeSelection(const juce::MouseEvent& e, const std::string& trackId);
+  void dragTimeSelection(const juce::MouseEvent& e);
+  void endTimeSelection(const juce::MouseEvent& e);
+  void clearTimeSelection();
+  int64_t timeSnap() const;
+  bool timeSelectionKey(const juce::KeyPress& key);  // the keys that act on the time selection; true: used
+  void zoomToSelection();
+  bool rulerZooming_ = false;  // a drag up or down on the bar numbers zooms (sideways it moves along the song)
+  double zoomAnchor_ = 0, zoomLength_ = 0;
   std::vector<std::string> missing_;          // asset ids whose file is not in the project folder
   WaveformCache waves_{[this] { repaint(); }};  // the clip lanes and the audio editor
   PatternWaves patternWaves_{[this] { repaint(); }};  // what each pattern sounds like, drawn inside its clips
@@ -486,7 +534,7 @@ private:
   std::mutex liveMutex_;                                  // the MIDI thread reads these two
   std::string liveTrack_;
   std::vector<std::pair<std::string, int>> midiHeld_;     // notes a MIDI keyboard holds, oldest first
-  static constexpr int kTrackHead = 6 + 8 + 130 + 26 + 26 + 6 + 110 + 6 + 56 + 10;  // track header width
+  static constexpr int kTrackHead = 190;  // track header width: colour, name, FX, M, S (the volume a thin bar under the name)
 
   float master_[2] = {0, 0};
   std::map<std::string, std::pair<float, float>> meters_;
