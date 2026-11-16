@@ -76,6 +76,13 @@ target_link_libraries(hunt_tests PRIVATE core_domain core_engine_lib core_previe
 target_compile_definitions(hunt_tests PRIVATE CORE_TEMPLATES_DIR="${CMAKE_SOURCE_DIR}/templates" CORE_LANG_DIR="${CMAKE_SOURCE_DIR}/lang")
 add_test(NAME hunt_tests COMMAND hunt_tests)
 
+# Ronda 3 do audit (R3-A a R3-G).
+add_executable(round3_tests round3_tests.cpp)
+target_include_directories(round3_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(round3_tests PRIVATE core_domain core_engine_lib)
+target_compile_definitions(round3_tests PRIVATE CORE_LANG_DIR="${CMAKE_SOURCE_DIR}/lang")
+add_test(NAME round3_tests COMMAND round3_tests)
+
 # The command line: what the app and the scripts call.
 add_test(NAME cli_version COMMAND core-engine --version)
 set_tests_properties(cli_version PROPERTIES PASS_REGULAR_EXPRESSION "core-engine ${CORE_VERSION}")
@@ -87,12 +94,17 @@ add_test(NAME cli_measure COMMAND ${CMAKE_COMMAND} -DENGINE=$<TARGET_FILE:core-e
 add_test(NAME cli_unicode COMMAND ${CMAKE_COMMAND} -DENGINE=$<TARGET_FILE:core-engine> -DWORK=${CMAKE_CURRENT_BINARY_DIR}/cli
                                   -P ${CMAKE_CURRENT_SOURCE_DIR}/cli_unicode.cmake)
 
-set_tests_properties(engine_tests domain_tests ai_tests aifx_tests role_tests midi_tests bug_tests audit_tests audit2_tests hunt_tests bitwig_tests cli_version cli_demo_render cli_measure cli_unicode
+set_tests_properties(engine_tests domain_tests ai_tests aifx_tests role_tests midi_tests bug_tests audit_tests audit2_tests hunt_tests round3_tests bitwig_tests cli_version cli_demo_render cli_measure cli_unicode
                      PROPERTIES LABELS merge TIMEOUT 300)
+# Labels por area (2026-11-16, plano de testes T03), alem do nivel. ci/testes.txt e a lista que o gate confere.
+#   ai      o que a AI chama (tools, catalogo, propostas)
+#   ui      a app com janela (eventos de rato e teclado)
+#   plugins plugins reais (Vital, sfizz); fora do gate, a mao (T19). Vazio ate la.
+set_tests_properties(ai_tests aifx_tests role_tests round3_tests PROPERTIES LABELS "merge;ai")
 
 # The app's own end-to-end test (play, undo, save/reopen, export... on the null device, with its test plugins).
 # It opens Core's window for ~20 s, so it has its own label.
 if(TARGET CoreApp)
   add_test(NAME desktop_self_test COMMAND CoreApp --self-test ${CMAKE_CURRENT_BINARY_DIR}/self-test.png)
-  set_tests_properties(desktop_self_test PROPERTIES LABELS desktop TIMEOUT 600)
+  set_tests_properties(desktop_self_test PROPERTIES LABELS "desktop;ui" TIMEOUT 600)
 endif()
