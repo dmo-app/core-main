@@ -17,5 +17,5 @@ target_sources(CoreAIGate PRIVATE src/GatePlugin.cpp)
 target_include_directories(CoreAIGate PRIVATE src)
 # The ParamIDs are the parameters' indexes (gate.hpp keeps the order), so the role map knows them without the plugin.
 target_compile_definitions(CoreAIGate PUBLIC JUCE_FORCE_USE_LEGACY_PARAM_IDS=1 JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0
-                           JUCE_VST3_CAN_REPLACE_VST2=0 JUCE_DISPLAY_SPLASH_SCREEN=0)
+                           JUCE_VST3_CAN_REPLACE_VST2=0)
 target_link_libraries(CoreAIGate PRIVATE juce::juce_audio_utils PUBLIC juce::juce_recommended_config_flags)
