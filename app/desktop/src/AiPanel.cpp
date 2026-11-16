@@ -1,7 +1,9 @@
 #include "AiPanel.h"
 #include "models.hpp"
+#include "samples.hpp"
 #include <algorithm>
 #include <cstdlib>
+#include <filesystem>
 #include <thread>
 #include "Language.h"
 #include "Theme.h"
@@ -19,6 +21,13 @@ juce::String u8(const char* s) { return juce::String::fromUTF8(s); }
 constexpr const char* kEfforts[] = {"low", "medium", "high"};
 // The permission modes as the combo shows them (catalog.hpp: ask, readonly, trusted).
 constexpr const char* kModes[] = {"Ask before changing", "Read only", "Trusted (applies by itself)"};
+
+int64_t nowMs() { return juce::Time::currentTimeMillis(); }
+
+std::filesystem::path pathOfFile(const juce::File& f) {
+  const juce::String p = f.getFullPathName();
+  return std::filesystem::path(std::u8string(reinterpret_cast<const char8_t*>(p.toRawUTF8())));
+}
 
 juce::String dollars(double usd) { return "$" + juce::String(usd, usd < 0.1 ? 4 : 2); }
 
@@ -49,6 +58,21 @@ AiPanel::AiPanel(Host host) : host_(std::move(host)) {
   discard_.onClick = [this] { dropProposal(); };
   addChildComponent(apply_);
   addChildComponent(discard_);
+  dislike_.setButtonText(u8("Não gostei"));
+  like_.setTooltip(u8("Keeps this as a recipe the AI reuses for similar requests (with any model)"));
+  dislike_.setTooltip(u8("The AI will not offer this recipe again"));
+  like_.onClick = [this] { remember(true); };
+  dislike_.onClick = [this] { remember(false); };
+  addChildComponent(like_);
+  addChildComponent(dislike_);
+  memoryButton_.setTooltip(u8("The AI's memory: export or import its recipes (JSON)"));
+  memoryButton_.onClick = [this] { showMemoryMenu(); };
+  addAndMakeVisible(memoryButton_);
+  {
+    std::string why;
+    memory_ = ai::Memory::open(pathOfFile(host_.keyFolder.getChildFile("core-ai-memory.sqlite")), &why);
+    if (!memory_) say(u8("Core"), u8("The AI's memory could not be opened: ") + u8(why));
+  }
   {
     const juce::File settings = host_.keyFolder.getChildFile("ai-settings.json");
     const json j = settings.existsAsFile() ? json::parse(settings.loadFileAsString().toStdString(), nullptr, false) : json();
@@ -129,8 +153,10 @@ void AiPanel::send() {
   dropProposal();  // a new message: the old proposal goes
   if (!chat_ || chat_->config().model != cfg.model || chat_->config().effort != cfg.effort || chat_->config().provider.url() != cfg.provider.url() ||
       chat_->config().permissions.mode != cfg.permissions.mode)
-    chat_ = std::make_unique<ai::Chat>(cfg, host_.functions(), host_.pcore, host_.knowledge);  // a new model or mode starts a new chat
+    chat_ = std::make_unique<ai::Chat>(cfg, host_.functions(), host_.pcore, host_.knowledge, memory_.get());  // a new model or mode starts a new chat
   input_.clear();
+  showFeedback(false);
+  lastRequest_ = text.toStdString();
   say(u8("Diogo"), text);
   busy_ = true;
   send_.setEnabled(false);
@@ -221,11 +247,56 @@ void AiPanel::applyProposal() {
     juce::String text = u8("Applied (Edit > Undo takes it back):");
     for (const auto& l : lines) text += "\n  \u2022 " + u8(l);
     say(u8("Core"), text);
+    if (memory_ && chat_) {  // a candidate recipe; Gostei confirms it
+      recipeId_ = memory_->applied(lastRequest_, doc::songStyle(host_.song()), pending_, chat_->config().model, chat_->shown(), nowMs());
+      showFeedback(!recipeId_.empty());
+    }
   } catch (const std::exception& e) {
     say(u8("Core"), u8("Not applied, nothing changed: ") + u8(e.what()));
     return;
   }
   dropProposal();
+}
+
+void AiPanel::showFeedback(bool visible) {
+  if (!visible) recipeId_.clear();
+  like_.setVisible(visible);
+  dislike_.setVisible(visible);
+  resized();
+}
+
+void AiPanel::remember(bool liked) {
+  if (!memory_ || recipeId_.empty()) return;
+  if (memory_->feedback(recipeId_, liked, "", nowMs()))
+    say(u8("Core"), liked ? u8("Kept in the AI's memory: similar requests start from it.") : u8("Noted: the AI will not offer this again."));
+  showFeedback(false);
+}
+
+void AiPanel::showMemoryMenu() {
+  juce::PopupMenu m;
+  m.addSectionHeader(u8("AI memory: ") + juce::String(memory_ ? memory_->size() : 0) + u8(" recipe(s)"));
+  m.addItem(1, u8("Export…"), memory_ != nullptr);
+  m.addItem(2, u8("Import…"), memory_ != nullptr);
+  m.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&memoryButton_), [this, alive = alive_](int choice) {
+    if (!alive->load() || !memory_ || choice == 0) return;
+    const bool exporting = choice == 1;
+    chooser_ = std::make_unique<juce::FileChooser>(exporting ? u8("Export the AI's memory") : u8("Import an AI memory"),
+                                                   juce::File::getSpecialLocation(juce::File::userDocumentsDirectory).getChildFile("core-ai-memory.json"), "*.json");
+    const int flags = exporting ? juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::warnAboutOverwriting : juce::FileBrowserComponent::openMode;
+    chooser_->launchAsync(flags | juce::FileBrowserComponent::canSelectFiles, [this, alive, exporting](const juce::FileChooser& fc) {
+      if (!alive->load() || !memory_ || fc.getResult() == juce::File()) return;
+      const juce::File f = fc.getResult();
+      if (exporting) {
+        const bool ok = f.replaceWithText(u8(memory_->exportJson().dump(1, ' ', false, json::error_handler_t::replace)));
+        say(u8("Core"), ok ? u8("Memory exported to ") + f.getFullPathName() : u8("Could not write ") + f.getFullPathName());
+        return;
+      }
+      const json j = json::parse(f.loadFileAsString().toStdString(), nullptr, false);
+      std::string why;
+      const int n = j.is_discarded() ? -1 : memory_->importJson(j, &why);
+      say(u8("Core"), n < 0 ? u8("Not imported: ") + u8(why.empty() ? std::string("not JSON") : why) : u8("Imported ") + juce::String(n) + u8(" new recipe(s)."));
+    });
+  });
 }
 
 void AiPanel::dropProposal() {
@@ -248,22 +319,27 @@ void AiPanel::paint(juce::Graphics& g) { g.fillAll(kBackground); }
 void AiPanel::resized() {
   auto r = getLocalBounds().reduced(10);
   auto top = r.removeFromTop(26);
-  model_.setBounds(top.removeFromLeft(180));
+  model_.setBounds(top.removeFromLeft(160));
   top.removeFromLeft(6);
   effort_.setBounds(top.removeFromLeft(80));
   top.removeFromLeft(6);
-  mode_.setBounds(top.removeFromLeft(170));
+  mode_.setBounds(top.removeFromLeft(150));
   newChat_.setBounds(top.removeFromRight(90));
+  top.removeFromRight(6);
+  memoryButton_.setBounds(top.removeFromRight(80));
   r.removeFromTop(8);
   auto bottom = r.removeFromBottom(22);
   status_.setBounds(bottom.removeFromLeft(bottom.getWidth() / 2));
   cost_.setBounds(bottom);
   r.removeFromBottom(6);
-  if (apply_.isVisible() || discard_.isVisible()) {
+  if (apply_.isVisible() || discard_.isVisible() || like_.isVisible()) {
     auto buttons = r.removeFromBottom(30);
     apply_.setBounds(buttons.removeFromLeft(110));
     buttons.removeFromLeft(6);
     discard_.setBounds(buttons.removeFromLeft(110));
+    dislike_.setBounds(buttons.removeFromRight(110));
+    buttons.removeFromRight(6);
+    like_.setBounds(buttons.removeFromRight(110));
     r.removeFromBottom(6);
   }
   auto entry = r.removeFromBottom(64);

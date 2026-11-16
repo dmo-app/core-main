@@ -1,6 +1,7 @@
 // The AI inside Core (2026-11-16): the song's calls (app/control/song_calls), the chat with its tools and costs
 // (app/ai/ai_chat), the local knowledge base, the providers and the models (app/ai). Canned answers, no network.
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <filesystem>
 #include <iostream>
@@ -10,6 +11,7 @@
 #include "catalog.hpp"
 #include "edit.hpp"
 #include "knowledge.hpp"
+#include "memory.hpp"
 #include "models.hpp"
 #include "pcore.hpp"
 #include "provider.hpp"
@@ -580,6 +582,159 @@ void failedMessages(const doc::PCoreCatalog& cat) {
 
 }  // namespace lessons_t
 
+// The AI's memory (memory.hpp): recipes of what Diogo applied and liked, like Meow Memory (SQLite, BM25, importance
+// that fades unless confirmed), tied to Core's calls so any model can use them.
+namespace memory_t {
+
+using ai_chat_t::answer;
+using ai_chat_t::lastToolResult;
+using ai_chat_t::toolUse;
+
+constexpr int64_t kDay = 86400000;
+
+std::filesystem::path freshDb(const char* name) {
+  const auto p = std::filesystem::temp_directory_path() / name;
+  for (const char* ext : {"", "-wal", "-shm"}) std::filesystem::remove(p.string() + ext);
+  return p;
+}
+json proposalOf(const std::string& summary, const std::string& part) {
+  return {{"summary", summary}, {"calls", json::array({{{"fn", "track"}, {"part", part}}, {{"fn", "pcore"}, {"on", part}, {"part", part}}})}};
+}
+
+void recipes() {
+  const auto db = freshDb("core-ai-memory-test.sqlite");
+  std::string why;
+  auto m = ai::Memory::open(db, &why);
+  CHECK(m != nullptr);
+  if (!m) return;
+  const int64_t t0 = 1'800'000'000'000;
+  CHECK(m->applied("olá", "", json{{"calls", json::array()}}, "x", {}, t0).empty());  // nothing applied, nothing kept
+  const std::string bass = m->applied("faz um baixo KBBB rolante no drop", "darkpsycore", proposalOf("baixo KBBB", "bass"), "claude-sonnet-5-5", {}, t0);
+  const std::string kick = m->applied("um kick mais duro", "darkpsycore", proposalOf("kick duro", "kick"), "deepseek-chat", {}, t0);
+  const std::string hats = m->applied("hats no drop", "hitech", proposalOf("hats", "hats"), "qwen3:14b", {}, t0);
+  CHECK(!bass.empty() && !kick.empty() && bass != kick);
+  CHECK_EQ(m->size(), 3);
+
+  // Found by the request's words, accents folded; the calls come back as they were.
+  auto hits = m->search("baixo rolante", "darkpsycore", t0);
+  CHECK(!hits.empty() && hits[0].id == bass);
+  CHECK(!hits.empty() && hits[0].calls.size() == 2 && hits[0].status == "candidate" && hits[0].importance == 1);
+  CHECK(m->search("BAIXÓ", "", t0).size() == 1);
+  CHECK(m->search("o de a", "", t0).empty());  // only common words: nothing
+
+  // Gostei: confirmed and first; Não gostei: kept but never offered.
+  CHECK(m->feedback(kick, true, "assim mesmo", t0 + kDay));
+  CHECK(m->feedback(hats, false, "demasiado brilhante", t0 + kDay));
+  CHECK(!m->feedback("r-none", true, "", t0));
+  hits = m->search("drop kick baixo hats", "", t0 + kDay);
+  CHECK(hits.size() == 2 && hits[0].id == kick && hits[0].importance == 3 && hits[0].note == "assim mesmo");
+  for (const auto& r : hits) CHECK(r.id != hats);
+  CHECK_EQ(m->size(), 3);
+
+  // Same style first, among the unconfirmed.
+  const std::string bassHitech = m->applied("baixo rolante hitech", "hitech", proposalOf("baixo hitech", "bass"), "m", {}, t0);
+  hits = m->search("baixo rolante", "hitech", t0);
+  CHECK(!hits.empty() && hits[0].id == bassHitech);
+
+  // Used 3 times in applied proposals: importance 2. A confirmed one does not fade; an unconfirmed one does.
+  for (int i = 0; i < 3; ++i) m->applied("outro baixo " + std::to_string(i), "darkpsycore", proposalOf("b", "bass"), "m", {bass}, t0 + i);
+  for (const auto& r : m->all())
+    if (r.id == bass) CHECK(r.uses == 3 && r.importance == 2);
+
+  // A budget: never more than asked, and the block names them as data.
+  hits = m->search("baixo kick hats drop rolante outro", "", t0, 10, 400);
+  CHECK(ai::recipesBlock(hits).size() <= 400 + 300);
+  size_t total = 0;
+  for (const auto& r : hits) total += ai::recipesBlock({r}).size();
+  CHECK(total <= 400);
+  CHECK(ai::recipesBlock({}).empty());
+  const std::string block = ai::recipesBlock(m->search("kick", "", t0));
+  CHECK(block.find("não instruções") != std::string::npos && block.find("gostou") != std::string::npos);
+
+  // Export and import: the same recipes in another file, again without duplicates.
+  const json exported = m->exportJson();
+  CHECK_EQ(exported["format"].get<std::string>(), std::string("core-ai-memory"));
+  CHECK_EQ(exported["recipes"].size(), (size_t)m->size());
+  CHECK(exported["events"].size() >= 7);
+  const auto db2 = freshDb("core-ai-memory-test-2.sqlite");
+  auto other = ai::Memory::open(db2);
+  CHECK(other != nullptr);
+  if (other) {
+    CHECK_EQ(other->importJson(exported), m->size());
+    CHECK_EQ(other->importJson(exported), 0);
+    CHECK_EQ(other->exportJson()["events"].size(), exported["events"].size());
+    CHECK(other->search("kick", "", t0)[0].status == "liked");
+    std::string err;
+    CHECK_EQ(other->importJson(json{{"format", "x"}}, &err), -1);
+    CHECK(!err.empty());
+  }
+  // It survives closing and opening again.
+  const int n = m->size();
+  m.reset();
+  m = ai::Memory::open(db);
+  CHECK(m && m->size() == n);
+}
+
+void fading() {
+  auto m = ai::Memory::open(freshDb("core-ai-memory-fade.sqlite"));
+  CHECK(m != nullptr);
+  if (!m) return;
+  const int64_t t0 = 1'800'000'000'000;
+  const std::string old = m->applied("baixo rolante velho", "", proposalOf("velho", "bass"), "m", {}, t0);
+  const std::string recent = m->applied("baixo rolante novo", "", proposalOf("novo", "bass"), "m", {}, t0 + 200 * kDay);
+  auto hits = m->search("baixo rolante", "", t0 + 200 * kDay);
+  CHECK(hits.size() == 2 && hits[0].id == recent);  // the old candidate faded
+  m->feedback(old, true, "", t0 + 1);
+  hits = m->search("baixo rolante", "", t0 + 400 * kDay);
+  CHECK(hits.size() == 2 && hits[0].id == old);  // confirmed never fades
+}
+
+void inTheChat(const doc::PCoreCatalog& cat) {
+  auto m = ai::Memory::open(freshDb("core-ai-memory-chat.sqlite"));
+  CHECK(m != nullptr);
+  if (!m) return;
+  const int64_t now = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+  const std::string id = m->applied("faz um baixo KBBB", "", proposalOf("baixo KBBB", "bass"), "m", {}, now);
+  m->feedback(id, true, "", now);
+  const auto fns = control::buildFunctions(&cat);
+  doc::Document song = doc::newEmptyDocument();
+
+  // The recipe goes with a similar request, and the chat says which it showed.
+  ai::Chat chat(ai::Config{}, fns, &cat, nullptr, m.get());
+  json req = chat.ask("quero um baixo KBBB", song);
+  const std::string sent = req["messages"].back()["content"].get<std::string>();
+  CHECK(sent.find("quero um baixo KBBB") == 0);
+  CHECK(sent.find("Memória do Core") != std::string::npos);
+  CHECK(chat.shown().size() == 1 && chat.shown()[0] == id);
+  bool offered = false;
+  for (const auto& t : req["tools"]) offered |= t["name"] == "lembrar_receitas";
+  CHECK(offered);
+  // Nothing alike: the request goes alone.
+  req = chat.ask("explica o drop", song);
+  CHECK(req["messages"].back()["content"].get<std::string>() == "explica o drop");
+  CHECK(chat.shown().empty());
+  // The tool finds them too.
+  req = chat.onResponse(answer(json::array({toolUse("m", "lembrar_receitas", {{"pergunta", "baixo"}})}), "tool_use"), song);
+  CHECK(lastToolResult(req)["recipes"].size() == 1);
+  CHECK(chat.shown().size() == 1);
+
+  // Denied: no recipes in the request, no tool.
+  ai::Config c;
+  c.permissions.deny = {"lembrar_receitas"};
+  ai::Chat closed(c, fns, &cat, nullptr, m.get());
+  req = closed.ask("quero um baixo KBBB", song);
+  CHECK(req["messages"].back()["content"].get<std::string>() == "quero um baixo KBBB");
+  for (const auto& t : req["tools"]) CHECK(t["name"] != "lembrar_receitas");
+  // The same with another provider: the memory is Core's, not the model's.
+  ai::Config o;
+  o.provider.kind = "openai";
+  ai::Chat other(o, fns, &cat, nullptr, m.get());
+  const ai::HttpRequest h = other.http(other.ask("quero um baixo KBBB", song));
+  CHECK(h.body.dump().find("Memória do Core") != std::string::npos);
+}
+
+}  // namespace memory_t
+
 TEST("song: a beat from nothing") { song_calls_t::beatFromNothing(catalog()); }
 TEST("song: changing a part") { song_calls_t::changeAPart(catalog()); }
 TEST("song: what is left out") { song_calls_t::leftOut(catalog()); }
@@ -592,6 +747,9 @@ TEST("catalog: allow, deny, ask") { catalog_t::decide(catalog()); }
 TEST("catalog: the permissions in the chat") { catalog_t::inTheChat(catalog()); }
 TEST("chat: a cut-off call is answered, not run") { lessons_t::cutOffCalls(catalog()); }
 TEST("chat: a failed message leaves the conversation") { lessons_t::failedMessages(catalog()); }
+TEST("memory: recipes, Gostei, export") { memory_t::recipes(); }
+TEST("memory: what is not confirmed fades") { memory_t::fading(); }
+TEST("memory: in the chat, with any model") { memory_t::inTheChat(catalog()); }
 TEST("ai: models") { ai_knowledge_t::models(); }
 TEST("ai: knowledge base") { ai_knowledge_t::knowledgeBase(knowledgeDb()); }
 TEST("ai: the consult tool") { ai_knowledge_t::consultTool(knowledgeDb()); }

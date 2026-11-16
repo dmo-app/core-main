@@ -79,8 +79,17 @@ std::string toolName(const std::string& functionId) {
   return out.substr(0, 64);
 }
 
-std::vector<Action> catalog(const std::vector<control::CoreFunction>& functions, bool knowledge) {
+std::vector<Action> catalog(const std::vector<control::CoreFunction>& functions, bool knowledge, bool memory) {
   std::vector<Action> out;
+  if (memory)
+    out.push_back(readAction(
+        "lembrar_receitas",
+        "Procura na memória do Core as receitas que o Diogo já aplicou ou de que gostou (pedido, estilo e as chamadas do Core). "
+        "As mais parecidas com o pedido já vêm com ele; usa isto para procurar outras.",
+        {{"type", "object"},
+         {"properties", {{"pergunta", {{"type", "string"}, {"description", "palavras do pedido ou da parte (\"baixo KBBB drop\")"}}},
+                         {"estilo", {{"type", "string"}, {"description", "o estilo (opcional)"}}}}},
+         {"required", {"pergunta"}}}));
   if (knowledge)
     out.push_back(readAction(
         "consultar_manual",

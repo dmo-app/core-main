@@ -12,6 +12,7 @@
 #include "calls.hpp"
 #include "catalog.hpp"
 #include "knowledge.hpp"
+#include "memory.hpp"
 #include "pcore.hpp"
 #include "provider.hpp"
 
@@ -51,7 +52,10 @@ json systemFor(const doc::Document& song, const doc::PCoreCatalog* pcore, const 
 
 class Chat {
 public:
-  Chat(Config config, std::vector<control::CoreFunction> functions, const doc::PCoreCatalog* pcore, const Knowledge* knowledge = nullptr);
+  // With the AI's memory, each request carries the recipes most like it (unless the permissions deny
+  // lembrar_receitas), and the model can search for more.
+  Chat(Config config, std::vector<control::CoreFunction> functions, const doc::PCoreCatalog* pcore, const Knowledge* knowledge = nullptr,
+       const Memory* memory = nullptr);
 
   // The HTTP request for a request body of ask/onResponse, in the provider's own form.
   HttpRequest http(const json& body) const { return makeRequest(config_.provider, body); }
@@ -72,6 +76,8 @@ public:
   json proposal() const;
   // Each write as the model asked it, with Core's verdict ("ok: ..." / "left out: ..."), for the panel.
   const std::vector<std::string>& log() const { return log_; }
+  // The recipes of the memory this message's model was given (in the request and by lembrar_receitas).
+  const std::vector<std::string>& shown() const { return shown_; }
   const Usage& usage() const { return usage_; }   // this message
   const Usage& total() const { return total_; }   // the whole chat
   const Config& config() const { return config_; }
@@ -89,6 +95,8 @@ private:
   std::vector<control::CoreFunction> functions_;
   const doc::PCoreCatalog* pcore_;
   const Knowledge* knowledge_;
+  const Memory* memory_;
+  std::vector<std::string> shown_;
   std::vector<Action> actions_;  // the whole catalog (a denied action is refused when called)
   json tools_;                   // what is offered: the actions not denied
   int asked_ = 0;                // calls in the proposal that wait for Apply

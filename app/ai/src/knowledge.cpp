@@ -29,6 +29,8 @@ bool exec(sqlite3* h, const char* sql, std::string* error) {
   return false;
 }
 
+}  // namespace
+
 // The words of a question as an FTS5 query: each word quoted (no operators get through), any of them.
 std::string ftsQuery(const std::string& q) {
   static const std::set<std::string> stop = {"a", "o", "e", "de", "do", "da", "dos", "das", "em", "no", "na", "um", "uma", "para", "com",
@@ -47,8 +49,6 @@ std::string ftsQuery(const std::string& q) {
   flush();
   return out;
 }
-
-}  // namespace
 
 int buildKnowledge(const std::filesystem::path& jsonl, const std::filesystem::path& dbPath, std::string* error) {
   std::ifstream in(jsonl, std::ios::binary);

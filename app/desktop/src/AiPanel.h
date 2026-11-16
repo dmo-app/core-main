@@ -43,6 +43,9 @@ private:
   void showProposal();
   void applyProposal();
   void dropProposal();
+  void remember(bool liked);         // Gostei / Não gostei on the recipe just applied
+  void showMemoryMenu();             // export / import the memory
+  void showFeedback(bool visible);
   juce::String apiKey() const;
   bool needsKey() const;
   const ai::ModelEntry& entry() const;
@@ -53,6 +56,10 @@ private:
   std::vector<ai::ModelEntry> models_;
   juce::TextEditor transcript_, input_;
   juce::TextButton send_{"Send"}, newChat_{"New chat"}, apply_{"Apply"}, discard_{"Discard"};
+  juce::TextButton like_{"Gostei"}, dislike_, memoryButton_{"Memory"};
+  std::unique_ptr<ai::Memory> memory_;  // %APPDATA%\Core\AI\core-ai-memory.sqlite: recipes of what Diogo applied and liked
+  std::string lastRequest_, recipeId_;   // the message the proposal answered; the recipe Apply just kept
+  std::unique_ptr<juce::FileChooser> chooser_;
   nlohmann::json pending_;  // the proposal waiting for Apply (null: none)
   juce::ComboBox model_, effort_, mode_;  // mode_: the permissions' mode (ask, readonly, trusted)
   ai::Permissions permissions_;            // from ai-settings.json; mode_ changes its mode

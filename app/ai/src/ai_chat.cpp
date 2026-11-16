@@ -1,12 +1,17 @@
 #include "ai_chat.hpp"
 #include <algorithm>
 #include <cctype>
+#include <chrono>
 #include "samples.hpp"
 #include "score.hpp"
 
 namespace core::ai {
 
 namespace {
+
+int64_t nowMs() {
+  return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+}
 
 const char* kSystem =
     "És a AI do Core, a DAW do Diogo, para música electrónica (psytrance, dark psycore, hi-tech, slambient...). "
@@ -122,9 +127,10 @@ json systemFor(const doc::Document& song, const doc::PCoreCatalog* pcore, const 
                       {{"type", "text"}, {"text", "Ficha dos estilos:\n" + styleCard(song, pcore).dump()}, {"cache_control", {{"type", "ephemeral"}}}}});
 }
 
-Chat::Chat(Config config, std::vector<control::CoreFunction> functions, const doc::PCoreCatalog* pcore, const Knowledge* knowledge)
-    : config_(std::move(config)), functions_(std::move(functions)), pcore_(pcore), knowledge_(knowledge),
-      actions_(catalog(functions_, knowledge != nullptr)) {
+Chat::Chat(Config config, std::vector<control::CoreFunction> functions, const doc::PCoreCatalog* pcore, const Knowledge* knowledge,
+           const Memory* memory)
+    : config_(std::move(config)), functions_(std::move(functions)), pcore_(pcore), knowledge_(knowledge), memory_(memory),
+      actions_(catalog(functions_, knowledge != nullptr, memory != nullptr)) {
   std::vector<Action> offered;
   for (const auto& a : actions_)
     if (decide(config_.permissions, a) != Verdict::deny) offered.push_back(a);
@@ -169,11 +175,20 @@ json Chat::ask(const std::string& text, const doc::Document& song) {
   usage_ = Usage{};
   ++proposalNo_;
   askStart_ = messages_.size();
+  shown_.clear();
+  std::string content = text;
+  // The memory: the recipes most like this request go with it (as data), unless the permissions say no.
+  if (memory_)
+    if (const Action* a = findAction(actions_, "lembrar_receitas"); a && decide(config_.permissions, *a) != Verdict::deny) {
+      const auto hits = memory_->search(text, doc::songStyle(song), nowMs());
+      for (const auto& r : hits) shown_.push_back(r.id);
+      if (!hits.empty()) content += "\n\n" + recipesBlock(hits);
+    }
   // Tool results left from a message that stopped early go in the same turn as the new text (one user turn).
   if (!messages_.empty() && messages_.back().value("role", std::string()) == "user" && messages_.back()["content"].is_array())
-    messages_.back()["content"].push_back({{"type", "text"}, {"text", text}});
+    messages_.back()["content"].push_back({{"type", "text"}, {"text", content}});
   else
-    messages_.push_back({{"role", "user"}, {"content", text}});
+    messages_.push_back({{"role", "user"}, {"content", content}});
   summary_ = text.substr(0, 120);
   ++steps_;
   return request(song);
@@ -188,6 +203,17 @@ json Chat::runTool(const std::string& name, const json& input, const doc::Docume
     return {{"error", "not allowed: Diogo's permissions deny " + name}};
   }
   if (name == "ler_musica") return songForAi(song);
+  if (name == "lembrar_receitas") {
+    if (!memory_) return {{"error", "the memory is not open"}};
+    json out = json::array();
+    for (const auto& r : memory_->search(input.value("pergunta", std::string()), input.value("estilo", std::string()), nowMs(), 5)) {
+      if (std::find(shown_.begin(), shown_.end(), r.id) == shown_.end()) shown_.push_back(r.id);
+      out.push_back({{"pedido", r.request}, {"estado", r.status == "liked" ? "gostou" : "aplicou"}, {"estilo", r.style}, {"calls", r.calls},
+                     {"nota_do_diogo", r.note}});
+    }
+    if (out.empty()) return {{"result", "nothing in the memory for that"}};
+    return {{"recipes", out}};
+  }
   if (name == "consultar_manual") {
     if (!knowledge_) return {{"error", "the knowledge base is not installed"}};
     json hits = json::array();

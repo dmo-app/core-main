@@ -11,6 +11,10 @@
 
 namespace core::ai {
 
+// The words of a question as an FTS5 query: each word quoted (no operators get through), any of them; common
+// Portuguese and English words left out. "" when nothing is left.
+std::string ftsQuery(const std::string& question);
+
 struct KnowledgeHit {
   std::string source, title, style, text;
   double rank = 0;  // bm25: lower is better

@@ -4,7 +4,7 @@
 // MCP), and one policy decides for each action: allow, deny or ask. No code was copied from theDAW, only the idea.
 //
 // In Core:
-//   read  actions (ler_musica, formas_pcore, consultar_manual) only look; they run when the model calls them.
+//   read  actions (ler_musica, formas_pcore, consultar_manual, lembrar_receitas) only look; they run when the model calls them.
 //   edit  actions are Core's calls (control/calls.hpp: pcore, shape, track, mix...). They never touch the song while the
 //         model works: each is checked and joins the proposal.
 //   allow  read: it runs.  edit: it joins the proposal, and a proposal of allowed edits only is applied by itself when
@@ -36,8 +36,8 @@ struct Action {
 std::string toolName(const std::string& functionId);
 
 // The catalog: the read actions (consultar_manual only with the knowledge base), then one edit per function Core can
-// run now (its text choices as enums, its knobs with their ranges).
-std::vector<Action> catalog(const std::vector<control::CoreFunction>& functions, bool knowledge);
+// run now (its text choices as enums, its knobs with their ranges). lembrar_receitas only with the AI's memory (memory.hpp).
+std::vector<Action> catalog(const std::vector<control::CoreFunction>& functions, bool knowledge, bool memory = false);
 const Action* findAction(const std::vector<Action>& actions, const std::string& name);
 
 // The views. Anthropic: {name, description, input_schema}, the last one with cache_control (tools and system are
