@@ -3,6 +3,7 @@
 // No GUI, no audio device, no engine code here: the domain is plain data, validation and conversion.
 // Contract: docs/contracts/core-document.md.
 #pragma once
+#include <cstdlib>
 #include <algorithm>
 #include <cstdint>
 #include <filesystem>
@@ -21,6 +22,12 @@ constexpr const char* kDocumentFormat = "core-document";
 // migrated when opened (to a copy: the app saves them under a new name).
 constexpr int kSchemaVersion = 3;  // 3: transport.tempoMap. A song without tempo changes is still written as 2.
 constexpr int kPpq = 960;
+// The number after an id's prefix ("n12" -> 12) for the next free id: at most a billion, so "+ 1" never overflows
+// with a huge or odd id from a file (sweep). Not a number: 0.
+inline long idNumber(const char* digits) {
+  const long v = std::strtol(digits, nullptr, 10);
+  return v < 0 ? 0 : v > 1000000000L ? 1000000000L : v;
+}
 
 // A document that cannot be read. `path` names the entity and field, e.g. "tracks[1].patterns[0].notes[3].pitch".
 struct DocumentError : std::runtime_error {

@@ -20,6 +20,42 @@ target_link_libraries(domain_tests PRIVATE core_domain core_engine_lib)
 target_compile_definitions(domain_tests PRIVATE CORE_TEMPLATES_DIR="${CMAKE_SOURCE_DIR}/templates")
 add_test(NAME domain_tests COMMAND domain_tests)
 
+# The role map (Settings > Roles) and the tools that play through it (SUCK, PUM, build-up effects).
+add_executable(role_tests role_tests.cpp)
+target_include_directories(role_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(role_tests PRIVATE core_domain core_engine_lib)
+add_test(NAME role_tests COMMAND role_tests)
+
+# MIDI files in and out (export with the rolls expanded as they play; import into tracks and patterns).
+add_executable(midi_tests midi_tests.cpp)
+target_include_directories(midi_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(midi_tests PRIVATE core_domain core_engine_lib)
+add_test(NAME midi_tests COMMAND midi_tests)
+
+# The medium and small bugs fixed from the reviewed sweep (2026-11-16): each failed before its fix.
+add_executable(bug_tests bug_tests.cpp)
+target_include_directories(bug_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(bug_tests PRIVATE core_domain core_engine_lib)
+add_test(NAME bug_tests COMMAND bug_tests)
+
+# The export for the Bitwig: the .mid and the .vstpreset of each plugin, and which goes on which track.
+add_executable(bitwig_tests bitwig_tests.cpp)
+target_include_directories(bitwig_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(bitwig_tests PRIVATE core_domain core_engine_lib)
+add_test(NAME bitwig_tests COMMAND bitwig_tests)
+
+# The bugs of the external audit (2026-11-16, RELATORIO-BUGS-MELHORIAS.md): each failed before its fix.
+add_executable(audit_tests audit_tests.cpp)
+target_include_directories(audit_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/engine/src)
+target_link_libraries(audit_tests PRIVATE core_domain core_engine_lib)
+add_test(NAME audit_tests COMMAND audit_tests)
+
+# The second external audit (2026-11-16, code sweep): engine-client lines, sync retry, export disk space, autosave.
+add_executable(audit2_tests audit2_tests.cpp)
+target_include_directories(audit2_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/engine/src ${CMAKE_SOURCE_DIR}/app/engine-client/src)
+target_link_libraries(audit2_tests PRIVATE core_domain core_engine_lib)
+add_test(NAME audit2_tests COMMAND audit2_tests)
+
 # The command line: what the app and the scripts call.
 add_test(NAME cli_version COMMAND core-engine --version)
 set_tests_properties(cli_version PROPERTIES PASS_REGULAR_EXPRESSION "core-engine ${CORE_VERSION}")
@@ -28,7 +64,11 @@ add_test(NAME cli_demo_render COMMAND ${CMAKE_COMMAND} -DENGINE=$<TARGET_FILE:co
 add_test(NAME cli_measure COMMAND ${CMAKE_COMMAND} -DENGINE=$<TARGET_FILE:core-engine> -DWORK=${CMAKE_CURRENT_BINARY_DIR}/cli
                                   -P ${CMAKE_CURRENT_SOURCE_DIR}/cli_measure.cmake)
 
-set_tests_properties(engine_tests domain_tests cli_version cli_demo_render cli_measure PROPERTIES LABELS merge TIMEOUT 300)
+add_test(NAME cli_unicode COMMAND ${CMAKE_COMMAND} -DENGINE=$<TARGET_FILE:core-engine> -DWORK=${CMAKE_CURRENT_BINARY_DIR}/cli
+                                  -P ${CMAKE_CURRENT_SOURCE_DIR}/cli_unicode.cmake)
+
+set_tests_properties(engine_tests domain_tests role_tests midi_tests bug_tests audit_tests audit2_tests bitwig_tests cli_version cli_demo_render cli_measure cli_unicode
+                     PROPERTIES LABELS merge TIMEOUT 300)
 
 # The app's own end-to-end test (play, undo, save/reopen, export... on the null device, with its test plugins).
 # It opens Core's window for ~20 s, so it has its own label.

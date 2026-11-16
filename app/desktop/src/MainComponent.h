@@ -252,13 +252,18 @@ private:
   doc::Loop engineLoop() const;  // the song's loop, or the pattern's while the Patterns window plays
   void askTrackName(const std::string& trackId);
   void exportWav(int bits, bool mono = false);
+  void exportMidi();
+  void exportBitwig();  // the .mid and a .vstpreset per plugin, for the Bitwig
+  void importMidi();
   // Plugins (VST3): what this PC has (Plugins menu > Scan), their windows and their states in the song.
   std::unique_ptr<PluginCatalog> plugins_;
   uint64_t pluginEditsSeen_ = 0;
   void scanPlugins();
   bool fetchPluginStates();  // the engine's plugin states into the document (false: no answer)
   void selectDevice(const std::string& name);
-  enum class SaveResult { Failed, Saved };
+  // SavedWithoutPlugins: the song is in the file but the plugins' current settings are not (the engine gave no
+  // answer): the song stays unsaved and Close does not go on (audit R01).
+  enum class SaveResult { Failed, Saved, SavedWithoutPlugins };
   void save(bool chooseName, std::function<void(SaveResult)> then = nullptr);
   SaveResult writeTo(const juce::File& target);  // shows the error itself
   std::string lastSampleTrack_;  // the library's last try on a track (the next try there replaces its undo step)
@@ -407,6 +412,8 @@ private:
   // Autosave (M6): every minute while there are unsaved changes, a copy goes to the autosave folder (never
   // over the song); saved, or closed cleanly, it is removed. One left by a crash is offered on the next start.
   void autosaveTick();
+  void startAutosave(doc::Document document);  // writes this copy on a thread, when it is not on disk yet
+  bool autosaveAsking_ = false;  // the plugins' settings were asked for the next copy
   void removeOwnAutosave();
   void offerRecovery();
   void recoverAutosave(const doc::AutosaveInfo& autosave, const doc::Document& recovered);  // opens it, unsaved

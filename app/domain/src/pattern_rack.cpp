@@ -64,7 +64,7 @@ std::string nextSlotId(const std::vector<PatternSlot>& slots) {
   int high = 0;
   for (const auto& s : slots)
     if (s.id.size() > 1 && s.id[0] == 's' && std::all_of(s.id.begin() + 1, s.id.end(), [](char c) { return std::isdigit((unsigned char)c); }))
-      high = std::max(high, std::stoi(s.id.substr(1)));
+      if (s.id.size() <= 9) high = std::max(high, std::stoi(s.id.substr(1)));  // longer: no stoi out_of_range (sweep)
   return "s" + std::to_string(high + 1);
 }
 

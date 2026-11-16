@@ -3,6 +3,7 @@
 // talks to the engine: at most one document edit in flight, intermediate values coalesced, the last
 // one always sent. Plan sections 3.3 (consistency) and 3.4 (IPC).
 #pragma once
+#include <chrono>
 #include <cmath>
 #include <condition_variable>
 #include <cstdint>
@@ -19,6 +20,8 @@
 #include <vector>
 #include "document.hpp"
 #include "engine_client.hpp"
+#include "engine_protocol.hpp"
+#include "sync_retry.hpp"
 
 namespace core::app {
 
@@ -130,13 +133,15 @@ public:
   // waiting: `done` runs on the message thread (empty if no answer in timeoutMs). The Mixer asks once a second.
   void cpuAsync(int timeoutMs, std::function<void(json)> done);
   void newSong();  // another song (open, new): the document the engine accepted is not this song's any more
-  // Plugins: the state of every loaded plugin ({key: base64}); waits at most timeoutMs (empty if no answer).
+  // Plugins: the state of every loaded plugin ({key: base64}); waits at most timeoutMs (null if no answer; {} is an answer).
   json pluginStates(int timeoutMs);
-  // The same without waiting: `done` runs later on the message thread with the states (empty if no answer).
+  // The same without waiting: `done` runs later on the message thread with the states (null if no answer).
   void pluginStatesAsync(int timeoutMs, std::function<void(json)> done);
   // The parameters of a loaded plugin that can be automated ([{id, name, value, default, steps, text}]);
   // empty if it is not loaded or there is no answer in timeoutMs. UI thread.
   json pluginParams(const std::string& key, int timeoutMs);
+  // The loaded plugin's sound as a .vstpreset, in base64 ("" if no answer, not loaded or not VST3): Bitwig export.
+  std::string pluginPreset(const std::string& key, int timeoutMs);
   void openPluginEditor(const std::string& key);
   void releasePlugins();  // another song (open, new): the engine's plugins start again from its states
   // New engine session: same document, loop and position; stays stopped.
@@ -148,7 +153,7 @@ public:
 
 private:
   struct Action {
-    enum Kind { Play, Stop, Home, Seek, SetLoop, Export, CancelExport, SelectDevice, LiveNote, Panic, Cpu, ResetLoudness, Analysis, Listen, Watch, PluginStates, PluginParams, PluginEditor, ReleasePlugins } kind;
+    enum Kind { Play, Stop, Home, Seek, SetLoop, Export, CancelExport, SelectDevice, LiveNote, Panic, Cpu, ResetLoudness, Analysis, Listen, Watch, PluginStates, PluginParams, PluginPreset, PluginEditor, ReleasePlugins } kind;
     int64_t tick = 0;
     std::string text;
     int bits = 24;
@@ -178,6 +183,9 @@ private:
   std::optional<doc::Document> acceptedDocument_;
   uint64_t documentEpoch_ = 0;
   int64_t wantedRevision_ = 1, sentRevision_ = 0;
+  client::SyncRetry syncRetry_;  // audit 2, bug 2: a project.load with no answer is sent again by itself
+  bool retryPending_ = false;
+  std::chrono::steady_clock::time_point retryAt_{};
   std::deque<Action> actions_;
   doc::Loop loop_;          // latest loop asked for
   double listenDb_ = -10;   // setListenLevel; sent with every engine.start

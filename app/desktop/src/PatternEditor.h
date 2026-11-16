@@ -64,6 +64,10 @@ public:
   // FOLLOW (Tools > FOLLOW): 0 the kick and the bass follow the selected notes, 1 the kick follows the STUTTER of the
   // bars shown, 2 the bass follows the kick there, 3 this track's FOLLOW on/off (it then follows at every edit).
   void follow(int what);
+  // SUCK / PUM / build-up effects through the role map (role_tools.hpp) on the current track. tool: "suck" (amount =
+  // bars before the drop), "pump" / "pumpSong" (sourceIndex = the track the pump follows), "buildupFx" (amount 1..3:
+  // filter+reverb, +delay, +drive). Pattern ticks [from, to) of the bars shown.
+  void roleTool(const std::string& tool, int amount, int sourceIndex, int64_t from, int64_t to);
   // Edit > Notes and Edit > Randomize (see the .cpp): transpose, add notes above, length, velocity, shuffle, random pitches.
   void noteTool(const std::string& kind, int value);
   // The Tools menu (2026-11-05: create, not only trim). Each acts on the bars shown (the selected notes among them,
@@ -87,7 +91,7 @@ public:
   // last take changed (when nothing was edited since) and writes another. tempoTo > 0: the song's tempo glides from
   // the build-up (or roll) to the drop. Returns what happened.
   void showBuildup();
-  juce::String buildupTake(const doc::PCoreSettings& settings, int64_t from, int64_t to, double tempoTo, bool again);
+  juce::String buildupTake(const doc::PCoreSettings& settings, int64_t from, int64_t to, double tempoTo, bool again, int effects = 0);
   // The Patterns window (P-Core's channel rack, a window of its own): the menus' "Patterns…" open it.
   std::function<void()> onOpenPatterns;
   std::function<const doc::PCoreCatalog*()> pcoreCatalog;  // pcore/styles.json beside Core.exe (nullptr: missing)

@@ -133,6 +133,12 @@ BuildupPanel::BuildupPanel(const Start& start) : start_(start) {
   tempoOn_.setEnabled(start_.tempoPossible);
   amount(tempo_, 40, 600, std::round(start_.bpm), " BPM", u8("The song's tempo glides to this from the build-up (or roll) to the drop"));
   tempoOn_.onClick = [this] { tempo_.setEnabled(tempoOn_.getToggleState()); };
+  effects_.addItem(u8("None"), 1);
+  effects_.addItem(u8("Filter opens + reverb grows"), 2);
+  effects_.addItem(u8("Filter + reverb + delay"), 3);
+  effects_.addItem(u8("Filter + reverb + delay + drive"), 4);
+  effects_.setSelectedId(1, juce::dontSendNotification);
+  effects_.setTooltip(u8("The plugins of the roles (Settings > Roles) on this track, moving from the build-up (or roll) to the drop"));
   tempo_.setEnabled(false);
 
   head(changeHead_, u8("Change"), false);
@@ -163,7 +169,8 @@ BuildupPanel::BuildupPanel(const Start& start) : start_(start) {
                 {"Silence", {&gap_}, {0}},
                 {"Pitch rise", {&rise_}, {0}},
                 {"After the drop", {&drop_, &dropBars_}, {0, 80}},
-                {"Tempo", {&tempoOn_, &tempo_}, {90, 0}}};
+                {"Tempo", {&tempoOn_, &tempo_}, {90, 0}},
+                {"Effects", {&effects_}, {0}}};
   for (auto* rows : {&top_, &change_, &drop_rows_})
     for (auto& row : *rows) {
       auto* l = labels_.add(new juce::Label({}, row.label));
@@ -239,7 +246,8 @@ void BuildupPanel::write(bool again) {
     return;
   }
   const double tempoTo = dropOpen_ && tempoOn_.isEnabled() && tempoOn_.getToggleState() ? tempo_.getValue() : 0.0;
-  const juce::String said = onWrite(settings(), (int64_t)(from - 1) * kBar, (int64_t)to * kBar, tempoTo, again && written_);
+  const int fx = dropOpen_ ? effects_.getSelectedId() - 1 : 0;
+  const juce::String said = onWrite(settings(), (int64_t)(from - 1) * kBar, (int64_t)to * kBar, tempoTo, fx, again && written_);
   status_.setText(said, juce::dontSendNotification);
   written_ = true;
   again_.setEnabled(true);

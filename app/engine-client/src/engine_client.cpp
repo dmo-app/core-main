@@ -1,4 +1,5 @@
 #include "engine_client.hpp"
+#include "engine_protocol.hpp"
 #include <fstream>
 #ifndef _WIN32
 #error "The engine client is Windows only for now (the first qualified platform)."
@@ -255,14 +256,30 @@ void EngineClient::readLoop() {
   std::vector<char> buffer(1 << 16);
   DWORD n = 0;
   bool tooLarge = false;
+  std::string protocolError;
   while (ReadFile(process_->stdoutRead, buffer.data(), (DWORD)buffer.size(), &n, nullptr) && n > 0) {
     partial.append(buffer.data(), n);
     size_t start = 0, end;
     while ((end = partial.find('\n', start)) != std::string::npos) {
       std::string line = partial.substr(start, end - start);
       if (!line.empty() && line.back() == '\r') line.pop_back();
-      if (!line.empty()) onLine(line);
+      if (!line.empty()) {
+        // Nothing the engine writes may end this thread without the disconnect below (audit 2, bug 1):
+        // pending commands fail with a clear error and the session restarts cleanly.
+        try {
+          onLine(line);
+        } catch (const std::exception& e) {
+          protocolError = e.what();
+        } catch (...) {
+          protocolError = "The engine's answer could not be read.";
+        }
+        if (!protocolError.empty()) break;
+      }
       start = end + 1;
+    }
+    if (!protocolError.empty()) {
+      TerminateProcess(process_->process, 1);
+      break;
     }
     partial.erase(0, start);
     if (partial.size() > maxMessageBytes_) {  // a broken engine: end the session, never grow without limit
@@ -274,53 +291,64 @@ void EngineClient::readLoop() {
   WaitForSingleObject(process_->process, 2000);
   DWORD code = 0;
   GetExitCodeProcess(process_->process, &code);
-  disconnect(tooLarge ? "The engine sent a message larger than the protocol allows."
-                      : "The engine exited (code " + std::to_string(code) + ").");
+  disconnect(!protocolError.empty() ? protocolError
+             : tooLarge ? "The engine sent a message larger than the protocol allows."
+                        : "The engine exited (code " + std::to_string(code) + ").");
 }
 
 void EngineClient::onLine(const std::string& line) {
-  json message = json::parse(line, nullptr, false);
-  if (message.is_discarded() || !message.is_object()) {
-    std::lock_guard<std::mutex> g(mutex_);
-    stderrTail_ += "[not JSON on stdout] " + line.substr(0, 200) + "\n";
-    return;
-  }
-  if (message.contains("event")) {
-    if (message["event"] == "ready") {
+  // Never throws on what the engine wrote (audit 2, bug 1). A broken protocol throws on purpose (NoId below): readLoop
+  // turns that into a clean end of the session, with the reason.
+  EngineLine read = readEngineLine(line);
+  switch (read.kind) {
+    case EngineLine::Kind::NotJson: {
+      std::lock_guard<std::mutex> g(mutex_);
+      stderrTail_ += "[not JSON on stdout] " + line.substr(0, 200) + "\n";
+      return;
+    }
+    case EngineLine::Kind::Ready: {
       {
         std::lock_guard<std::mutex> g(mutex_);
         if (helloReceived_) return;
-        hello_ = message;
+        hello_ = std::move(read.message);
         helloReceived_ = true;
       }
       changed_.notify_all();
       return;
     }
-    try {
-      if (handler_) handler_(message);
-    } catch (const std::exception& e) {
-      std::lock_guard<std::mutex> g(mutex_);
-      stderrTail_ += std::string("[unexpected engine event] ") + e.what() + "\n";
-    } catch (...) {
-      std::lock_guard<std::mutex> g(mutex_);
-      stderrTail_ += "[unexpected engine event] unknown handler exception\n";
+    case EngineLine::Kind::Event:
+      try {
+        if (handler_) handler_(read.message);
+      } catch (const std::exception& e) {
+        std::lock_guard<std::mutex> g(mutex_);
+        stderrTail_ += std::string("[unexpected engine event] ") + e.what() + "\n";
+      } catch (...) {
+        std::lock_guard<std::mutex> g(mutex_);
+        stderrTail_ += "[unexpected engine event] unknown handler exception\n";
+      }
+      return;
+    case EngineLine::Kind::NoId: {
+      // No command can be told its answer: end the session now instead of letting one wait for its timeout
+      // (audit 2, point 4). readLoop ends the process and disconnect() fails every pending command with this.
+      {
+        std::lock_guard<std::mutex> g(mutex_);
+        stderrTail_ += "[reply without id] " + read.error + "\n";
+      }
+      throw std::runtime_error(endReason(read));
     }
-    return;
+    case EngineLine::Kind::Reply:
+      break;
   }
   std::promise<json> promise;
   {
     std::lock_guard<std::mutex> g(mutex_);
-    if (!message.contains("id") || !message["id"].is_number_integer()) {  // e.g. a line the engine could not parse
-      stderrTail_ += "[reply without id] " + message.value("error", line.substr(0, 200)) + "\n";
-      return;
-    }
-    auto it = pending_.find(message["id"].get<int64_t>());
+    auto it = pending_.find(read.id);
     if (it == pending_.end()) return;  // timed out already
     promise = std::move(it->second);
     pending_.erase(it);
   }
-  if (message.value("ok", false)) promise.set_value(message.value("result", json()));
-  else promise.set_exception(std::make_exception_ptr(EngineError(EngineError::Kind::Rejected, message.value("error", "Engine error."))));
+  if (read.ok) promise.set_value(std::move(read.result));
+  else promise.set_exception(std::make_exception_ptr(EngineError(EngineError::Kind::Rejected, read.error)));
 }
 
 void EngineClient::disconnect(const std::string& why) {

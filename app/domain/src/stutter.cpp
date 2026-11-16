@@ -131,11 +131,16 @@ int stutterTrack(Document& doc, const std::string& trackId, int64_t from, int64_
     const Clip& c = *cp;
     Pattern& p = patternById(t, pid);
     std::set<std::string> ids;
-    for (const auto& n : p.notes) {
-      const int64_t at = c.startTick + (n.tick - c.offsetTicks);  // where the note first sounds in this clip
-      if (n.tick < c.offsetTicks || at >= c.startTick + c.lengthTicks) continue;
-      if (whole || (at >= from && at < to)) ids.insert(n.id);
-    }
+    // Every place the note sounds in this clip: a looping clip plays the pattern again and again, and a clip that
+    // starts mid-pattern plays its first notes in the next repeat (sweep: only the first pass counted).
+    const int64_t len = std::max<int64_t>(1, p.lengthTicks);
+    const int64_t origin = c.startTick - c.offsetTicks % len, end = c.startTick + c.lengthTicks;
+    for (const auto& n : p.notes)
+      for (int64_t base = origin; base + n.tick < end; base += len) {
+        const int64_t at = base + n.tick;
+        if (at < c.startTick) continue;
+        if (whole || (at >= from && at < to)) { ids.insert(n.id); break; }
+      }
     if (!ids.empty()) written += stutterNotes(p, ids, preset.recipe, preset.id, pitched);
   }
   return written;
