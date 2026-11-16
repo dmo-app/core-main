@@ -6,6 +6,7 @@
 #include <thread>
 #include "support/check.hpp"
 #include "support/signals.hpp"
+#include <limits>
 #include <tuple>
 #include "assets.hpp"
 #include "bounce.hpp"
@@ -18,6 +19,7 @@
 #include "io/audio_file.hpp"
 #include "engine_protocol.hpp"
 #include "pattern_sound.hpp"
+#include "sampling.hpp"
 #include <fstream>
 #include "io/wav.hpp"
 
@@ -270,8 +272,21 @@ TEST("caca 2, U-5: a duracao de um preview com sampleRate 0 e 0, nao infinito") 
 TEST("caca 2, U-8: os tres textos que faltavam tem traducao") {
   std::ifstream f(CORE_LANG_DIR "/pt-PT.json", std::ios::binary);
   const json lang = json::parse(f);
-  for (const char* key : {"Rename pattern", "Save as Template", "This pattern, all its rows, goes into Templates > Mine."})
+  for (const char* key : {"Rename pattern", "Save as template", "This pattern, all its rows, goes into Templates > Mine."})
     CHECK(lang["strings"].contains(key));
+}
+
+TEST("caca 2, P08: um clip so de NaN e um ficheiro estragado, nao silencio") {
+  const float nan = std::numeric_limits<float>::quiet_NaN();
+  core::sampling::Channels broken = {std::vector<float>(4800, nan), std::vector<float>(4800, nan)};
+  CHECK(core::sampling::hasBrokenSamples(broken));
+  CHECK_EQ(core::sampling::normalizePeak(broken), 0.0);  // nada muda
+  core::sampling::Channels one = {coretest::sine(440, 48000, 4800, 0.5f)};
+  CHECK(!core::sampling::hasBrokenSamples(one));
+  one[0][100] = std::numeric_limits<float>::infinity();
+  CHECK(core::sampling::hasBrokenSamples(one));
+  core::sampling::Channels silent = {std::vector<float>(4800, 0.0f)};
+  CHECK(!core::sampling::hasBrokenSamples(silent));  // o silencio continua silencio
 }
 
 CORE_TEST_MAIN

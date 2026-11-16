@@ -902,6 +902,10 @@ private:
       owner_.showError(u8("Cut silence"), u8("Not enough memory for this clip."));
       return;
     }
+    if (core::sampling::hasBrokenSamples(channels)) {  // deep hunt P08: not "silent"
+      owner_.showError(u8("Cut silence"), u8("The clip has broken samples (NaN or Inf): the file is damaged."));
+      return;
+    }
     const auto r = core::sampling::audibleRange(channels, reader->sampleRate, -60, 1, 20);
     if (r.to <= r.from) { owner_.showError(u8("Cut silence"), u8("The clip is silent.")); return; }
     if (r.from == 0 && r.to == (int64_t)frames) { owner_.notice_ = u8("No silence to cut at the start or end."); return; }
