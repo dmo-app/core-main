@@ -7391,6 +7391,15 @@ void MainComponent::selfTestStep() {
         const doc::Loop& l = history_.current().loop;
         if (!l.enabled || l.startTick != 8 * kBar || l.endTick != 16 * kBar) return finish(false, "loop section key");
         undo();
+        // The same from where the engine reports the playhead after the jump: a whole sample, a little before the
+        // bar (7679.97 for 7680 at 190 BPM). That must still be the section at the bar, not the one before.
+        shownTick_ = -1;
+        playTick_ = 8.0 * kBar - 0.03;
+        keyPressed(juce::KeyPress('l', juce::ModifierKeys::ctrlModifier | juce::ModifierKeys::shiftModifier, 0));
+        const doc::Loop& engineLoop = history_.current().loop;
+        if (!engineLoop.enabled || engineLoop.startTick != 8 * kBar || engineLoop.endTick != 16 * kBar) return finish(false, "loop section from the engine's position");
+        undo();
+        moveShownPosition(0);
         selectClip("bass", c3);
         int64_t before = -1;
         for (const auto& c : history_.current().findTrack("bass")->clips) if (c.id == c3) before = c.startTick;
