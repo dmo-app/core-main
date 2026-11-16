@@ -6,6 +6,7 @@
 #include "GlobalKeys.h"
 #include "Language.h"
 #include "edit.hpp"
+#include "quick_tools.hpp"
 
 namespace core::app {
 using namespace theme;
@@ -524,6 +525,10 @@ PatternsPanel::PatternsPanel(Host host) : host_(std::move(host)) {
     change(u8("Pattern length"), [id, b](doc::Document& d) { doc::setRackBars(d, id, b); });
   };
   addAndMakeVisible(bars_);
+  double_.setButtonText(u8("x2"));
+  double_.setTooltip(u8("Double: the pattern twice as long, its notes repeated, ready for a variation in the new half (Ctrl+Shift+D)"));
+  double_.onClick = [this] { doublePattern(); };
+  addAndMakeVisible(double_);
   gridLabel_.setText(u8("Grid:"), juce::dontSendNotification);
   addAndMakeVisible(gridLabel_);
   grid_.addItem("1/8", 8);
@@ -870,6 +875,9 @@ void PatternsPanel::rowMenu(const std::string& trackId, juce::Component* target)
   m.addItem(3, u8("Open Piano Roll"));
   m.addItem(4, u8("Effects…"));
   m.addItem(5, u8("Clear this row"));
+  m.addSeparator();
+  m.addItem(6, u8("Shift row left (1/16)     Alt+Left"));
+  m.addItem(7, u8("Shift row right (1/16)    Alt+Right"));
   juce::Component::SafePointer<PatternsPanel> self(this);
   m.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(target).withMousePosition(),
                   [self, trackId, part, style, shapes](int r) {
@@ -878,6 +886,7 @@ void PatternsPanel::rowMenu(const std::string& trackId, juce::Component* target)
     if (r == 3) { self->openPianoRoll(trackId); return; }
     if (r == 4) { if (self->host_.openEffects) self->host_.openEffects(trackId); return; }
     if (r == 5) { self->change(u8("Clear row"), [sid, trackId](doc::Document& d) { doc::clearRackSlot(d, sid, {trackId}); }); return; }
+    if (r == 6 || r == 7) { self->shiftRow(trackId, r == 6 ? -1 : 1); return; }
     const doc::PCoreCatalog* cat = self->host_.catalog ? self->host_.catalog() : nullptr;
     if (!cat) return;
     if ((r >= 300 && r <= 312) || (r >= 400 && r < 401 + (int)cat->scales.size())) {
@@ -1017,8 +1026,31 @@ void PatternsPanel::timerCallback() {
   if (playing) { rows_.repaint(); repaint(numbersArea_); if (velocity_) velocity_->repaint(); }
 }
 
+void PatternsPanel::doublePattern() {
+  const doc::PatternSlot* s = slot();
+  if (!s) return;
+  if (s->bars >= doc::kRackMaxBars) { say(u8("The pattern is already 8 bars long.")); return; }
+  const std::string id = slotId_;
+  int bars = 0;
+  change(u8("Double pattern"), [id, &bars](doc::Document& d) { bars = doc::doubleRackSlot(d, id); });
+  if (bars > 0) say(u8("Doubled: ") + juce::String(bars) + u8(" bars, the notes repeated. Change the new half for a variation."));
+}
+
+void PatternsPanel::shiftRow(const std::string& trackId, int steps) {
+  if (trackId.empty()) { say(u8("Choose a row first (click its name).")); return; }
+  const std::string id = slotId_;
+  int moved = 0;
+  change(steps < 0 ? u8("Shift row left") : u8("Shift row right"),
+         [id, trackId, steps, &moved](doc::Document& d) { moved = doc::shiftRackRow(d, id, trackId, steps); });
+  if (moved == 0) say(u8("The row is empty: nothing to shift."));
+}
+
 bool PatternsPanel::keyPressed(const juce::KeyPress& key) {
   if (key == juce::KeyPress::spaceKey) { togglePlay(); return true; }
+  // Quality of life (quick_tools.hpp): Alt+arrows shift the chosen row a 1/16 (FL), Ctrl+Shift+D doubles (Ableton).
+  if (key == juce::KeyPress(juce::KeyPress::leftKey, juce::ModifierKeys::altModifier, 0)) { shiftRow(selected_, -1); return true; }
+  if (key == juce::KeyPress(juce::KeyPress::rightKey, juce::ModifierKeys::altModifier, 0)) { shiftRow(selected_, 1); return true; }
+  if (key == juce::KeyPress('d', juce::ModifierKeys::ctrlModifier | juce::ModifierKeys::shiftModifier, 0)) { doublePattern(); return true; }
   if (key == juce::KeyPress('z', juce::ModifierKeys::ctrlModifier, 0)) { host_.undo(); return true; }
   if (key == juce::KeyPress('y', juce::ModifierKeys::ctrlModifier, 0) ||
       key == juce::KeyPress('z', juce::ModifierKeys::ctrlModifier | juce::ModifierKeys::shiftModifier, 0)) { host_.redo(); return true; }
@@ -1093,6 +1125,8 @@ void PatternsPanel::resized() {
   head.removeFromRight(14);
   head.removeFromLeft(10);
   bars_.setBounds(head.removeFromLeft(110));
+  head.removeFromLeft(4);
+  double_.setBounds(head.removeFromLeft(36));
   head.removeFromLeft(14);
   gridLabel_.setBounds(head.removeFromLeft(40));
   grid_.setBounds(head.removeFromLeft(80));

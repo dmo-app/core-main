@@ -243,6 +243,11 @@ private:
   juce::String templatesStamp_;
   bool templatesLoaded_ = false;
   void showTrackMenu(const std::string& trackId);  // the track's own items (rename, duplicate, remove...)
+  // Freeze / Unfreeze (quick_tools.hpp): the track's plugins rendered to audio on a track below, unloaded until Unfreeze.
+  void toggleFreeze(const std::string& trackId);
+  void pollFreeze();  // the timer: the render finished, failed or never started
+  struct FreezeJob { std::string trackId; juce::File file; std::string path; juce::uint32 since = 0; };
+  std::unique_ptr<FreezeJob> freeze_;
   void showMainMenu(const std::string& trackId, int64_t tick);  // right click: Tools, Instruments, Import, MIDI, Sample, Music
   juce::PopupMenu legacyMenu(int index, const juce::String& name);  // the menus that were on the top bar, by their old place
   void showAddTrackMenu();

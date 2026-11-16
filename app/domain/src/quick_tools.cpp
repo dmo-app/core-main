@@ -1,0 +1,191 @@
+#include "quick_tools.hpp"
+#include <algorithm>
+#include "edit.hpp"
+#include "pattern_rack.hpp"
+
+namespace core::doc {
+
+namespace {
+constexpr int64_t kBar = 4 * kPpq;
+constexpr int64_t kSixteenth = kPpq / 4;
+const char* kFrozenKey = "frozen";          // on the source: the audio track it plays from
+const char* kFrozenFromKey = "frozenFrom";  // on the audio track: the source
+
+void sortNotes(Pattern& p) {
+  std::stable_sort(p.notes.begin(), p.notes.end(), [](const Note& a, const Note& b) { return a.tick < b.tick; });
+}
+
+int64_t wrap(int64_t v, int64_t len) { return ((v % len) + len) % len; }
+
+std::string extraString(const json& extra, const char* key) {
+  return extra.is_object() && extra.contains(key) && extra[key].is_string() ? extra[key].get<std::string>() : std::string();
+}
+} // namespace
+
+// ---- sections
+
+int64_t nextSectionStart(const Document& doc, int64_t tick) {
+  int64_t best = -1;
+  for (const auto& s : doc.sections)
+    if (s.startTick > tick && s.startTick < doc.lengthTicks && (best < 0 || s.startTick < best)) best = s.startTick;
+  return best;
+}
+
+int64_t previousSectionStart(const Document& doc, int64_t tick, int64_t slackTicks) {
+  int64_t best = -1;
+  const int64_t before = tick - std::max<int64_t>(0, slackTicks);
+  for (const auto& s : doc.sections)
+    if (s.startTick < before && s.startTick > best) best = s.startTick;
+  return best;
+}
+
+Loop sectionLoop(const Document& doc, const std::string& sectionId) {
+  for (const auto& s : doc.sections)
+    if (s.id == sectionId) {
+      Loop l = doc.loop;
+      l.enabled = true;
+      l.startTick = s.startTick;
+      l.endTick = std::min(s.startTick + s.lengthTicks, doc.lengthTicks);
+      if (l.endTick <= l.startTick) throw DocumentError("sections", "the section starts after the song's end");
+      return l;
+    }
+  throw DocumentError("sections", "no section '" + sectionId + "'");
+}
+
+const Section* sectionAt(const Document& doc, int64_t tick) {
+  const Section* at = nullptr;
+  for (const auto& s : doc.sections)
+    if (tick >= s.startTick && tick < s.startTick + s.lengthTicks) at = &s;
+  return at;
+}
+
+// ---- Patterns window
+
+int doubleRackSlot(Document& doc, const std::string& slotId) {
+  const auto slots = rackSlots(doc);
+  const PatternSlot* slot = findRackSlot(slots, slotId);
+  if (!slot) throw DocumentError("patternSlots", "no pattern '" + slotId + "'");
+  if (slot->bars >= kRackMaxBars) throw DocumentError("bars", "the pattern is already " + std::to_string(kRackMaxBars) + " bars long");
+  const int bars = slot->bars * 2;
+  setRackBars(doc, slotId, bars);  // the notes repeat into the new half
+  return bars;
+}
+
+int rotatePatternNotes(Pattern& pattern, int64_t deltaTicks, const std::set<std::string>& noteIds) {
+  const int64_t len = pattern.lengthTicks;
+  if (len <= 0 || deltaTicks % len == 0) return 0;
+  int moved = 0;
+  for (auto& n : pattern.notes) {
+    if (!noteIds.empty() && !noteIds.count(n.id)) continue;
+    n.tick = wrap(n.tick + deltaTicks, len);
+    ++moved;
+  }
+  sortNotes(pattern);
+  return moved;
+}
+
+int shiftRackRow(Document& doc, const std::string& slotId, const std::string& trackId, int steps) {
+  if (steps == 0) return 0;
+  const auto slots = rackSlots(doc);
+  const PatternSlot* slot = findRackSlot(slots, slotId);
+  if (!slot) throw DocumentError("patternSlots", "no pattern '" + slotId + "'");
+  const auto it = slot->tracks.find(trackId);
+  Track* t = nullptr;
+  for (auto& tr : doc.tracks) if (tr.id == trackId) t = &tr;
+  if (!t) throw DocumentError("tracks", "no track '" + trackId + "'");
+  if (it == slot->tracks.end() || !t->findPattern(it->second)) return 0;  // an empty row
+  return rotatePatternNotes(patternById(*t, it->second), (int64_t)steps * kSixteenth);
+}
+
+// ---- nudge
+
+int nudgeClips(Document& doc, const std::vector<ClipRef>& clips, int64_t deltaTicks) {
+  if (clips.empty() || deltaTicks == 0) return 0;
+  Document next = doc;  // all or nothing
+  int64_t lastEnd = 0;
+  for (const auto& r : clips) {
+    Track& t = trackById(next, r.trackId);
+    if (r.audio) {
+      const auto c = std::find_if(t.audioClips.begin(), t.audioClips.end(), [&](const AudioClip& a) { return a.id == r.clipId; });
+      if (c == t.audioClips.end()) throw DocumentError("clips", "no audio clip '" + r.clipId + "'");
+      if (c->startTick + deltaTicks < 0) throw DocumentError("clips", "a clip would start before the song");
+      moveAudioClip(next, r.trackId, r.clipId, c->startTick + deltaTicks);
+      for (const auto& a : trackById(next, r.trackId).audioClips)
+        if (a.id == r.clipId) lastEnd = std::max(lastEnd, audioClipEndTick(next, a));
+    } else {
+      const auto c = std::find_if(t.clips.begin(), t.clips.end(), [&](const Clip& a) { return a.id == r.clipId; });
+      if (c == t.clips.end()) throw DocumentError("clips", "no clip '" + r.clipId + "'");
+      if (c->startTick + deltaTicks < 0) throw DocumentError("clips", "a clip would start before the song");
+      const int64_t start = c->startTick + deltaTicks, len = c->lengthTicks;
+      moveClip(t, r.clipId, start);
+      lastEnd = std::max(lastEnd, start + len);
+    }
+  }
+  if (lastEnd > next.lengthTicks) setSongLength(next, (lastEnd + kBar - 1) / kBar * kBar);
+  doc = std::move(next);
+  return (int)clips.size();
+}
+
+int nudgeNotes(Pattern& pattern, const std::set<std::string>& noteIds, int64_t deltaTicks) {
+  if (noteIds.empty() || deltaTicks == 0) return 0;
+  int moved = 0;
+  for (const auto& n : pattern.notes)
+    if (noteIds.count(n.id)) {
+      if (n.tick + deltaTicks < 0 || n.tick + deltaTicks >= pattern.lengthTicks)
+        throw DocumentError("notes", "a note would leave the pattern");
+      ++moved;
+    }
+  for (auto& n : pattern.notes) if (noteIds.count(n.id)) n.tick += deltaTicks;
+  sortNotes(pattern);
+  return moved;
+}
+
+// ---- freeze
+
+std::string frozenInto(const Track& track) { return extraString(track.extra, kFrozenKey); }
+bool isFrozen(const Track& track) { return !frozenInto(track).empty(); }
+
+std::string cannotFreeze(const Document& doc, const std::string& trackId) {
+  const Track* t = doc.findTrack(trackId);
+  if (!t) return "There is no such track.";
+  if (isFrozen(*t)) return "The track is already frozen.";
+  if (!extraString(t->extra, kFrozenFromKey).empty()) return "This is a frozen track's audio: unfreeze the original instead.";
+  if (t->instrument.kind == "audio") return "An audio track has no plugins to freeze.";
+  if (t->instrument.kind == "bus") return "A bus cannot be frozen: freeze the tracks that feed it.";
+  bool plugins = t->instrument.kind == "plugin";
+  for (const auto& fx : t->effects) plugins = plugins || (fx.is_object() && fx.value("type", std::string()) == "plugin");
+  if (!plugins) return "The track has no plugins: there is nothing to freeze.";
+  if (t->clips.empty()) return "The track plays nothing in the song.";
+  return cannotBounce(doc, trackId);
+}
+
+Printed freezeTrack(Document& doc, const std::string& trackId, const std::filesystem::path& file,
+                    const std::filesystem::path& projectDir) {
+  if (const std::string why = cannotFreeze(doc, trackId); !why.empty()) throw DocumentError("tracks", why);
+  Document next = doc;
+  Printed out = placeBounce(next, trackId, file, projectDir, 0, next.lengthTicks);
+  Track& printed = trackById(next, out.trackId);
+  const std::string bounce = " (bounce)", frozen = " (frozen)";  // the same length: the name still fits
+  if (printed.name.size() >= bounce.size() && printed.name.compare(printed.name.size() - bounce.size(), bounce.size(), bounce) == 0)
+    printed.name.replace(printed.name.size() - bounce.size(), bounce.size(), frozen);
+  if (!printed.extra.is_object()) printed.extra = json::object();
+  printed.extra[kFrozenFromKey] = trackId;
+  Track& source = trackById(next, trackId);  // placeBounce muted it
+  if (!source.extra.is_object()) source.extra = json::object();
+  source.extra[kFrozenKey] = out.trackId;
+  doc = std::move(next);
+  return out;
+}
+
+void unfreezeTrack(Document& doc, const std::string& trackId) {
+  Document next = doc;
+  Track& source = trackById(next, trackId);
+  const std::string audio = frozenInto(source);
+  if (audio.empty()) throw DocumentError("tracks", "the track is not frozen");
+  source.extra.erase(kFrozenKey);
+  source.mix.mute = false;
+  if (next.findTrack(audio)) removeTrack(next, audio);  // the user may have deleted it already
+  doc = std::move(next);
+}
+
+} // namespace core::doc

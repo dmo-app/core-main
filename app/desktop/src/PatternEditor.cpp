@@ -8,6 +8,7 @@
 #include <cmath>
 #include <limits>
 #include "edit.hpp"
+#include "quick_tools.hpp"
 #include "groove.hpp"
 #include "pattern_tools.hpp"
 #include "pcore.hpp"
@@ -2153,6 +2154,19 @@ bool PatternEditor::keyPressed(const juce::KeyPress& key) {
   if (keys.matches("edit.delete", key)) { deleteSelection(); return true; }
   if (keys.matches("edit.duplicate", key)) { duplicateSelection(); return true; }
   if (keys.matches("edit.selectAll", key)) { selectAll(); return true; }
+  // Nudge (Ableton / Bitwig arrows, quick_tools.hpp): the selected notes one grid step (Alt) or 1/64 (Alt+Shift).
+  const bool back = keys.matches("edit.nudgeBack", key) || keys.matches("edit.nudgeFineBack", key);
+  const bool fine = keys.matches("edit.nudgeFineBack", key) || keys.matches("edit.nudgeFineForward", key);
+  if (back || keys.matches("edit.nudgeForward", key) || fine) {
+    if (selected_.empty() || !currentTrack()) return false;  // no notes chosen: the window nudges clips
+    const std::string trackId = trackId_, patternId = patternId_;
+    const std::set<std::string> ids = selected_;
+    const int64_t step = (fine ? doc::kPpq / 16 : std::max<int64_t>(1, snapTicks())) * (back ? -1 : 1);
+    host_.applyEdit([&](doc::Document& d) { doc::nudgeNotes(doc::patternById(doc::trackById(d, trackId), patternId), ids, step); },
+                    "Nudge notes");
+    repaint();
+    return true;
+  }
   return false;  // the window handles the rest (Space, undo...)
 }
 

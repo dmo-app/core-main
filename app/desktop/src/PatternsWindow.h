@@ -68,6 +68,8 @@ public:
   void setStep(const std::string& trackId, int step, bool on);  // inside a gesture when dragging
   void setVelocity(const std::string& trackId, const std::string& noteId, double velocity);
   void rowMenu(const std::string& trackId, juce::Component* target);
+  void doublePattern();                                   // x2 / Ctrl+Shift+D
+  void shiftRow(const std::string& trackId, int steps);   // Alt+Left / Alt+Right on the chosen row
   void openPianoRoll(const std::string& trackId);
   Host& host() { return host_; }
   double playheadInBar() const;  // 0..1 of the shown bar, -1 when the playhead is elsewhere
@@ -116,6 +118,7 @@ private:
   // Rack.
   juce::Label rackTitle_, swingLabel_, gridLabel_;
   juce::ComboBox bars_, grid_;
+  juce::TextButton double_;  // Double: the pattern twice as long, its notes repeated (quick_tools.hpp)
   juce::Slider swing_;
   juce::ToggleButton followButton_;
   juce::OwnedArray<juce::TextButton> barTabs_;
