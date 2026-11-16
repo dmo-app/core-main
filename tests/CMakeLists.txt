@@ -63,6 +63,16 @@ target_link_libraries(hunt_tests PRIVATE core_domain core_engine_lib core_previe
 target_compile_definitions(hunt_tests PRIVATE CORE_TEMPLATES_DIR="${CMAKE_SOURCE_DIR}/templates" CORE_LANG_DIR="${CMAKE_SOURCE_DIR}/lang")
 add_test(NAME hunt_tests COMMAND hunt_tests)
 
+# The Vital presets of the AI (presets/vital): index, VST3 state with the 4 macros, preset on a track, user variants.
+add_executable(vital_tests vital_tests.cpp)
+target_include_directories(vital_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(vital_tests PRIVATE core_domain core_engine_lib)
+target_compile_definitions(vital_tests PRIVATE CORE_PRESETS_DIR="${CMAKE_SOURCE_DIR}/presets/vital")
+add_test(NAME vital_tests COMMAND vital_tests)
+# Windows only, by hand, with Vital installed: does the real Vital take Core's preset state? (see vital_check.cpp)
+add_executable(vital_check vital_check.cpp)
+target_link_libraries(vital_check PRIVATE core_domain core_engine_lib)
+
 # The command line: what the app and the scripts call.
 add_test(NAME cli_version COMMAND core-engine --version)
 set_tests_properties(cli_version PROPERTIES PASS_REGULAR_EXPRESSION "core-engine ${CORE_VERSION}")
@@ -74,7 +84,7 @@ add_test(NAME cli_measure COMMAND ${CMAKE_COMMAND} -DENGINE=$<TARGET_FILE:core-e
 add_test(NAME cli_unicode COMMAND ${CMAKE_COMMAND} -DENGINE=$<TARGET_FILE:core-engine> -DWORK=${CMAKE_CURRENT_BINARY_DIR}/cli
                                   -P ${CMAKE_CURRENT_SOURCE_DIR}/cli_unicode.cmake)
 
-set_tests_properties(engine_tests domain_tests role_tests midi_tests bug_tests audit_tests audit2_tests hunt_tests bitwig_tests cli_version cli_demo_render cli_measure cli_unicode
+set_tests_properties(engine_tests domain_tests role_tests midi_tests bug_tests audit_tests audit2_tests hunt_tests bitwig_tests vital_tests cli_version cli_demo_render cli_measure cli_unicode
                      PROPERTIES LABELS merge TIMEOUT 300)
 
 # The app's own end-to-end test (play, undo, save/reopen, export... on the null device, with its test plugins).
