@@ -79,6 +79,12 @@ public:
   const std::vector<std::string>& log() const { return log_; }
   // The recipes of the memory this message's model was given (in the request and by lembrar_receitas).
   const std::vector<std::string>& shown() const { return shown_; }
+  // This message as a whole, for the memory (memory.hpp) and, one day, for training a model on what Diogo approved:
+  // {"format": "core-ai-episode", "version": 1, provider, model, effort, mode, toolsView ("full" | "gateway"),
+  //  "system" (text), "tools" (every action offered, full form: {name, description, inputSchema}), "messages" (the
+  //  whole conversation so far, content blocks: text / tool_use {id, name, input} / tool_result {tool_use_id, content}),
+  //  "turnStart" (where this message starts in messages), "shown" (the recipes given), "log" (Core's verdict on each write)}.
+  json episode() const;
   const Usage& usage() const { return usage_; }   // this message
   const Usage& total() const { return total_; }   // the whole chat
   const Config& config() const { return config_; }
@@ -104,6 +110,7 @@ private:
   int asked_ = 0;                // calls in the proposal that wait for Apply
   size_t askStart_ = 0;          // where this message's turn starts in messages_
   json messages_ = json::array();
+  json system_;                  // this message's system blocks (set by ask)
   json calls_ = json::array();
   std::vector<std::string> log_;
   std::string reply_, error_, summary_;

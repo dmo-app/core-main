@@ -248,7 +248,8 @@ void AiPanel::applyProposal() {
     for (const auto& l : lines) text += "\n  \u2022 " + u8(l);
     say(u8("Core"), text);
     if (memory_ && chat_) {  // a candidate recipe; Gostei confirms it
-      recipeId_ = memory_->applied(lastRequest_, doc::songStyle(host_.song()), pending_, chat_->config().model, chat_->shown(), nowMs());
+      recipeId_ = memory_->applied(lastRequest_, doc::songStyle(host_.song()), pending_, chat_->config().model, chat_->shown(), nowMs(),
+                                   chat_->episode());
       showFeedback(!recipeId_.empty());
     }
   } catch (const std::exception& e) {
@@ -277,17 +278,21 @@ void AiPanel::showMemoryMenu() {
   m.addSectionHeader(u8("AI memory: ") + juce::String(memory_ ? memory_->size() : 0) + u8(" recipe(s)"));
   m.addItem(1, u8("Export…"), memory_ != nullptr);
   m.addItem(2, u8("Import…"), memory_ != nullptr);
+  m.addItem(3, u8("Export for training (JSONL)…"), memory_ != nullptr);
   m.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&memoryButton_), [this, alive = alive_](int choice) {
     if (!alive->load() || !memory_ || choice == 0) return;
-    const bool exporting = choice == 1;
+    const bool exporting = choice != 2, lines = choice == 3;
+    const char* name = lines ? "core-ai-memory.jsonl" : "core-ai-memory.json";
     chooser_ = std::make_unique<juce::FileChooser>(exporting ? u8("Export the AI's memory") : u8("Import an AI memory"),
-                                                   juce::File::getSpecialLocation(juce::File::userDocumentsDirectory).getChildFile("core-ai-memory.json"), "*.json");
+                                                   juce::File::getSpecialLocation(juce::File::userDocumentsDirectory).getChildFile(name),
+                                                   lines ? "*.jsonl" : "*.json");
     const int flags = exporting ? juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::warnAboutOverwriting : juce::FileBrowserComponent::openMode;
-    chooser_->launchAsync(flags | juce::FileBrowserComponent::canSelectFiles, [this, alive, exporting](const juce::FileChooser& fc) {
+    chooser_->launchAsync(flags | juce::FileBrowserComponent::canSelectFiles, [this, alive, exporting, lines](const juce::FileChooser& fc) {
       if (!alive->load() || !memory_ || fc.getResult() == juce::File()) return;
       const juce::File f = fc.getResult();
       if (exporting) {
-        const bool ok = f.replaceWithText(u8(memory_->exportJson().dump(1, ' ', false, json::error_handler_t::replace)));
+        const std::string text = lines ? memory_->exportJsonl() : memory_->exportJson().dump(1, ' ', false, json::error_handler_t::replace);
+        const bool ok = f.replaceWithText(u8(text));
         say(u8("Core"), ok ? u8("Memory exported to ") + f.getFullPathName() : u8("Could not write ") + f.getFullPathName());
         return;
       }

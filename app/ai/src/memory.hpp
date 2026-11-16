@@ -40,9 +40,11 @@ public:
   Memory& operator=(const Memory&) = delete;
 
   // A proposal Diogo applied: a new candidate recipe. `shown` are the recipes the model was given for it (each counts
-  // as used). Returns the new recipe's id ("" when the proposal has no calls).
+  // as used). `episode` is the whole message (Chat::episode: system, tools, conversation), kept with the "applied" event
+  // so the memory can one day teach a model (AICORE trains; Core only keeps and exports). Returns the new recipe's id
+  // ("" when the proposal has no calls).
   std::string applied(const std::string& request, const std::string& style, const nlohmann::json& proposal, const std::string& model,
-                      const std::vector<std::string>& shown, int64_t nowMs);
+                      const std::vector<std::string>& shown, int64_t nowMs, const nlohmann::json& episode = nullptr);
   // Gostei / Não gostei, with an optional note in his words. False when there is no such recipe.
   bool feedback(const std::string& recipeId, bool liked, const std::string& note, int64_t nowMs);
 
@@ -51,9 +53,15 @@ public:
   std::vector<Recipe> all() const;  // newest first
   int size() const;
 
-  // Export: {"format": "core-ai-memory", "version": 1, "recipes": [...], "events": [...]}. Import adds what is not
-  // there yet (by id); returns how many recipes were added, -1 and why when the file is not a memory export.
+  // Export: {"format": "core-ai-memory", "version": 2, "producer": "Core", "recipes": [...], "events": [...],
+  // "toolsets": {hash: tools}} (version 1 had no toolsets; both import). Import adds what is not there yet (by id);
+  // returns how many recipes were added, -1 and why when the file is not a memory export.
   nlohmann::json exportJson() const;
+  // The same as JSON lines, each one whole by itself (for training tools): first {"format": "core-ai-memory-jsonl",
+  // "version": 1, "producer": "Core", "recipes": n}, then one line per recipe, oldest first:
+  //   {"type": "recipe", "recipe": {...}, "episode": {...Chat::episode with its "tools"} | null, "events": [{at, kind, data}]}
+  // Its events say what Diogo did with it: applied, liked / disliked (with his note), used (in a later proposal).
+  std::string exportJsonl() const;
   int importJson(const nlohmann::json& j, std::string* error = nullptr);
 
 private:

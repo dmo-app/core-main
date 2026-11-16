@@ -159,7 +159,7 @@ void Chat::reset() {
 json Chat::request(const doc::Document& song) const {
   return {{"model", config_.model},
           {"max_tokens", config_.maxTokens},
-          {"system", systemFor(song, pcore_, config_.permissions.mode, config_.gateway)},
+          {"system", system_.is_null() ? systemFor(song, pcore_, config_.permissions.mode, config_.gateway) : system_},
           {"tools", tools_},
           {"messages", messages_},
           {"output_config", {{"effort", config_.effort}}},
@@ -178,6 +178,8 @@ json Chat::ask(const std::string& text, const doc::Document& song) {
   ++proposalNo_;
   askStart_ = messages_.size();
   shown_.clear();
+  // The song does not change while the model works (its edits are only proposed): one system for the whole message.
+  system_ = systemFor(song, pcore_, config_.permissions.mode, config_.gateway);
   std::string content = text;
   // The memory: the recipes most like this request go with it (as data), unless the permissions say no.
   if (memory_)
@@ -320,6 +322,25 @@ void Chat::abandon() {
   }
   calls_ = json::array();
   asked_ = 0;
+}
+
+json Chat::episode() const {
+  std::string system;
+  for (const auto& b : system_.is_array() ? system_ : json::array())
+    if (b.value("type", std::string()) == "text") system += (system.empty() ? "" : "\n\n") + b.value("text", std::string());
+  return {{"format", "core-ai-episode"},
+          {"version", 1},
+          {"provider", config_.provider.kind},
+          {"model", config_.model},
+          {"effort", config_.effort},
+          {"mode", config_.permissions.mode},
+          {"toolsView", config_.gateway ? "gateway" : "full"},
+          {"system", system},
+          {"tools", mcpTools(offered_)},
+          {"messages", messages_},
+          {"turnStart", askStart_},
+          {"shown", shown_},
+          {"log", log_}};
 }
 
 json Chat::proposal() const {

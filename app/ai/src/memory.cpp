@@ -1,6 +1,7 @@
 #include "memory.hpp"
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <set>
 #include "knowledge.hpp"
 #include "sqlite3.h"
@@ -112,6 +113,29 @@ double weight(const Recipe& r, int64_t nowMs) {
   return r.importance * std::pow(0.5, days / kHalfLifeDays);
 }
 
+// The tool definitions an episode was given are the same in most episodes: kept once, by a hash of their text (FNV-1a
+// 64, the same on every machine).
+std::string hashOf(const std::string& text) {
+  uint64_t h = 1469598103934665603ull;
+  for (unsigned char c : text) h = (h ^ c) * 1099511628211ull;
+  char b[17];
+  std::snprintf(b, sizeof b, "%016llx", (unsigned long long)h);
+  return b;
+}
+
+void addToolset(sqlite3* h, const std::string& hash, const json& tools) {
+  Stmt st(h, "INSERT OR IGNORE INTO toolsets(hash, tools) VALUES(?,?)");
+  st.text(1, hash).text(2, tools.dump(-1, ' ', false, json::error_handler_t::replace)).step();
+}
+
+json toolsetOf(sqlite3* h, const std::string& hash) {
+  Stmt st(h, "SELECT tools FROM toolsets WHERE hash = ?");
+  st.text(1, hash);
+  if (!st || st.step() != SQLITE_ROW) return nullptr;
+  json t = json::parse(st.col(0), nullptr, false);
+  return t.is_discarded() ? json(nullptr) : t;
+}
+
 }  // namespace
 
 json Recipe::toJson() const {
@@ -137,6 +161,7 @@ std::unique_ptr<Memory> Memory::open(const std::filesystem::path& path, std::str
                        "  UNIQUE(at, kind, recipe, data));"
                        "CREATE TABLE IF NOT EXISTS recipes(id TEXT PRIMARY KEY, request TEXT, style TEXT, parts TEXT, summary TEXT, model TEXT,"
                        "  status TEXT, note TEXT, calls TEXT, importance INTEGER, uses INTEGER, created INTEGER, updated INTEGER);"
+                       "CREATE TABLE IF NOT EXISTS toolsets(hash TEXT PRIMARY KEY, tools TEXT);"
                        "CREATE VIRTUAL TABLE IF NOT EXISTS recipes_fts USING fts5(id UNINDEXED, request, summary, style, parts,"
                        "  tokenize='unicode61 remove_diacritics 2');",
                        error);
@@ -157,7 +182,7 @@ int Memory::size() const {
 }
 
 std::string Memory::applied(const std::string& request, const std::string& style, const json& proposal, const std::string& model,
-                            const std::vector<std::string>& shown, int64_t nowMs) {
+                            const std::vector<std::string>& shown, int64_t nowMs, const json& episode) {
   const json calls = proposal.is_object() && proposal.contains("calls") && proposal["calls"].is_array() ? proposal["calls"] : json::array();
   if (calls.empty()) return "";
   sqlite3* h = db_->h;
@@ -174,7 +199,18 @@ std::string Memory::applied(const std::string& request, const std::string& style
   r.importance = 1;
   r.createdMs = r.updatedMs = nowMs;
   insertRecipe(h, r);
-  addEvent(h, nowMs, "applied", r.id, {{"request", request}, {"style", style}, {"model", model}, {"calls", calls}, {"summary", r.summary}});
+  json data = {{"request", request}, {"style", style}, {"model", model}, {"calls", calls}, {"summary", r.summary}};
+  if (episode.is_object()) {
+    json e = episode;
+    if (e.contains("tools")) {  // kept once in toolsets
+      const std::string hash = hashOf(e["tools"].dump());
+      addToolset(h, hash, e["tools"]);
+      e.erase("tools");
+      e["toolsHash"] = hash;
+    }
+    data["episode"] = e;
+  }
+  addEvent(h, nowMs, "applied", r.id, data);
   // The recipes the model was given count as used when what it proposed was applied.
   for (const auto& id : shown) {
     Stmt up(h, "UPDATE recipes SET uses = uses + 1, updated = ?2, "
@@ -244,7 +280,37 @@ json Memory::exportJson() const {
     json data = json::parse(st.col(3), nullptr, false);
     events.push_back({{"at", st.col64(0)}, {"kind", st.col(1)}, {"recipe", st.col(2)}, {"data", data.is_discarded() ? json() : data}});
   }
-  return {{"format", "core-ai-memory"}, {"version", 1}, {"recipes", recipes}, {"events", events}};
+  json toolsets = json::object();
+  Stmt ts(db_->h, "SELECT hash, tools FROM toolsets ORDER BY hash");
+  while (ts && ts.step() == SQLITE_ROW) {
+    json t = json::parse(ts.col(1), nullptr, false);
+    if (!t.is_discarded()) toolsets[ts.col(0)] = t;
+  }
+  return {{"format", "core-ai-memory"}, {"version", 2}, {"producer", "Core"}, {"recipes", recipes}, {"events", events}, {"toolsets", toolsets}};
+}
+
+std::string Memory::exportJsonl() const {
+  auto line = [](const json& j) { return j.dump(-1, ' ', false, json::error_handler_t::replace) + "\n"; };
+  const auto recipes = all();
+  std::string out = line({{"format", "core-ai-memory-jsonl"}, {"version", 1}, {"producer", "Core"}, {"recipes", (int)recipes.size()}});
+  for (auto it = recipes.rbegin(); it != recipes.rend(); ++it) {  // oldest first
+    json rec = {{"type", "recipe"}, {"recipe", it->toJson()}, {"episode", nullptr}, {"events", json::array()}};
+    Stmt st(db_->h, "SELECT at, kind, data FROM events WHERE recipe = ? ORDER BY id");
+    st.text(1, it->id);
+    while (st && st.step() == SQLITE_ROW) {
+      json data = json::parse(st.col(2), nullptr, false);
+      if (data.is_discarded()) data = nullptr;
+      if (st.col(1) == "applied" && data.is_object() && data.contains("episode")) {
+        json e = data["episode"];
+        data.erase("episode");
+        if (e.is_object() && e.contains("toolsHash")) e["tools"] = toolsetOf(db_->h, e.value("toolsHash", std::string()));
+        rec["episode"] = e;
+      }
+      rec["events"].push_back({{"at", st.col64(0)}, {"kind", st.col(1)}, {"data", data}});
+    }
+    out += line(rec);
+  }
+  return out;
 }
 
 int Memory::importJson(const json& j, std::string* error) {
@@ -274,6 +340,9 @@ int Memory::importJson(const json& j, std::string* error) {
     r.updatedMs = x.value("updatedMs", r.createdMs);
     added += insertRecipe(h, r) ? 1 : 0;
   }
+  if (j.contains("toolsets") && j["toolsets"].is_object())
+    for (const auto& [hash, tools] : j["toolsets"].items())
+      if (tools.is_array()) addToolset(h, hash, tools);
   if (j.contains("events") && j["events"].is_array())
     for (const auto& e : j["events"])
       if (e.is_object())

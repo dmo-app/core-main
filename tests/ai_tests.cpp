@@ -733,6 +733,60 @@ void inTheChat(const doc::PCoreCatalog& cat) {
   CHECK(h.body.dump().find("Memória do Core") != std::string::npos);
 }
 
+// Diogo, 2026-11-16: the memory is exported clean, so AICORE can train a model on it (Core only keeps and exports).
+void episodesForTraining(const doc::PCoreCatalog& cat) {
+  auto m = ai::Memory::open(freshDb("core-ai-memory-episodes.sqlite"));
+  CHECK(m != nullptr);
+  if (!m) return;
+  const auto fns = control::buildFunctions(&cat);
+  doc::Document song = doc::newEmptyDocument();
+  ai::Chat chat(ai::Config{}, fns, &cat, nullptr, m.get());
+  chat.ask("cria a estrutura de um darkpsycore", song);
+  chat.onResponse(answer(json::array({toolUse("s", "shape", {{"shape", "darkpsycore-64"}})}), "tool_use"), song);
+  chat.onResponse(answer(json::array({{{"type", "text"}, {"text", "Pronto."}}}), "end_turn"), song);
+  const json e = chat.episode();
+  CHECK(e["format"] == "core-ai-episode" && e["version"] == 1 && e["model"] == "claude-haiku-5-5" && e["toolsView"] == "full");
+  CHECK(e["system"].get<std::string>().size() > 100);
+  CHECK(e["tools"].size() == ai::catalog(fns, false, true).size());
+  CHECK(e["messages"].size() == 4 && e["turnStart"] == 0);  // request, tool_use, tool_result, answer
+  CHECK(e["log"].size() == 1);
+  const json proposal = chat.proposal();
+  CHECK(proposal["calls"].size() == 1);
+
+  // Two applied with the same tools: the tools are kept once.
+  const std::string a = m->applied("cria a estrutura de um darkpsycore", "darkpsycore", proposal, "claude-haiku-5-5", {}, 1000, e);
+  const std::string b = m->applied("outra estrutura", "darkpsycore", proposal, "claude-haiku-5-5", {}, 2000, e);
+  m->applied("sem episódio", "", proposal, "m", {}, 3000);
+  m->feedback(a, true, "boa estrutura", 1500);
+  const json full = m->exportJson();
+  CHECK(full["version"] == 2 && full["toolsets"].size() == 1);
+
+  // JSONL: a header, then one whole line per recipe, oldest first.
+  const std::string text = m->exportJsonl();
+  std::vector<json> lines;
+  size_t at = 0;
+  while (at < text.size()) {
+    const size_t end = text.find('\n', at);
+    lines.push_back(json::parse(text.substr(at, end - at), nullptr, false));
+    at = end + 1;
+  }
+  CHECK(lines.size() == 4);
+  if (lines.size() != 4) return;
+  CHECK(lines[0]["format"] == "core-ai-memory-jsonl" && lines[0]["recipes"] == 3);
+  CHECK(lines[1]["recipe"]["id"] == a && lines[2]["recipe"]["id"] == b);
+  CHECK(lines[1]["recipe"]["status"] == "liked" && lines[1]["recipe"]["note"] == "boa estrutura");
+  CHECK(lines[1]["episode"]["tools"] == e["tools"] && lines[1]["episode"]["messages"] == e["messages"]);
+  CHECK(!lines[1]["episode"].contains("toolsHash") || lines[1]["episode"]["tools"].is_array());
+  CHECK(lines[1]["events"].size() == 2 && lines[1]["events"][1]["kind"] == "liked");
+  CHECK(!lines[1]["events"][0]["data"].contains("episode"));  // the episode is said once, beside the recipe
+  CHECK(lines[3]["episode"].is_null());
+
+  // Import brings the episodes and their tools.
+  auto other = ai::Memory::open(freshDb("core-ai-memory-episodes-2.sqlite"));
+  CHECK(other && other->importJson(full) == 3);
+  if (other) CHECK(other->exportJsonl() == text);
+}
+
 }  // namespace memory_t
 
 // Found by the real-API bench (2026-11-16): models write a style's id as "align"; it aligns as that style does.
@@ -823,6 +877,7 @@ TEST("chat: a failed message leaves the conversation") { lessons_t::failedMessag
 TEST("memory: recipes, Gostei, export") { memory_t::recipes(); }
 TEST("memory: what is not confirmed fades") { memory_t::fading(); }
 TEST("memory: in the chat, with any model") { memory_t::inTheChat(catalog()); }
+TEST("memory: episodes and the JSONL export") { memory_t::episodesForTraining(catalog()); }
 TEST("song: a style's id as align") { bench_t::alignByStyle(catalog()); }
 TEST("catalog: the gateway view (ajuda / fazer)") { gateway_t::gatewayMode(catalog()); }
 TEST("ai: models") { ai_knowledge_t::models(); }
