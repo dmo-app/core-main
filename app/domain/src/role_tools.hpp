@@ -77,7 +77,15 @@ struct SpacePreset {
 };
 const std::vector<SpacePreset>& spacePresets();  // reverb: room, hall, plate, huge, tight; delay: throw, dotted, eighths, sixteenths, slow
 const SpacePreset* findSpacePreset(const std::string& kind, const std::string& id);
-struct SharedBusResult { std::string busId; bool newBus = false; int sends = 0, sections = 0; std::string sentence; };
+// sections: the sections where the bus level moves. sizeSet: the preset's size (feedback) was written; false when
+// the role has no such macro. skipped: tracks that could not feed the bus, "name (reason)", left as they were.
+struct SharedBusResult {
+  std::string busId;
+  bool newBus = false, sizeSet = false;
+  int sends = 0, sections = 0;
+  std::vector<std::string> skipped;
+  std::string sentence;
+};
 SharedBusResult toolSharedBus(Document& doc, const std::vector<std::string>& trackIds, const RoleMap& map, const std::string& kind,
                               const std::string& preset = "");  // preset "": room (reverb) or dotted (delay)
 

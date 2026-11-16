@@ -16,6 +16,8 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # o resumo compara a lista de testes com a main
       - name: Ferramentas
         run: sudo apt-get update && sudo apt-get install -y ninja-build
       - name: Configurar
@@ -23,25 +25,34 @@ jobs:
       - name: Compilar
         run: cmake --build build --parallel 4
       - name: Testes (merge)
-        run: ctest --test-dir build -L merge --output-on-failure --timeout 600
+        run: ctest --test-dir build -L merge --no-tests=error --output-on-failure --timeout 600 --output-junit gate-junit.xml
+      - name: Resumo e inventario (ci/testes.txt, nenhum teste da main desaparece)
+        if: always()
+        run: cmake -DSRC=$PWD -DBUILD=build -DJUNIT=build/gate-junit.xml -DCTEST_RC=0 -DAPP=OFF -DBASE=origin/main -DCLEAN=sim -DOUT=build/gate-resumo.txt -P ci/resumo.cmake
   windows:
     runs-on: windows-2025
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: ilammy/msvc-dev-cmd@v1
       - name: Configurar
         run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
       - name: Compilar
         run: cmake --build build --parallel 4
-      - name: Testes (merge)
-        run: ctest --test-dir build -L merge --output-on-failure --timeout 600
-      - name: Self-test da app (desktop)
-        run: ctest --test-dir build -L desktop --output-on-failure --timeout 900
-      - name: Guardar o resultado do self-test
+      - name: Testes (merge + desktop, incluindo o self-test da app)
+        run: ctest --test-dir build --no-tests=error --output-on-failure --timeout 900 --output-junit gate-junit.xml
+      - name: Resumo e inventario
+        if: always()
+        shell: bash
+        run: cmake -DSRC="$PWD" -DBUILD=build -DJUNIT=build/gate-junit.xml -DCTEST_RC=0 -DAPP=ON -DBASE=origin/main -DCLEAN=sim -DOUT=build/gate-resumo.txt -P ci/resumo.cmake
+      - name: Guardar o resultado do self-test e o resumo
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: self-test
-          path: build/tests/self-test.png
+          path: |
+            build/tests/self-test.png
+            build/gate-resumo.txt
           if-no-files-found: ignore

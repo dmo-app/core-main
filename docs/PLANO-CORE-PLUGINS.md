@@ -122,6 +122,17 @@ Corrigido, com testes em `tests/hunt_tests.cpp` (PR #7 e PR #8):
 - §4: `transport.ppq` diferente de 960 diz "must be 960", e não "between 960 and 960".
 - Logs: ficam 20 de cada tipo contando com o da sessão (eram 21). Os 14 .dmp de 4 a 10/11 ficam porque são menos de 20 (como desenhado).
 
+### Ronda 3 do audit (2026-11-16, `development\bug\audit-profunda\ROUND3-PR9-PR4AI.md`)
+
+Corrigido, com testes em `tests/round3_tests.cpp`:
+- R3-A: `toolRoll` trabalha numa cópia da pista: numa pista com 64 padrões recusa sem cortar nenhum clip.
+- R3-B: um cartão cinzento já não abre a tool (diz que plugin falta); o W-Core mostra cinzentos os papéis sem plugin; a frase do F-Core só diz o que escreveu (impact sem drive não fala de "grit").
+- R3-C: 28 textos do painel Tools e dos menus traduzidos; as frases feitas de duas partes são traduzidas parte a parte.
+- R3-D: R-Core/D-Core com um plugin sem macro de tamanho (feedback) diz que o tamanho é o do plugin (`sizeSet`).
+- R3-E: uma pista que não pode ir para o bus (8 sends) fica como estava e a frase diz o nome e a razão (`skipped`); quem já tinha um R-Core muda sem o perder.
+- R3-F: `kind` (R-Core/D-Core) e `style` (ROLL) aceitam maiúsculas, como preset, intent e section.
+- R3-G: só contam as secções em que o nível do bus muda; "quieter in the drops" só aparece quando há um drop.
+
 Não mudado: P07 (o autosave tem um slot por sessão e é apagado quando a música fica guardada ou descartada: serve para recuperar de um crash, não para guardar versões) e a versão do esquema escrita conforme o conteúdo (2 sem mudanças de tempo, 3 com elas: de propósito, para os ficheiros antigos continuarem a abrir em versões anteriores).
 
 ### Export para o Bitwig (2026-11-16)
