@@ -26,17 +26,6 @@ const char* kSystem =
     "- Uma pista nova não tem som até o Diogo escolher o plugin (VST3); diz-lhe isso quando criares pistas.\n"
     "- No fim, responde com uma ou duas frases: o que propuseste e o que ele deve ouvir. Esse texto é o título da proposta.";
 
-std::string lower(std::string s) {
-  for (auto& c : s) c = (char)std::tolower((unsigned char)c);
-  return s;
-}
-
-std::string num(double v) {
-  char b[32];
-  std::snprintf(b, sizeof b, "%g", v);
-  return b;
-}
-
 // The song as the model reads it: Core's song (control::songJson) plus, per track, its part, its pattern and where it
 // plays.
 json songForAi(const doc::Document& song) {
@@ -95,12 +84,6 @@ json shapesFor(const doc::PCoreCatalog* pcore, const std::string& part, const st
   return {{"part", part}, {"shapes", out}};
 }
 
-std::string trackHint(const control::CoreFunction& f) {
-  if (f.family == "mix" || f.family == "open") return "the track's name, or \"master\"";
-  if (f.family == "arrange") return "the track's name (leave it out for every track)";
-  return "the track's name (a track made by \"track\" in this chat counts)";
-}
-
 }  // namespace
 
 Prices pricesOf(const std::string& model) {
@@ -125,75 +108,28 @@ double Usage::costUsd(const Prices& p) const {
   return (input * p.input + output * p.output + cacheWrite * p.cacheWrite + cacheRead * p.cacheRead) / 1e6;
 }
 
-std::string toolName(const std::string& functionId) {
-  std::string out;
-  for (unsigned char c : functionId) out += (std::isalnum(c) || c == '_' || c == '-') ? (char)c : '_';
-  return out.substr(0, 64);
-}
-
 json toolsFor(const std::vector<control::CoreFunction>& functions, bool knowledge) {
-  json tools = json::array();
-  if (knowledge)
-    tools.push_back({{"name", "consultar_manual"},
-                     {"description", "Consulta a base local do CORE-MANUAL: como fazer música em cada estilo (BPM, kick, KBBB, baixo, hats, "
-                                     "arranjo, energia, mistura, técnicas). Devolve os excertos que melhor respondem."},
-                     {"input_schema", {{"type", "object"},
-                                       {"properties", {{"pergunta", {{"type", "string"}, {"description", "o que queres saber, em palavras-chave"}}},
-                                                       {"estilo", {{"type", "string"}, {"description", "darkpsycore, hitech, psytrance, slambient (opcional)"}}}}},
-                                       {"required", {"pergunta"}}}}});
-  tools.push_back({{"name", "ler_musica"},
-                   {"description", "Lê a música aberta no Core: nome, estilo, BPM, compassos, secções e pistas (parte, padrões, onde tocam, plugin, mistura)."},
-                   {"input_schema", {{"type", "object"}, {"properties", json::object()}}}});
-  tools.push_back({{"name", "formas_pcore"},
-                   {"description", "As formas (padrões) do P-Core para uma parte, as do estilo primeiro, com a grelha e os passos."},
-                   {"input_schema", {{"type", "object"},
-                                     {"properties", {{"part", {{"type", "string"}, {"description", "kick, bass, hats, cymbals, perc, build, lead, arp, pad, fx"}}},
-                                                     {"style", {{"type", "string"}, {"description", "o id do estilo (opcional)"}}}}},
-                                     {"required", {"part"}}}}});
-  for (const auto& f : functions) {
-    if (!f.available) continue;
-    json props = json::object();
-    json required = json::array();
-    if (f.family != "track" && f.family != "shape") props["on"] = {{"type", "string"}, {"description", trackHint(f)}};
-    if (f.rises || f.family == "pcore" || f.family == "arrange" || f.family == "plays")
-      props["section"] = {{"type", "string"}, {"description", "the section's name (\"Drop\")"}};
-    if (!f.presets.empty()) props["preset"] = {{"type", "string"}, {"enum", f.presets}};
-    if (f.family == "track") props["name"] = {{"type", "string"}, {"description", "the track's name (else the part's)"}};
-    if (f.family == "open") props["what"] = {{"type", "string"}, {"description", "instrument, patterns, mixer, score, effects or an effect's name"}};
-    for (const auto& [key, values] : f.options) {
-      json p = {{"type", "string"}};
-      if (!values.empty()) p["enum"] = values;
-      props[key] = p;
-    }
-    if (f.family == "track") required.push_back("part");
-    if (f.family == "shape") required.push_back("shape");
-    if (f.family == "plays") required = {"on", "section", "play"};
-    if (f.family == "pcore") required.push_back("on");
-    if (!f.args.empty()) {
-      json args = json::object();
-      for (const auto& a : f.args) {
-        std::string d = num(a.min) + ".." + num(a.max) + (a.unit.empty() ? "" : " " + a.unit) + ", default " + num(a.def);
-        if (!a.hint.empty()) d += ": " + a.hint;
-        args[a.id] = {{"type", "number"}, {"description", a.name + " (" + d + ")"}};
-      }
-      props["args"] = {{"type", "object"}, {"properties", args}, {"additionalProperties", false}};
-    }
-    json schema = {{"type", "object"}, {"properties", props}};
-    if (!required.empty()) schema["required"] = required;
-    std::string description = f.name + ": " + f.description;
-    tools.push_back({{"name", toolName(f.id)}, {"description", description}, {"input_schema", schema}});
-  }
-  tools.back()["cache_control"] = {{"type", "ephemeral"}};
-  return tools;
+  return anthropicTools(catalog(functions, knowledge));
 }
 
-json systemFor(const doc::Document& song, const doc::PCoreCatalog* pcore) {
-  return json::array({{{"type", "text"}, {"text", kSystem}},
+json systemFor(const doc::Document& song, const doc::PCoreCatalog* pcore, const std::string& mode) {
+  std::string text = kSystem;
+  if (mode == "readonly")
+    text += "\n\nNeste chat só lês e explicas: o Diogo não deixou mudar a música, as ferramentas de escrita não estão disponíveis.";
+  if (mode == "trusted")
+    text += "\n\nNeste chat o Diogo confia nas tuas propostas: aplicam-se sozinhas quando acabas (continua a ser um só passo de undo).";
+  return json::array({{{"type", "text"}, {"text", text}},
                       {{"type", "text"}, {"text", "Ficha dos estilos:\n" + styleCard(song, pcore).dump()}, {"cache_control", {{"type", "ephemeral"}}}}});
 }
 
 Chat::Chat(Config config, std::vector<control::CoreFunction> functions, const doc::PCoreCatalog* pcore, const Knowledge* knowledge)
-    : config_(std::move(config)), functions_(std::move(functions)), pcore_(pcore), knowledge_(knowledge), tools_(toolsFor(functions_, knowledge != nullptr)) {}
+    : config_(std::move(config)), functions_(std::move(functions)), pcore_(pcore), knowledge_(knowledge),
+      actions_(catalog(functions_, knowledge != nullptr)) {
+  std::vector<Action> offered;
+  for (const auto& a : actions_)
+    if (decide(config_.permissions, a) != Verdict::deny) offered.push_back(a);
+  tools_ = anthropicTools(offered);
+}
 
 double Chat::cost(const Usage& u) const {
   if (config_.pricesSet) return u.costUsd(config_.prices);
@@ -203,6 +139,7 @@ double Chat::cost(const Usage& u) const {
 void Chat::reset() {
   messages_ = json::array();
   calls_ = json::array();
+  asked_ = 0;
   log_.clear();
   reply_.clear();
   error_.clear();
@@ -213,7 +150,7 @@ void Chat::reset() {
 json Chat::request(const doc::Document& song) const {
   return {{"model", config_.model},
           {"max_tokens", config_.maxTokens},
-          {"system", systemFor(song, pcore_)},
+          {"system", systemFor(song, pcore_, config_.permissions.mode)},
           {"tools", tools_},
           {"messages", messages_},
           {"output_config", {{"effort", config_.effort}}},
@@ -222,6 +159,7 @@ json Chat::request(const doc::Document& song) const {
 
 json Chat::ask(const std::string& text, const doc::Document& song) {
   calls_ = json::array();
+  asked_ = 0;
   log_.clear();
   reply_.clear();
   error_.clear();
@@ -236,6 +174,13 @@ json Chat::ask(const std::string& text, const doc::Document& song) {
 }
 
 json Chat::runTool(const std::string& name, const json& input, const doc::Document& song) {
+  const Action* action = findAction(actions_, name);
+  if (!action) return {{"error", "unknown tool " + name}};
+  const Verdict verdict = decide(config_.permissions, *action);
+  if (verdict == Verdict::deny) {
+    log_.push_back("not allowed: " + name);
+    return {{"error", "not allowed: Diogo's permissions deny " + name}};
+  }
   if (name == "ler_musica") return songForAi(song);
   if (name == "consultar_manual") {
     if (!knowledge_) return {{"error", "the knowledge base is not installed"}};
@@ -253,12 +198,9 @@ json Chat::runTool(const std::string& name, const json& input, const doc::Docume
       if (const doc::PCoreStyle* s = doc::pcoreStyleFor(*pcore_, doc::songStyle(song))) style = s->id;
     return shapesFor(pcore_, input.value("part", std::string()), style);
   }
-  const control::CoreFunction* f = nullptr;
-  for (const auto& fn : functions_)
-    if (toolName(fn.id) == name) f = &fn;
-  if (!f) return {{"error", "unknown tool " + name}};
+  if (action->kind == Kind::read) return {{"error", "unknown tool " + name}};
   json call = input.is_object() ? input : json::object();
-  call["fn"] = f->id;
+  call["fn"] = action->function;
   json all = calls_;
   all.push_back(call);
   const control::Proposal before = control::validateProposal({{"calls", calls_}}, functions_, song, nullptr);
@@ -266,6 +208,7 @@ json Chat::runTool(const std::string& name, const json& input, const doc::Docume
   std::vector<std::string> fresh(p.problems.begin() + std::min(p.problems.size(), before.problems.size()), p.problems.end());
   if (p.calls.size() > before.calls.size()) {
     calls_.push_back(call);
+    if (verdict == Verdict::ask) ++asked_;
     const control::Call& made = p.calls.back();
     std::string line = "ok: " + control::describeCall(made);
     log_.push_back(line);
@@ -324,7 +267,9 @@ json Chat::onResponse(const json& raw, const doc::Document& song) {
 }
 
 json Chat::proposal() const {
-  return {{"id", "ai-" + std::to_string(proposalNo_)}, {"summary", summary_}, {"calls", calls_}};
+  // Applied by itself only when every call in it is allowed (trusted); else it waits for Apply.
+  const bool automatic = !calls_.empty() && asked_ == 0;
+  return {{"id", "ai-" + std::to_string(proposalNo_)}, {"summary", summary_}, {"calls", calls_}, {"auto", automatic}};
 }
 
 }  // namespace core::ai

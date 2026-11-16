@@ -54,7 +54,8 @@ private:
   juce::TextEditor transcript_, input_;
   juce::TextButton send_{"Send"}, newChat_{"New chat"}, apply_{"Apply"}, discard_{"Discard"};
   nlohmann::json pending_;  // the proposal waiting for Apply (null: none)
-  juce::ComboBox model_, effort_;
+  juce::ComboBox model_, effort_, mode_;  // mode_: the permissions' mode (ask, readonly, trusted)
+  ai::Permissions permissions_;            // from ai-settings.json; mode_ changes its mode
   juce::Label status_, cost_;
   bool busy_ = false;
   std::shared_ptr<std::atomic<bool>> alive_ = std::make_shared<std::atomic<bool>>(true);

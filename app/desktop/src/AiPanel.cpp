@@ -1,5 +1,6 @@
 #include "AiPanel.h"
 #include "models.hpp"
+#include <algorithm>
 #include <cstdlib>
 #include <thread>
 #include "Language.h"
@@ -16,6 +17,8 @@ juce::String u8(const std::string& s) { return juce::String::fromUTF8(s.c_str())
 juce::String u8(const char* s) { return juce::String::fromUTF8(s); }
 
 constexpr const char* kEfforts[] = {"low", "medium", "high"};
+// The permission modes as the combo shows them (catalog.hpp: ask, readonly, trusted).
+constexpr const char* kModes[] = {"Ask before changing", "Read only", "Trusted (applies by itself)"};
 
 juce::String dollars(double usd) { return "$" + juce::String(usd, usd < 0.1 ? 4 : 2); }
 
@@ -51,6 +54,7 @@ AiPanel::AiPanel(Host host) : host_(std::move(host)) {
     const json j = settings.existsAsFile() ? json::parse(settings.loadFileAsString().toStdString(), nullptr, false) : json();
     std::vector<std::string> problems;
     models_ = ai::modelEntries(j.is_discarded() ? json() : j, &problems);
+    permissions_ = ai::permissionsFrom(j.is_discarded() ? json() : j, &problems);
     for (const auto& p : problems) say(u8("Core"), u8("ai-settings.json: ") + u8(p));
   }
   for (int i = 0; i < (int)models_.size(); ++i) model_.addItem(u8(models_[(size_t)i].name), i + 1);
@@ -61,6 +65,15 @@ AiPanel::AiPanel(Host host) : host_(std::move(host)) {
   effort_.setSelectedId(2, juce::dontSendNotification);
   effort_.setTooltip(u8("How much the model thinks: low is quicker and cheaper"));
   addAndMakeVisible(effort_);
+  for (int i = 0; i < (int)std::size(kModes); ++i) mode_.addItem(u8(kModes[i]), i + 1);
+  {
+    const auto& modes = ai::permissionModes();
+    const auto at = std::find(modes.begin(), modes.end(), permissions_.mode);
+    mode_.setSelectedId(at == modes.end() ? 1 : (int)(at - modes.begin()) + 1, juce::dontSendNotification);
+  }
+  mode_.setTooltip(u8("What the AI may do: ask before changing the song (Apply), only read and explain, or apply by itself (still one Undo step). "
+                      "Per action in ai-settings.json: \"permissions\": {\"allow\": [...], \"deny\": [...], \"ask\": [...]}"));
+  addAndMakeVisible(mode_);
   status_.setColour(juce::Label::textColourId, kText.withAlpha(0.7f));
   addAndMakeVisible(status_);
   cost_.setJustificationType(juce::Justification::centredRight);
@@ -70,7 +83,7 @@ AiPanel::AiPanel(Host host) : host_(std::move(host)) {
     say(u8("Core"), u8("No Anthropic key yet. Set ANTHROPIC_API_KEY, or put the key alone in ") +
                         host_.keyFolder.getChildFile("anthropic-key.txt").getFullPathName() + u8("."));
   if (host_.knowledge == nullptr) say(u8("Core"), u8("The style knowledge base (ai/core-ai-knowledge.sqlite) is not installed: the AI works without it."));
-  setSize(560, 640);
+  setSize(600, 640);
 }
 
 AiPanel::~AiPanel() { alive_->store(false); }
@@ -94,6 +107,8 @@ ai::Config AiPanel::configNow() const {
   ai::Config c = entry().config;
   c.provider.apiKey = apiKey().toStdString();
   c.effort = kEfforts[juce::jlimit(0, (int)std::size(kEfforts) - 1, effort_.getSelectedId() - 1)];
+  c.permissions = permissions_;
+  c.permissions.mode = ai::permissionModes()[(size_t)juce::jlimit(0, (int)ai::permissionModes().size() - 1, mode_.getSelectedId() - 1)];
   return c;
 }
 
@@ -112,8 +127,9 @@ void AiPanel::send() {
   }
   const ai::Config cfg = configNow();
   dropProposal();  // a new message: the old proposal goes
-  if (!chat_ || chat_->config().model != cfg.model || chat_->config().effort != cfg.effort || chat_->config().provider.url() != cfg.provider.url())
-    chat_ = std::make_unique<ai::Chat>(cfg, host_.functions(), host_.pcore, host_.knowledge);  // a new model starts a new chat
+  if (!chat_ || chat_->config().model != cfg.model || chat_->config().effort != cfg.effort || chat_->config().provider.url() != cfg.provider.url() ||
+      chat_->config().permissions.mode != cfg.permissions.mode)
+    chat_ = std::make_unique<ai::Chat>(cfg, host_.functions(), host_.pcore, host_.knowledge);  // a new model or mode starts a new chat
   input_.clear();
   say(u8("Diogo"), text);
   busy_ = true;
@@ -179,6 +195,7 @@ void AiPanel::finished() {
   if (!proposal["calls"].empty()) {
     pending_ = proposal;
     showProposal();
+    if (proposal.value("auto", false) && apply_.isVisible()) applyProposal();  // trusted: every call allowed
   }
   showCost();
 }
@@ -230,9 +247,11 @@ void AiPanel::paint(juce::Graphics& g) { g.fillAll(kBackground); }
 void AiPanel::resized() {
   auto r = getLocalBounds().reduced(10);
   auto top = r.removeFromTop(26);
-  model_.setBounds(top.removeFromLeft(220));
+  model_.setBounds(top.removeFromLeft(180));
   top.removeFromLeft(6);
-  effort_.setBounds(top.removeFromLeft(100));
+  effort_.setBounds(top.removeFromLeft(80));
+  top.removeFromLeft(6);
+  mode_.setBounds(top.removeFromLeft(170));
   newChat_.setBounds(top.removeFromRight(90));
   r.removeFromTop(8);
   auto bottom = r.removeFromBottom(22);
@@ -258,8 +277,8 @@ AiWindow::AiWindow(AiPanel::Host host) : juce::DocumentWindow(u8("Core · AI"), 
   setUsingNativeTitleBar(true);
   setContentOwned(new AiPanel(std::move(host)), true);
   setResizable(true, true);
-  setResizeLimits(420, 420, 2000, 2000);
-  centreWithSize(560, 640);
+  setResizeLimits(560, 420, 2000, 2000);
+  centreWithSize(600, 640);
 }
 
 void AiWindow::show() {

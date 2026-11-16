@@ -4,8 +4,10 @@
 #include <cmath>
 #include <filesystem>
 #include <iostream>
+#include <set>
 #include "ai_chat.hpp"
 #include "calls.hpp"
+#include "catalog.hpp"
 #include "edit.hpp"
 #include "knowledge.hpp"
 #include "models.hpp"
@@ -387,6 +389,150 @@ void models() {
 
 }  // namespace ai_knowledge_t
 
+// The one catalog (pattern from theDAW's tool_catalog.py / permissions.py): every provider's tools are views of it, and
+// one policy decides allow / deny / ask.
+namespace catalog_t {
+
+using ai_chat_t::answer;
+using ai_chat_t::lastToolResult;
+using ai_chat_t::toolUse;
+
+void views(const doc::PCoreCatalog& cat) {
+  const auto fns = control::buildFunctions(&cat);
+  const std::vector<ai::Action> acts = ai::catalog(fns, true);
+  const json anthropic = ai::anthropicTools(acts), openai = ai::openAiTools(acts), mcp = ai::mcpTools(acts);
+  CHECK_EQ(anthropic.size(), acts.size());
+  CHECK_EQ(openai.size(), acts.size());
+  CHECK_EQ(mcp.size(), acts.size());
+  for (size_t i = 0; i < acts.size(); ++i) {
+    CHECK_EQ(anthropic[i]["name"].get<std::string>(), acts[i].name);
+    CHECK(openai[i]["function"]["parameters"] == acts[i].schema);
+    CHECK(mcp[i]["inputSchema"] == acts[i].schema);
+    CHECK(acts[i].kind == ai::Kind::read ? acts[i].function.empty() : !acts[i].function.empty());
+  }
+  // Names are unique, and the chat's tools are the same view.
+  std::set<std::string> seen;
+  for (const auto& a : acts) CHECK(seen.insert(a.name).second);
+  CHECK(ai::toolsFor(fns, true) == anthropic);
+  // What the OpenAI-compatible provider sends is the catalog's OpenAI view.
+  ai::Config c;
+  c.provider.kind = "openai";
+  ai::Chat chat(c, fns, &cat);
+  const ai::HttpRequest h = chat.http(chat.ask("olá", doc::newEmptyDocument()));
+  CHECK(h.body["tools"] == ai::openAiTools(ai::catalog(fns, false)));
+  // Without the knowledge base there is no consultar_manual.
+  CHECK(ai::findAction(ai::catalog(fns, false), "consultar_manual") == nullptr);
+  CHECK(ai::findAction(acts, "consultar_manual") != nullptr);
+}
+
+void decide(const doc::PCoreCatalog& cat) {
+  const std::vector<ai::Action> acts = ai::catalog(control::buildFunctions(&cat), false);
+  const ai::Action& read = *ai::findAction(acts, "ler_musica");
+  const ai::Action& pcore = *ai::findAction(acts, "pcore");
+  const ai::Action& shape = *ai::findAction(acts, "shape");
+  ai::Permissions p;  // ask
+  CHECK(ai::decide(p, read) == ai::Verdict::allow);
+  CHECK(ai::decide(p, pcore) == ai::Verdict::ask);
+  p.mode = "trusted";
+  CHECK(ai::decide(p, pcore) == ai::Verdict::allow);
+  p.ask = {"shape"};  // per action, over the mode
+  CHECK(ai::decide(p, shape) == ai::Verdict::ask);
+  p.deny = {"pcore"};
+  CHECK(ai::decide(p, pcore) == ai::Verdict::deny);
+  p.allow = {"pcore"};  // deny wins
+  CHECK(ai::decide(p, pcore) == ai::Verdict::deny);
+  p = {};
+  p.deny = {"*"};
+  CHECK(ai::decide(p, read) == ai::Verdict::deny);
+  p = {};
+  p.mode = "readonly";
+  p.allow = {"pcore"};  // read-only wins over everything
+  CHECK(ai::decide(p, pcore) == ai::Verdict::deny);
+  CHECK(ai::decide(p, read) == ai::Verdict::allow);
+  // A family names every action of it.
+  p = {};
+  p.deny = {"pcore"};
+  CHECK(pcore.family == "pcore");
+  CHECK(ai::decide(p, pcore) == ai::Verdict::deny);
+
+  // From ai-settings.json; bad values are left out with why.
+  std::vector<std::string> problems;
+  ai::Permissions s = ai::permissionsFrom(json::parse(R"({"permissions": {"mode": "trusted", "deny": ["mix"], "ask": ["shape", 3]}})"), &problems);
+  CHECK_EQ(s.mode, std::string("trusted"));
+  CHECK(s.deny.count("mix") == 1 && s.ask.count("shape") == 1 && s.ask.size() == 1);
+  CHECK_EQ(problems.size(), (size_t)1);
+  problems.clear();
+  s = ai::permissionsFrom(json::parse(R"({"permissions": {"mode": "yolo"}})"), &problems);
+  CHECK_EQ(s.mode, std::string("ask"));
+  CHECK_EQ(problems.size(), (size_t)1);
+  CHECK_EQ(ai::permissionsFrom(json::object()).mode, std::string("ask"));
+}
+
+void inTheChat(const doc::PCoreCatalog& cat) {
+  const auto fns = control::buildFunctions(&cat);
+  doc::Document song = doc::newEmptyDocument();
+  auto offered = [](const json& req, const std::string& name) {
+    for (const auto& t : req["tools"])
+      if (t["name"] == name) return true;
+    return false;
+  };
+  const json shapeCall = json::array({toolUse("a", "shape", {{"shape", "darkpsycore-64"}})});
+  const json done = json::array({{{"type", "text"}, {"text", "Feito."}}});
+
+  // Read only: no write tool is offered, the system says so, and a write called anyway is refused.
+  {
+    ai::Config c;
+    c.permissions.mode = "readonly";
+    ai::Chat chat(c, fns, &cat);
+    json req = chat.ask("explica o drop", song);
+    CHECK(offered(req, "ler_musica"));
+    CHECK(!offered(req, "pcore") && !offered(req, "shape"));
+    CHECK(req["system"][0]["text"].get<std::string>().find("só lês") != std::string::npos);
+    req = chat.onResponse(answer(shapeCall, "tool_use"), song);
+    CHECK(lastToolResult(req).contains("error"));
+    CHECK(chat.proposal()["calls"].empty());
+  }
+  // Ask (default): the proposal waits for Apply.
+  {
+    ai::Chat chat(ai::Config{}, fns, &cat);
+    chat.ask("forma", song);
+    chat.onResponse(answer(shapeCall, "tool_use"), song);
+    chat.onResponse(answer(done, "end_turn"), song);
+    CHECK_EQ(chat.proposal()["calls"].size(), (size_t)1);
+    CHECK(!chat.proposal()["auto"].get<bool>());
+  }
+  // Trusted: applies by itself; but one call that asks keeps the whole proposal for Apply.
+  {
+    ai::Config c;
+    c.permissions.mode = "trusted";
+    ai::Chat chat(c, fns, &cat);
+    chat.ask("forma", song);
+    chat.onResponse(answer(shapeCall, "tool_use"), song);
+    chat.onResponse(answer(done, "end_turn"), song);
+    CHECK(chat.proposal()["auto"].get<bool>());
+    c.permissions.ask = {"track"};
+    ai::Chat careful(c, fns, &cat);
+    careful.ask("forma e kick", song);
+    careful.onResponse(answer(json::array({toolUse("a", "shape", {{"shape", "darkpsycore-64"}}), toolUse("b", "track", {{"part", "kick"}})}), "tool_use"), song);
+    careful.onResponse(answer(done, "end_turn"), song);
+    CHECK_EQ(careful.proposal()["calls"].size(), (size_t)2);
+    CHECK(!careful.proposal()["auto"].get<bool>());
+  }
+  // Denied per action: not offered, refused if called, the rest still works.
+  {
+    ai::Config c;
+    c.permissions.deny = {"shape"};
+    ai::Chat chat(c, fns, &cat);
+    json req = chat.ask("forma", song);
+    CHECK(!offered(req, "shape") && offered(req, "pcore"));
+    req = chat.onResponse(answer(shapeCall, "tool_use"), song);
+    CHECK(lastToolResult(req).contains("error"));
+    CHECK(chat.proposal()["calls"].empty());
+  }
+}
+
+}  // namespace catalog_t
+
 TEST("song: a beat from nothing") { song_calls_t::beatFromNothing(catalog()); }
 TEST("song: changing a part") { song_calls_t::changeAPart(catalog()); }
 TEST("song: what is left out") { song_calls_t::leftOut(catalog()); }
@@ -394,6 +540,9 @@ TEST("song: a refused call changes nothing") { song_calls_t::refusedChangesNothi
 TEST("chat: tools") { ai_chat_t::tools(catalog()); }
 TEST("chat: a conversation and its cost") { ai_chat_t::conversation(catalog()); }
 TEST("chat: errors and limits") { ai_chat_t::errorsAndLimits(catalog()); }
+TEST("catalog: one source, every provider's view") { catalog_t::views(catalog()); }
+TEST("catalog: allow, deny, ask") { catalog_t::decide(catalog()); }
+TEST("catalog: the permissions in the chat") { catalog_t::inTheChat(catalog()); }
 TEST("ai: models") { ai_knowledge_t::models(); }
 TEST("ai: knowledge base") { ai_knowledge_t::knowledgeBase(knowledgeDb()); }
 TEST("ai: the consult tool") { ai_knowledge_t::consultTool(knowledgeDb()); }

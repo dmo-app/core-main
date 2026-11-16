@@ -3,6 +3,8 @@
 //   {"models": [{"name": "Qwen local", "provider": "openai", "baseUrl": "http://localhost:11434/v1", "model": "qwen3:14b"},
 //               {"name": "DeepSeek", "provider": "openai", "baseUrl": "https://api.deepseek.com/v1", "model": "deepseek-chat",
 //                "apiKeyEnv": "DEEPSEEK_API_KEY", "prices": {"input": 0.27, "output": 1.1, "cacheRead": 0.07}}]}
+// The same file holds what the AI may do (catalog.hpp):
+//   {"permissions": {"mode": "ask" | "readonly" | "trusted", "allow": [...], "deny": [...], "ask": [...]}}
 // A key is never written in the settings: it comes from the environment variable named, or from <keyFile> beside it.
 #pragma once
 #include <string>
