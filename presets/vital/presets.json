@@ -1,0 +1,477 @@
+{
+  "format": "core-ai-vital-presets",
+  "version": 1,
+  "synth": "Vital",
+  "macros": [
+    "TOM",
+    "SUJO",
+    "MOVIMENTO",
+    "COMPRIMENTO"
+  ],
+  "macro_help": {
+    "TOM": "filtro / brilho",
+    "SUJO": "drive / distorção",
+    "MOVIMENTO": "LFO, profundidade do envelope ou velocidade",
+    "COMPRIMENTO": "decay / release (duração da nota)"
+  },
+  "macro_note": "Os 4 macros começam a 0,5 (o som desenhado). 0 = menos, 1 = mais.",
+  "presets": [
+    {
+      "id": "dpc-kbbb-plonk",
+      "name": "DPC KBBB Plonk",
+      "file": "presets/DPC KBBB Plonk.vital",
+      "style": "darkpsycore",
+      "role": "bass",
+      "bpm": 225,
+      "tags": [
+        "kbbb",
+        "rolling",
+        "baixo",
+        "seco"
+      ],
+      "description": "Baixo rolante seco para KBBB, nota até 40 ms, plonk de pitch no ataque, sub estreito.",
+      "macros": {
+        "TOM": [
+          "corte do filtro"
+        ],
+        "SUJO": [
+          "drive da distorção"
+        ],
+        "MOVIMENTO": [
+          "profundidade do envelope do filtro"
+        ],
+        "COMPRIMENTO": [
+          "decay do env 1",
+          "release do env 1",
+          "decay do env 2",
+          "release do env 2"
+        ]
+      },
+      "origin": "core"
+    },
+    {
+      "id": "dpc-growl-talk",
+      "name": "DPC Growl Talk",
+      "file": "presets/DPC Growl Talk.vital",
+      "style": "darkpsycore",
+      "role": "growl",
+      "bpm": 225,
+      "tags": [
+        "growl",
+        "formante",
+        "kbbb",
+        "camada"
+      ],
+      "description": "Camada média com vogais que falam, para a 3.ª nota do KBBB; sem sub (HP 150 Hz).",
+      "macros": {
+        "TOM": [
+          "transposição dos formantes"
+        ],
+        "SUJO": [
+          "drive da distorção"
+        ],
+        "MOVIMENTO": [
+          "quanto as vogais se mexem",
+          "quanto as vogais se mexem"
+        ],
+        "COMPRIMENTO": [
+          "decay do env 1",
+          "release do env 1"
+        ]
+      },
+      "origin": "core"
+    },
+    {
+      "id": "dpc-acid-squelch",
+      "name": "DPC Acid Squelch",
+      "file": "presets/DPC Acid Squelch.vital",
+      "style": "darkpsycore",
+      "role": "acid",
+      "bpm": 225,
+      "tags": [
+        "acid",
+        "303",
+        "pergunta-resposta",
+        "slide"
+      ],
+      "description": "Acid ressonante para pergunta e resposta; slide em notas ligadas e acento na velocity.",
+      "macros": {
+        "TOM": [
+          "corte do filtro",
+          "ressonância"
+        ],
+        "SUJO": [
+          "drive da distorção"
+        ],
+        "MOVIMENTO": [
+          "profundidade do squelch"
+        ],
+        "COMPRIMENTO": [
+          "decay do env 1",
+          "release do env 1",
+          "decay do env 2",
+          "release do env 2"
+        ]
+      },
+      "origin": "core"
+    },
+    {
+      "id": "dpc-abyss-drone",
+      "name": "DPC Abyss Drone",
+      "file": "presets/DPC Abyss Drone.vital",
+      "style": "darkpsycore",
+      "role": "drone",
+      "bpm": 225,
+      "tags": [
+        "drone",
+        "break",
+        "escuro"
+      ],
+      "description": "Drone escuro e largo para os breaks; ataque 1,2 s, release 2 s, reverb grande.",
+      "macros": {
+        "TOM": [
+          "corte do filtro"
+        ],
+        "SUJO": [
+          "drive da distorção"
+        ],
+        "MOVIMENTO": [
+          "quanto o filtro respira",
+          "velocidade do LFO"
+        ],
+        "COMPRIMENTO": [
+          "release",
+          "cauda do reverb"
+        ]
+      },
+      "origin": "core"
+    },
+    {
+      "id": "dpc-metal-hit",
+      "name": "DPC Metal Hit",
+      "file": "presets/DPC Metal Hit.vital",
+      "style": "darkpsycore",
+      "role": "metal",
+      "bpm": 225,
+      "tags": [
+        "metal",
+        "acento",
+        "percussao"
+      ],
+      "description": "Acerto metálico curto e escuro para os acentos; afinar à raiz do baixo.",
+      "macros": {
+        "TOM": [
+          "corte do filtro",
+          "quantidade de FM (brilho)"
+        ],
+        "SUJO": [
+          "drive da distorção"
+        ],
+        "MOVIMENTO": [
+          "quanto o FM se mexe no ataque",
+          "LFO 1/16 no rácio FM"
+        ],
+        "COMPRIMENTO": [
+          "decay do env 1",
+          "release do env 1",
+          "decay do env 2",
+          "release do env 2"
+        ]
+      },
+      "origin": "core"
+    },
+    {
+      "id": "ht-snap-bass",
+      "name": "HT Snap Bass",
+      "file": "presets/HT Snap Bass.vital",
+      "style": "hitech",
+      "role": "bass",
+      "bpm": 190,
+      "tags": [
+        "kbbb",
+        "clique",
+        "baixo",
+        "oitavas"
+      ],
+      "description": "Baixo com clique forte e oitavas, nota 40 a 50 ms; brilhante e seco.",
+      "macros": {
+        "TOM": [
+          "corte do filtro"
+        ],
+        "SUJO": [
+          "drive da distorção"
+        ],
+        "MOVIMENTO": [
+          "profundidade do envelope do filtro"
+        ],
+        "COMPRIMENTO": [
+          "decay do env 1",
+          "release do env 1",
+          "decay do env 2",
+          "release do env 2"
+        ]
+      },
+      "origin": "core"
+    },
+    {
+      "id": "ht-laser-zap",
+      "name": "HT Laser Zap",
+      "file": "presets/HT Laser Zap.vital",
+      "style": "hitech",
+      "role": "fx",
+      "bpm": 190,
+      "tags": [
+        "zap",
+        "laser",
+        "fx",
+        "acento"
+      ],
+      "description": "Zap com queda rápida de pitch, metálico; delay ping-pong curto e pouco reverb.",
+      "macros": {
+        "TOM": [
+          "corte do filtro"
+        ],
+        "SUJO": [
+          "drive da distorção"
+        ],
+        "MOVIMENTO": [
+          "tamanho da queda de pitch",
+          "velocidade da queda"
+        ],
+        "COMPRIMENTO": [
+          "decay do env 1",
+          "release do env 1"
+        ]
+      },
+      "origin": "core"
+    },
+    {
+      "id": "ht-fm-answer",
+      "name": "HT FM Answer",
+      "file": "presets/HT FM Answer.vital",
+      "style": "hitech",
+      "role": "lead",
+      "bpm": 190,
+      "tags": [
+        "fm",
+        "resposta",
+        "lead",
+        "delay"
+      ],
+      "description": "Resposta FM uma oitava acima, curta, feita para levar delay (0,75 de batida).",
+      "macros": {
+        "TOM": [
+          "corte do filtro",
+          "quantidade de FM (brilho)"
+        ],
+        "SUJO": [
+          "drive da distorção"
+        ],
+        "MOVIMENTO": [
+          "quanto o FM se mexe no ataque",
+          "LFO 1/16 no rácio FM"
+        ],
+        "COMPRIMENTO": [
+          "decay do env 1",
+          "release do env 1",
+          "decay do env 2",
+          "release do env 2"
+        ]
+      },
+      "origin": "core"
+    },
+    {
+      "id": "ht-glass-bell",
+      "name": "HT Glass Bell",
+      "file": "presets/HT Glass Bell.vital",
+      "style": "hitech",
+      "role": "bell",
+      "bpm": 190,
+      "tags": [
+        "fm",
+        "sino",
+        "metal",
+        "pluck"
+      ],
+      "description": "Sino FM de vidro e metal, curto, com pouco reverb.",
+      "macros": {
+        "TOM": [
+          "corte do filtro",
+          "quantidade de FM (brilho)"
+        ],
+        "SUJO": [
+          "drive da distorção"
+        ],
+        "MOVIMENTO": [
+          "quanto o FM se mexe no ataque",
+          "LFO 1/16 no rácio FM"
+        ],
+        "COMPRIMENTO": [
+          "decay do env 1",
+          "release do env 1",
+          "decay do env 2",
+          "release do env 2"
+        ]
+      },
+      "origin": "core"
+    },
+    {
+      "id": "ht-static-riser",
+      "name": "HT Static Riser",
+      "file": "presets/HT Static Riser.vital",
+      "style": "hitech",
+      "role": "riser",
+      "bpm": 190,
+      "tags": [
+        "riser",
+        "build",
+        "ruido",
+        "transicao"
+      ],
+      "description": "Riser de ruído e serra que abre em 8 compassos a 190 BPM; segurar a nota até ao drop.",
+      "macros": {
+        "TOM": [
+          "corte do filtro"
+        ],
+        "SUJO": [
+          "drive da distorção"
+        ],
+        "MOVIMENTO": [
+          "trémulo em 1/16 (sobe com o macro)",
+          "quanto o filtro abre"
+        ],
+        "COMPRIMENTO": [
+          "tempo de subida",
+          "tempo de subida do volume"
+        ]
+      },
+      "origin": "core"
+    },
+    {
+      "id": "sla-deep-sub",
+      "name": "SLA Deep Sub",
+      "file": "presets/SLA Deep Sub.vital",
+      "style": "slambient",
+      "role": "bass",
+      "bpm": 300,
+      "tags": [
+        "sub",
+        "baixo",
+        "macio",
+        "sem-clique"
+      ],
+      "description": "Baixo macio com sub forte uma oitava abaixo, sem clique; nota 25 a 45 ms, raiz B0 a F#1.",
+      "macros": {
+        "TOM": [
+          "corte do filtro"
+        ],
+        "SUJO": [
+          "drive da distorção"
+        ],
+        "MOVIMENTO": [
+          "profundidade do envelope do filtro"
+        ],
+        "COMPRIMENTO": [
+          "decay do env 1",
+          "release do env 1"
+        ]
+      },
+      "origin": "core"
+    },
+    {
+      "id": "sla-abyss-drone",
+      "name": "SLA Abyss Drone",
+      "file": "presets/SLA Abyss Drone.vital",
+      "style": "slambient",
+      "role": "drone",
+      "bpm": 300,
+      "tags": [
+        "drone",
+        "camada",
+        "escuro"
+      ],
+      "description": "Drone uma oitava acima da raiz, filtro baixo (1200 Hz), reverb 0,7 com pré-delay 60 ms.",
+      "macros": {
+        "TOM": [
+          "corte do filtro"
+        ],
+        "SUJO": [
+          "drive da distorção"
+        ],
+        "MOVIMENTO": [
+          "quanto o filtro respira",
+          "velocidade do LFO"
+        ],
+        "COMPRIMENTO": [
+          "release",
+          "cauda do reverb"
+        ]
+      },
+      "origin": "core"
+    },
+    {
+      "id": "sla-ghost-bed",
+      "name": "SLA Ghost Bed",
+      "file": "presets/SLA Ghost Bed.vital",
+      "style": "slambient",
+      "role": "texture",
+      "bpm": 300,
+      "tags": [
+        "textura",
+        "granular",
+        "camada",
+        "atmosfera"
+      ],
+      "description": "Cama granulada e larga uma oitava acima, para as camadas; delay 3/16 e reverb grande.",
+      "macros": {
+        "TOM": [
+          "corte do filtro"
+        ],
+        "SUJO": [
+          "drive da distorção"
+        ],
+        "MOVIMENTO": [
+          "quanto o grão corta",
+          "quanto o filtro respira"
+        ],
+        "COMPRIMENTO": [
+          "release",
+          "cauda do reverb"
+        ]
+      },
+      "origin": "core"
+    },
+    {
+      "id": "sla-low-boom",
+      "name": "SLA Low Boom",
+      "file": "presets/SLA Low Boom.vital",
+      "style": "slambient",
+      "role": "impact",
+      "bpm": 300,
+      "tags": [
+        "boom",
+        "impacto",
+        "sub",
+        "transicao"
+      ],
+      "description": "Boom grave 90 para 30 Hz com 900 ms e reverb grande; tocar na raiz (B0 a F#1) a cada 4 compassos.",
+      "macros": {
+        "TOM": [
+          "corte do filtro (corpo acima do sub)"
+        ],
+        "SUJO": [
+          "drive da distorção"
+        ],
+        "MOVIMENTO": [
+          "tamanho da queda de pitch",
+          "velocidade da queda"
+        ],
+        "COMPRIMENTO": [
+          "decay do env 1",
+          "release do env 1"
+        ]
+      },
+      "origin": "core"
+    }
+  ]
+}
