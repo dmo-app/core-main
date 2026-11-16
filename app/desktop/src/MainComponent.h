@@ -2,6 +2,7 @@
 // and L/R meters, undo/redo, open/save, engine status.
 // Only drawing and input here: the document lives in a History, the engine is reached through EngineSession.
 #pragma once
+#include <cmath>
 #include <optional>
 #include <functional>
 #include <map>
@@ -243,6 +244,12 @@ private:
   juce::String templatesStamp_;
   bool templatesLoaded_ = false;
   void showTrackMenu(const std::string& trackId);  // the track's own items (rename, duplicate, remove...)
+  // Freeze / Unfreeze (quick_tools.hpp): the track's plugins rendered to audio on a track below, unloaded until Unfreeze.
+  void toggleFreeze(const std::string& trackId);
+  void pollFreeze();  // the timer: the render finished, failed or never started
+  struct FreezeJob { std::string trackId; juce::File file; std::string path; juce::uint32 since = 0; doc::Document start; };
+  std::unique_ptr<FreezeJob> freeze_;
+  std::string freezePath_;  // the last freeze render: its end is told by pollFreeze, not as an export
   void showMainMenu(const std::string& trackId, int64_t tick);  // right click: Tools, Instruments, Import, MIDI, Sample, Music
   juce::PopupMenu legacyMenu(int index, const juce::String& name);  // the menus that were on the top bar, by their old place
   void showAddTrackMenu();
@@ -567,6 +574,9 @@ private:
   double shownTick_ = -1;
   juce::uint32 shownUntil_ = 0;
   double shownPosition() const { return shownTick_ >= 0 ? shownTick_ : playTick_; }
+  // The playhead as a whole tick, rounded: after a seek the engine reports it from a whole sample (7679.97 for
+  // 7680 at 190 BPM), and cutting that down put the playhead in the bar, beat or section before.
+  int64_t positionTick() const { return (int64_t)std::llround(shownPosition()); }
   // The engine's position goes on between its reports (about 21 a second): the playhead moves every frame.
   double playTick_ = 0;
   void updatePlayTick();

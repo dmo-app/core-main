@@ -41,7 +41,7 @@ struct Reader {
 };
 
 // One MTrk: its notes (on/off paired per channel and pitch, first in first out), its name and its tempos.
-void readTrack(Reader& r, std::vector<MidiTrack>& out, std::vector<MidiTempo>& tempos, bool splitChannels) {
+void readTrack(Reader& r, std::vector<MidiTrack>& out, std::vector<MidiTempo>& tempos, std::vector<MidiMarker>& markers, bool splitChannels) {
   int64_t tick = 0;
   uint8_t status = 0;
   std::string name;
@@ -68,6 +68,10 @@ void readTrack(Reader& r, std::vector<MidiTrack>& out, std::vector<MidiTempo>& t
       } else if (type == 0x51 && len == 3) {
         const uint32_t us = r.be(3);
         if (us > 0) tempos.push_back({tick, 60000000.0 / us});
+      } else if (type == 0x06) {
+        if (len > r.end - r.at) throw DocumentError("midi", "the file is cut short");
+        markers.push_back({tick, std::string(r.b.begin() + (long)r.at, r.b.begin() + (long)(r.at + len))});
+        r.skip(len);
       } else {
         r.skip(len);
       }
@@ -162,13 +166,14 @@ MidiFile parseMidi(const std::vector<uint8_t>& bytes) {
     const size_t next = r.at + length;
     if (isTrack) {
       Reader tr{bytes, r.at, next};
-      readTrack(tr, f.tracks, f.tempos, format == 0);
+      readTrack(tr, f.tracks, f.tempos, f.markers, format == 0);
     } else {
       --i;  // an unknown chunk does not count as a track
     }
     r.at = next;
   }
   std::stable_sort(f.tempos.begin(), f.tempos.end(), [](const MidiTempo& a, const MidiTempo& b) { return a.tick < b.tick; });
+  std::stable_sort(f.markers.begin(), f.markers.end(), [](const MidiMarker& a, const MidiMarker& b) { return a.tick < b.tick; });
   // Only the tracks that play notes (the tempo track, lyrics, empty ones go).
   f.tracks.erase(std::remove_if(f.tracks.begin(), f.tracks.end(), [](const MidiTrack& t) { return t.notes.empty(); }), f.tracks.end());
   return f;
@@ -183,6 +188,7 @@ std::vector<uint8_t> writeMidi(const MidiFile& file) {
   std::vector<Event> conductor = {meta(0, 0x58, {4, 2, 24, 8})};
   if (file.tempos.empty() || file.tempos.front().tick > 0) conductor.push_back(tempoEvent(0, 120));
   for (const auto& t : file.tempos) conductor.push_back(tempoEvent(t.tick, t.bpm));
+  for (const auto& m : file.markers) conductor.push_back(meta(std::max<int64_t>(0, m.tick), 0x06, std::vector<uint8_t>(m.text.begin(), m.text.end())));
   chunk(out, std::move(conductor));
   for (const auto& t : file.tracks) {
     std::vector<Event> events;
@@ -219,9 +225,15 @@ MidiFile songToMidi(const Document& doc, const MidiExportOptions& options) {
     prevBpm = t.bpm;
   }
   const int64_t songEnd = doc.lengthTicks;
+  // The sections as markers (Bitwig shows them as cue markers on import).
+  for (const auto& s : doc.sections)
+    if (s.startTick < songEnd) f.markers.push_back({s.startTick, s.name});
+  std::stable_sort(f.markers.begin(), f.markers.end(), [](const MidiMarker& a, const MidiMarker& b) { return a.tick < b.tick; });
   for (const auto& t : doc.tracks) {
     if (t.instrument.kind == "audio" || t.instrument.kind == "bus") continue;
-    if (t.mix.mute && !options.mutedTracks) continue;
+    // A frozen track is muted only because its audio plays: its notes are still the part (Freeze, quick_tools.hpp).
+    const bool frozen = t.extra.is_object() && t.extra.contains("frozen") && t.extra["frozen"].is_string() && !t.extra["frozen"].get<std::string>().empty();
+    if (t.mix.mute && !frozen && !options.mutedTracks) continue;
     if (!options.onlyTracks.empty() && std::find(options.onlyTracks.begin(), options.onlyTracks.end(), t.id) == options.onlyTracks.end()) continue;
     MidiTrack mt;
     mt.name = t.name;

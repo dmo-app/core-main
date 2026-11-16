@@ -24,10 +24,12 @@ namespace core::doc {
 struct MidiNote { int64_t tick = 0, length = 0; int pitch = 60, velocity = 100, channel = 0; };
 struct MidiTempo { int64_t tick = 0; double bpm = 120; };
 struct MidiTrack { std::string name; std::vector<MidiNote> notes; };
+struct MidiMarker { int64_t tick = 0; std::string text; };  // a marker meta event (0x06): the song's sections
 struct MidiFile {
   int ppq = 960;
   std::vector<MidiTrack> tracks;
   std::vector<MidiTempo> tempos;  // from every track, in time order
+  std::vector<MidiMarker> markers;  // from every track, in time order; written in the first (tempo) track
 };
 // Only the tracks with notes are kept. Throws DocumentError for a file that is not a MIDI file or is cut short.
 // SMPTE time is refused.

@@ -735,9 +735,13 @@ json toProjection(const Document& d, const std::filesystem::path& assetRoot) {
       if (c.offsetTicks % p->lengthTicks) clip["offsetTicks"] = c.offsetTicks % p->lengthTicks;  // the pattern may have been shortened
       clips.push_back(clip);
     }
-    const json envelopes = envelopesJson(playedCurves(t.automation, t.effects));
+    // A frozen track (quick_tools.hpp: Freeze) plays from its audio track: no instrument and no effects here, so the
+    // engine unloads its plugins. Its notes, plugins and their state stay in the document for Unfreeze.
+    const bool frozen = t.extra.is_object() && t.extra.contains("frozen") && t.extra["frozen"].is_string() &&
+                        !t.extra["frozen"].get<std::string>().empty();
+    const json envelopes = frozen ? json::array() : envelopesJson(playedCurves(t.automation, t.effects));
     json track = {{"id", t.id}, {"gainDb", t.mix.gainDb}, {"pan", t.mix.pan}, {"mute", t.mix.mute}, {"solo", t.mix.solo},
-                  {"clips", clips}, {"envelopes", envelopes}, {"effects", pluginChain(t.effects)}};
+                  {"clips", frozen ? json::array() : clips}, {"envelopes", envelopes}, {"effects", frozen ? json::array() : pluginChain(t.effects)}};
     if (t.instrument.kind == "audio") {
       track["instrument"] = "audio";
       track.erase("clips");
@@ -754,7 +758,7 @@ json toProjection(const Document& d, const std::filesystem::path& assetRoot) {
       }
       track["audioClips"] = audioClips;
     } else if (t.instrument.kind == "bus") { track["instrument"] = "bus"; track.erase("clips"); }
-    else if (t.instrument.kind == "plugin") { track["instrument"] = "plugin"; track["plugin"] = t.instrument.plugin; }
+    else if (t.instrument.kind == "plugin" && !frozen) { track["instrument"] = "plugin"; track["plugin"] = t.instrument.plugin; }
     else track["instrument"] = "none";  // an old Core instrument, or no instrument yet: its notes wait for a plugin
     if (!t.mix.output.empty()) track["output"] = t.mix.output;
     if (!t.mix.sends.empty()) {

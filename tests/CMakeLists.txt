@@ -96,7 +96,13 @@ add_test(NAME cli_measure COMMAND ${CMAKE_COMMAND} -DENGINE=$<TARGET_FILE:core-e
 add_test(NAME cli_unicode COMMAND ${CMAKE_COMMAND} -DENGINE=$<TARGET_FILE:core-engine> -DWORK=${CMAKE_CURRENT_BINARY_DIR}/cli
                                   -P ${CMAKE_CURRENT_SOURCE_DIR}/cli_unicode.cmake)
 
-set_tests_properties(engine_tests domain_tests role_tests midi_tests bug_tests audit_tests audit2_tests hunt_tests round3_tests bitwig_tests time_range_tests pattern_rack_tests song_notes_tests cli_version cli_demo_render cli_measure cli_unicode
+# Quality of life from other DAWs (2026-11-16): sections as markers, Double and row shift in Patterns, nudge, Freeze.
+add_executable(quick_tools_tests quick_tools_tests.cpp)
+target_include_directories(quick_tools_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/engine/src)
+target_link_libraries(quick_tools_tests PRIVATE core_domain core_engine_lib)
+add_test(NAME quick_tools_tests COMMAND quick_tools_tests)
+
+set_tests_properties(engine_tests domain_tests role_tests midi_tests bug_tests audit_tests audit2_tests hunt_tests round3_tests bitwig_tests time_range_tests pattern_rack_tests song_notes_tests quick_tools_tests cli_version cli_demo_render cli_measure cli_unicode
                      PROPERTIES LABELS merge TIMEOUT 300)
 
 # The app's own end-to-end test (play, undo, save/reopen, export... on the null device, with its test plugins).
@@ -105,3 +111,4 @@ if(TARGET CoreApp)
   add_test(NAME desktop_self_test COMMAND CoreApp --self-test ${CMAKE_CURRENT_BINARY_DIR}/self-test.png)
   set_tests_properties(desktop_self_test PROPERTIES LABELS desktop TIMEOUT 600)
 endif()
+

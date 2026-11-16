@@ -22,6 +22,7 @@
 #include <limits>
 #include "assets.hpp"
 #include "bounce.hpp"
+#include "quick_tools.hpp"
 #include "core_version.h"
 #include "bridge.hpp"
 #include "calls.hpp"
@@ -214,7 +215,7 @@ public:
 
   void update(const doc::Track& t) {
     track_ = t;
-    name_ = u8(t.name);
+    name_ = doc::isFrozen(t) ? u8("[FROZEN] ") + u8(t.name) : u8(t.name);  // its plugins are unloaded: the audio plays below
     colour_ = trackColour(t);
     mute_.setToggleState(t.mix.mute, juce::dontSendNotification);
     solo_.setToggleState(t.mix.solo, juce::dontSendNotification);
@@ -1309,7 +1310,7 @@ private:
   void splitHere() {
     const doc::AudioClip* c = clip();
     if (!c) return;
-    const int64_t at = hasSelection() ? tickOf(selFrom_) : (int64_t)owner_.snap_.positionTick;
+    const int64_t at = hasSelection() ? tickOf(selFrom_) : (int64_t)std::llround(owner_.snap_.positionTick);
     const std::string t = trackId_, id = clipId_;
     owner_.edit([&](doc::Document& d) { doc::splitAudioClip(d, t, id, at); }, u8("Split audio clip"));
     selFrom_ = selTo_ = 0;
@@ -1952,7 +1953,7 @@ MainComponent::MainComponent(EngineSession::Options options, doc::Document docum
   };  // Play while stopped, Pause while playing
   stop_.onClick = [this] { if (patternPlay_) stopPatternSlot(); else session_->stop(); };
   loop_.onClick = [this] {
-    const int64_t at = (int64_t)shownPosition() / kBar * kBar;
+    const int64_t at = positionTick() / kBar * kBar;
     edit([at](doc::Document& d) {
       if (d.loop.endTick <= d.loop.startTick) d.loop = {true, at, at + 4 * kBar, d.loop.extra};  // none yet: 4 bars from here
       else d.loop.enabled = !d.loop.enabled;
@@ -2152,7 +2153,7 @@ MainComponent::MainComponent(EngineSession::Options options, doc::Document docum
   // The Sound card's «Open», or a right-click on one of its bars: the sound and its modulation on one page.
   editor_.onSavePattern = [this](int64_t start, int64_t end) { savePatternFromEditor(start, end); };
   editor_.onBuildupTrack = [this](int bars, bool roll, bool gap) { buildupTrack(bars, roll, gap); };
-  editor_.bpm = [this] { return doc::bpmAt(history_.current(), (int64_t)shownPosition()); };
+  editor_.bpm = [this] { return doc::bpmAt(history_.current(), positionTick()); };
   editor_.patternLibrary = [this] { return loadPatterns(); };
   editor_.pcoreCatalog = [this]() -> const doc::PCoreCatalog* {
     // pcore/styles.json beside Core.exe, read once (a broken file is logged and P-Core says it is missing).
@@ -2362,7 +2363,7 @@ doc::Loop MainComponent::engineLoop() const { return patternPlay_ ? engineDocume
 
 void MainComponent::playPatternSlot(const std::string& slot, std::optional<doc::Document> preview, int64_t openTick) {
   const bool already = patternPlay_.has_value();
-  if (!already) patternSongTick_ = (int64_t)shownPosition();
+  if (!already) patternSongTick_ = positionTick();
   patternPlay_ = PatternPlay{slot, std::move(preview), openTick};
   session_->setDocument(engineDocument());
   session_->setLoop(engineLoop());
@@ -3131,7 +3132,7 @@ bool MainComponent::timeSelectionKey(const juce::KeyPress& key) {
     std::vector<std::string> targets;
     if (!first.empty()) targets = doc::tracksFrom(d, first, rangeCopy_.parts.size());
     else for (const auto& p : rangeCopy_.parts) targets.push_back(p.trackId);
-    const int64_t at = (int64_t)shownPosition() / kBeat * kBeat;
+    const int64_t at = positionTick() / kBeat * kBeat;
     doc::RangePasteResult result;
     const auto copy = rangeCopy_;
     edit([&](doc::Document& doc) { result = doc::pasteRange(doc, copy, at, targets); }, u8("Paste time"));
@@ -3359,7 +3360,7 @@ bool MainComponent::importAudioFile(const juce::File& wav, juce::String* problem
   if (dir.empty()) { if (problem) *problem = u8("the song has not been saved yet"); return false; }
   const doc::Track* selected = history_.current().findTrack(onTrack.empty() ? selectedTrack_ : onTrack);
   std::string trackId = selected && selected->instrument.kind == "audio" ? selected->id : std::string();
-  const int64_t at = where >= 0 ? where : (int64_t)snap_.positionTick / kBar * kBar;
+  const int64_t at = where >= 0 ? where : (int64_t)std::llround(snap_.positionTick) / kBar * kBar;
   std::string clipId, error;
   doc::Document next = history_.current();
   try {
@@ -3567,6 +3568,7 @@ void MainComponent::showSectionMenu(int64_t tick) {
     menu.addItem(3, u8("Swap with the previous one"));
     menu.addItem(4, u8("Swap with the next one"));
     menu.addItem(5, u8("Duplicate (inserts the copy after it)"));
+    menu.addItem(14, u8("Loop this section     Ctrl+Shift+L"));
     // Colour: the same hues as the tracks; "By type" follows the name (intro green, drop red…).
     juce::PopupMenu colour;
     const std::string typeColor = doc::sectionTypeColor(at->name);
@@ -3659,6 +3661,9 @@ void MainComponent::showSectionMenu(int64_t tick) {
       edit([&](doc::Document& d) { doc::swapSection(d, sectionId, chosen == 4); }, u8("Swap sections"));
     } else if (chosen == 5) {
       edit([&](doc::Document& d) { doc::duplicateSection(d, sectionId); }, u8("Duplicate section"));
+    } else if (chosen == 14) {
+      edit([&](doc::Document& d) { d.loop = doc::sectionLoop(d, sectionId); }, u8("Loop section"));
+      notice_ = u8("Loop: ") + sectionName;
     } else if (chosen == 6) {
       edit([&](doc::Document& d) { doc::removeSection(d, sectionId); }, u8("Remove section"));
     } else if (chosen == 7) {
@@ -4781,6 +4786,11 @@ void MainComponent::showTrackMenu(const std::string& trackId) {
   }
   std::vector<std::string> offered;
   if (current && doc::playsPatterns(*current)) menu.addSubMenu(u8("Tools"), coreToolsMenu(trackId));
+  // Freeze (Bitwig "Bounce in place", Ableton "Freeze"): the plugins to audio, unloaded until Unfreeze.
+  if (current && doc::isFrozen(*current)) menu.addItem(7, u8("Unfreeze (load the plugins again)     Ctrl+Shift+F"));
+  else if (current && doc::playsPatterns(*current))
+    menu.addItem(juce::PopupMenu::Item(u8("Freeze (plugins to audio, saves CPU)     Ctrl+Shift+F")).setID(7)
+                     .setEnabled(!freeze_ && !snap_.exportJob.active() && doc::cannotFreeze(history_.current(), trackId).empty()));
   menu.addSeparator();
   menu.addItem(3, "Remove");
   menu.showMenuAsync(juce::PopupMenu::Options(), [this, trackId, offered, instruments, pluginFx](int chosen) {
@@ -4822,7 +4832,85 @@ void MainComponent::showTrackMenu(const std::string& trackId) {
     if (chosen == 2) edit([&](doc::Document& d) { doc::duplicateTrack(d, trackId); }, "Duplicate " + name);
     if (chosen == 3) edit([&](doc::Document& d) { doc::removeTrack(d, trackId); }, "Remove " + name);  // undo brings it back
     if (chosen == 4) openAutomation(trackId, "gainDb");
+    if (chosen == 7) toggleFreeze(trackId);
   });
+}
+
+// Freeze: the engine renders the track's stem (as a bounce: its plugins, fader, pan and sends, without the master
+// gain) over the whole song; when the file is there it goes on an audio track below and the track is frozen
+// (doc::freezeTrack). Unfreeze is at once. The render goes into the song's Audio folder, so the song needs a folder.
+void MainComponent::toggleFreeze(const std::string& trackId) {
+  const juce::String title = u8("Freeze");
+  const doc::Track* t = history_.current().findTrack(trackId);
+  if (!t) return;
+  if (doc::isFrozen(*t)) {
+    const juce::String name = u8(t->name);
+    edit([&](doc::Document& d) { doc::unfreezeTrack(d, trackId); }, u8("Unfreeze ") + name);
+    notice_ = name + u8(" plays its plugins again.");
+    return;
+  }
+  if (freeze_ || snap_.exportJob.active()) { showError(title, u8("An export is running: wait for it to end.")); return; }
+  if (const std::string why = doc::cannotFreeze(history_.current(), trackId); !why.empty()) { showError(title, u8(why)); return; }
+  if (projectDir().empty()) {
+    notice_ = u8("Save the song first: the frozen audio goes into its Audio folder.");
+    save(true, [this, trackId](SaveResult r) { if (r != SaveResult::Failed) toggleFreeze(trackId); });
+    return;
+  }
+  stopPatternSlot();      // the engine renders the song's plugins, not a Patterns preview
+  fetchPluginStates();    // the plugins' sound now goes into the song: Unfreeze loads them as they are
+  auto job = std::make_unique<FreezeJob>();
+  job->trackId = trackId;
+  job->file = juce::File::getSpecialLocation(juce::File::tempDirectory)
+                  .getNonexistentChildFile(juce::File::createLegalFileName(u8(t->name)) + " (frozen)", ".wav", false);
+  job->path = job->file.getFullPathName().toStdString();
+  job->since = juce::Time::getMillisecondCounter();
+  job->start = history_.current();
+  freezePath_ = job->path;
+  session_->exportFiles({{job->path, trackId, true}}, 0, history_.current().lengthTicks, 32);
+  snap_.exportJob = session_->snapshot().exportJob;
+  notice_ = u8("Freezing ") + u8(t->name) + u8("...");
+  freeze_ = std::move(job);
+  repaint();
+}
+
+void MainComponent::pollFreeze() {
+  if (!freeze_) return;
+  const ExportJob& job = snap_.exportJob;
+  if (job.path != freeze_->path) {
+    if (juce::Time::getMillisecondCounter() - freeze_->since > 10000) {  // the engine never took the job
+      freeze_->file.deleteFile();
+      freeze_.reset();
+      showError(u8("Freeze"), u8("The engine did not start the render."));
+    }
+    return;
+  }
+  if (job.active()) return;
+  std::unique_ptr<FreezeJob> f = std::move(freeze_);
+  if (job.state != "succeeded") {
+    f->file.deleteFile();
+    if (job.state == "failed") showError(u8("Freeze"), u8(job.error));
+    else notice_ = u8("Freeze cancelled.");
+    return;
+  }
+  const std::filesystem::path dir = projectDir();
+  doc::Document next = history_.current();
+  doc::Printed printed;
+  try {
+    if (dir.empty()) throw doc::DocumentError("project", "the song has no folder any more: save it and try again");
+    // An edit while it rendered (notes, plugin, song length): the audio would be the old one.
+    if (!doc::freezeStillMatches(f->start, next, f->trackId))
+      throw doc::DocumentError("tracks", "the track or the song changed while it was freezing: freeze it again");
+    printed = doc::freezeTrack(next, f->trackId, pathOf(f->file), dir);
+  } catch (const std::exception& e) {
+    f->file.deleteFile();
+    showError(u8("Freeze"), u8(e.what()));
+    return;
+  }
+  f->file.deleteFile();  // copied into the song's Audio folder
+  const juce::String name = u8(doc::trackById(next, f->trackId).name);
+  edit([&](doc::Document& d) { d = next; }, u8("Freeze ") + name);
+  notice_ = name + u8(" is frozen: its plugins are unloaded and the audio plays below. Ctrl+Shift+F (or right-click) to unfreeze.");
+  logLine("Freeze: " + name);
 }
 
 void MainComponent::askTrackName(const std::string& trackId) {
@@ -4948,7 +5036,7 @@ void MainComponent::importMidi() {
       return;
     }
     doc::MidiImportOptions o;
-    o.atTick = (int64_t)snap_.positionTick / kBar * kBar;
+    o.atTick = (int64_t)std::llround(snap_.positionTick) / kBar * kBar;
     o.useTempo = history_.current().tracks.empty();  // an empty song takes the file's tempo
     doc::MidiImportResult result;
     edit([&](doc::Document& d) { result = doc::importMidi(d, midi, o); }, u8("Import MIDI"));
@@ -5127,7 +5215,7 @@ void MainComponent::showProjectMenu() {
 void MainComponent::previewNotes(const std::string& trackId, const std::vector<doc::Note>& notes) {
   if (notes.empty() || trackId.empty()) return;
   // The tempo playing where the song is now (the tempo map's, not the starting BPM); the engine's range is 40-600.
-  const double msPerTick = 60000.0 / (std::clamp(doc::bpmAt(history_.current(), (int64_t)shownPosition()), 40.0, 600.0) * doc::kPpq);
+  const double msPerTick = 60000.0 / (std::clamp(doc::bpmAt(history_.current(), positionTick()), 40.0, 600.0) * doc::kPpq);
   const int64_t first = notes.front().tick;
   juce::Component::SafePointer<MainComponent> safe(this);
   for (size_t i = 0; i < notes.size() && i < 64; ++i) {
@@ -5167,7 +5255,7 @@ void MainComponent::previewPattern(const std::string& trackId, const std::vector
   if (notes.empty() || trackId.empty() || session_ == nullptr) return;
   const uint64_t gen = patternPreviewGen_;
   patternPreviewTrack_ = trackId;
-  const double msPerTick = 60000.0 / (std::clamp(doc::bpmAt(history_.current(), (int64_t)shownPosition()), 40.0, 600.0) * doc::kPpq);
+  const double msPerTick = 60000.0 / (std::clamp(doc::bpmAt(history_.current(), positionTick()), 40.0, 600.0) * doc::kPpq);
   juce::Component::SafePointer<MainComponent> safe(this);
   for (size_t i = 0; i < notes.size() && i < 2000; ++i) {
     const auto& n = notes[i];
@@ -5239,7 +5327,7 @@ void MainComponent::savePatternFromEditor(int64_t start, int64_t end) {
 void MainComponent::buildupTrack(int bars, bool roll, bool gap) {
   const doc::Document& d0 = history_.current();
   const int64_t bar = 4 * doc::kPpq, length = (int64_t)std::clamp(bars, 1, 16) * bar;
-  const int64_t now = (int64_t)shownPosition();
+  const int64_t now = positionTick();
   int64_t drop = -1;
   for (const auto& sec : d0.sections) if (sec.startTick > now && sec.startTick >= length) { drop = sec.startTick; break; }
   if (drop < 0) drop = std::max<int64_t>(length, ((now + length) / (8 * bar) + 1) * 8 * bar);
@@ -6129,7 +6217,7 @@ const MainComponent::LiveWave* MainComponent::liveWave(const std::string& trackI
 void MainComponent::captureLiveWaves() {
   if (!snap_.playing) { for (auto& [k, w] : liveWaves_) w.lastBin = -1; return; }
   const doc::Document& d = history_.current();
-  const int64_t pos = (int64_t)snap_.positionTick;
+  const int64_t pos = (int64_t)std::llround(snap_.positionTick);
   for (const auto& t : d.tracks) {
     const auto peak = snap_.trackPeaks.find(t.id);
     for (const auto& c : t.clips) {
@@ -6337,7 +6425,7 @@ void MainComponent::playStop() {
   if (patternPlay_) { stopPatternSlot(); snap_.playing = false; return; }  // a pattern playing alone stops first
   if (!snap_.playing) {
     // The loop on and the start line outside it: Play starts at the loop's start (the line goes there too).
-    const int64_t at = (int64_t)shownPosition();
+    const int64_t at = positionTick();
     if (const int64_t from = doc::playStartTick(history_.current().loop, at); from != at) moveShownPosition(from);
   }
   snap_.playing ? session_->stop() : session_->play();
@@ -6361,7 +6449,7 @@ bool MainComponent::keyPressed(const juce::KeyPress& key) {
     const int64_t step = m.step;
     const bool back = m.back;
     if (is(m.id)) {
-      const int64_t now = (int64_t)shownPosition();
+      const int64_t now = positionTick();
       const int64_t to = back ? std::max<int64_t>(0, (now - 1) / step * step) : std::min<int64_t>(history_.current().lengthTicks, now / step * step + step);
       moveShownPosition(to);
       if ((double)to < viewStart() || (double)to > viewStart() + viewLength()) setView((double)to - viewLength() * 0.25, viewLength());
@@ -6399,6 +6487,51 @@ bool MainComponent::keyPressed(const juce::KeyPress& key) {
   if (is("view.tracksTaller")) { setTrackSize(trackSize_ + 1); return true; }
   if (is("view.tracksShorter")) { setTrackSize(trackSize_ - 1); return true; }
   if (is("transport.loop")) { loop_.triggerClick(); return true; }
+  // Sections as markers (Bitwig cue markers, Ableton locators; quick_tools.hpp).
+  if (is("transport.sectionBack") || is("transport.sectionForward")) {
+    const doc::Document& d = history_.current();
+    const bool back = is("transport.sectionBack");
+    const int64_t now = positionTick();
+    const int64_t to = back ? doc::previousSectionStart(d, now, snap_.playing ? kBeat : 0) : doc::nextSectionStart(d, now);
+    if (to < 0) {
+      notice_ = d.sections.empty() ? u8("No sections yet: right-click the ruler to add one.")
+                                   : back ? u8("This is the first section.") : u8("This is the last section.");
+      repaint();
+      return true;
+    }
+    moveShownPosition(to);
+    if ((double)to < viewStart() || (double)to > viewStart() + viewLength()) setView((double)to - viewLength() * 0.25, viewLength());
+    if (const doc::Section* s = doc::sectionAt(d, to)) notice_ = u8(s->name);
+    repaint();
+    return true;
+  }
+  if (is("transport.loopSection")) {
+    const doc::Section* s = doc::sectionAt(history_.current(), positionTick());
+    if (!s) { notice_ = u8("The playhead is not in a section: right-click the ruler to add one."); repaint(); return true; }
+    const std::string id = s->id;
+    const juce::String name = u8(s->name);
+    edit([&](doc::Document& d) { d.loop = doc::sectionLoop(d, id); }, u8("Loop section"));
+    notice_ = u8("Loop: ") + name;
+    return true;
+  }
+  // Nudge (Ableton / Bitwig): the selected clips one grid step (Alt) or 1/64 (Alt+Shift). The piano roll takes these
+  // keys first when notes are chosen there.
+  if (is("edit.nudgeBack") || is("edit.nudgeForward") || is("edit.nudgeFineBack") || is("edit.nudgeFineForward")) {
+    const bool back = is("edit.nudgeBack") || is("edit.nudgeFineBack");
+    const bool fine = is("edit.nudgeFineBack") || is("edit.nudgeFineForward");
+    std::vector<doc::ClipRef> refs;
+    const doc::Document& d = history_.current();
+    for (const auto& [trackId, clipId] : selectedClipKeys())
+      if (const doc::Track* t = d.findTrack(trackId)) refs.push_back({trackId, clipId, t->instrument.kind == "audio"});
+    if (refs.empty()) { notice_ = u8("Select clips first (click one, or Shift+drag a rectangle)."); repaint(); return true; }
+    const int64_t step = (fine ? doc::kPpq / 16 : timeSnap()) * (back ? -1 : 1);
+    edit([&](doc::Document& dd) { doc::nudgeClips(dd, refs, step); }, refs.size() == 1 ? u8("Nudge clip") : u8("Nudge clips"));
+    return true;
+  }
+  if (is("edit.freeze")) {
+    if (const std::string id = selectedTrack_.empty() ? editor_.track() : selectedTrack_; !id.empty()) toggleFreeze(id);
+    return true;
+  }
   if (is("keys.octaveUp") || is("keys.octaveDown")) {
     keyboardOctave_ = juce::jlimit(0, 8, keyboardOctave_ + (is("keys.octaveUp") ? 1 : -1));
     notice_ = u8("Keyboard: Z = C") + juce::String(keyboardOctave_) + u8(" (arrows change the octave)");
@@ -6425,7 +6558,7 @@ bool MainComponent::keyPressed(const juce::KeyPress& key) {
   }
   if (is("edit.copy")) { copyClips(); return true; }
   if (is("edit.cut")) { cutClips(); return true; }
-  if (is("edit.paste")) { pasteClips((int64_t)shownPosition() / kBeat * kBeat); return true; }
+  if (is("edit.paste")) { pasteClips(positionTick() / kBeat * kBeat); return true; }
   if (is("edit.duplicate") && !selectedClipKeys().empty()) { duplicateClips(); return true; }
   if (del && boxClips_.size() > 1) { deleteBoxClips(); return true; }
   if (del && !selectedClip_.empty()) {
@@ -6699,6 +6832,7 @@ void MainComponent::timerCallback() {
   collectSampleScan();
   collectSampleAnalysis();
   pollBridge();
+  pollFreeze();
   // The side panels follow the selection and the sample index.
   if (const void* data = hasSampleIndex_ ? (const void*)sampleIndex_.samples.data() : nullptr;
       data != libraryIndexData_ || (hasSampleIndex_ ? sampleIndex_.samples.size() : 0) != libraryIndexSize_) {
@@ -6746,7 +6880,7 @@ void MainComponent::timerCallback() {
     auto it = meters_.find(row->id());
     row->setLevels(it == meters_.end() ? 0 : it->second.first, it == meters_.end() ? 0 : it->second.second);
   }
-  const int64_t tick = (int64_t)shownPosition();
+  const int64_t tick = positionTick();
   // Bar, beat and sixteenth, as a counter: 009.01.01.
   position_.setText(juce::String(tick / kBar + 1).paddedLeft('0', 3) + "." + juce::String((tick / kBeat) % 4 + 1).paddedLeft('0', 2) + "." +
                         juce::String((tick % kBeat) / (kBeat / 4) + 1).paddedLeft('0', 2),
@@ -6807,7 +6941,10 @@ void MainComponent::timerCallback() {
   if (exportBar_.isVisible() != exporting) { exportBar_.setVisible(exporting); cancelExport_.setVisible(exporting); resized(); }
   cancelExport_.setEnabled(job.state == "running");
   const std::string jobKey = std::to_string(job.jobId) + job.state;
-  if (jobKey != jobSeen_) {
+  if (jobKey != jobSeen_ && !freezePath_.empty() && job.path == freezePath_) {
+    jobSeen_ = jobKey;  // a freeze render: pollFreeze tells how it ended (one notice, one error at most)
+    if (exporting) notice_ = u8("Freezing...");
+  } else if (jobKey != jobSeen_) {
     jobSeen_ = jobKey;
     const juce::String path = u8(job.path);
     if (job.state == "succeeded") notice_ = job.files > 1 ? u8("Exported ") + juce::String(job.files) + u8(" files to ") + juce::File(path).getParentDirectory().getFullPathName() : u8("Exported: ") + path;
@@ -7246,6 +7383,32 @@ void MainComponent::selfTestStep() {
       edit([](doc::Document& d) { doc::swapSection(d, d.sections[0].id, true); }, u8("Swap sections"));
       const doc::Document& d = history_.current();
       if (d.sections[0].name != "Drop" || d.findTrack("bass")->clips.front().patternId != p2) return finish(false, "sections swap");
+      {  // QoL from other DAWs (quick_tools.hpp), through the real keys: next section, loop it, nudge a clip and back.
+        moveShownPosition(0);
+        keyPressed(juce::KeyPress(juce::KeyPress::pageDownKey, juce::ModifierKeys::shiftModifier, 0));
+        if (positionTick() != 8 * kBar) return finish(false, "next section key");
+        keyPressed(juce::KeyPress('l', juce::ModifierKeys::ctrlModifier | juce::ModifierKeys::shiftModifier, 0));
+        const doc::Loop& l = history_.current().loop;
+        if (!l.enabled || l.startTick != 8 * kBar || l.endTick != 16 * kBar) return finish(false, "loop section key");
+        undo();
+        // The same from where the engine reports the playhead after the jump: a whole sample, a little before the
+        // bar (7679.97 for 7680 at 190 BPM). That must still be the section at the bar, not the one before.
+        shownTick_ = -1;
+        playTick_ = 8.0 * kBar - 0.03;
+        keyPressed(juce::KeyPress('l', juce::ModifierKeys::ctrlModifier | juce::ModifierKeys::shiftModifier, 0));
+        const doc::Loop& engineLoop = history_.current().loop;
+        if (!engineLoop.enabled || engineLoop.startTick != 8 * kBar || engineLoop.endTick != 16 * kBar) return finish(false, "loop section from the engine's position");
+        undo();
+        moveShownPosition(0);
+        selectClip("bass", c3);
+        int64_t before = -1;
+        for (const auto& c : history_.current().findTrack("bass")->clips) if (c.id == c3) before = c.startTick;
+        keyPressed(juce::KeyPress(juce::KeyPress::rightKey, juce::ModifierKeys::altModifier, 0));
+        int64_t after = -1;
+        for (const auto& c : history_.current().findTrack("bass")->clips) if (c.id == c3) after = c.startTick;
+        if (after != before + timeSnap() || history_.undoLabel() != "Nudge clip") return finish(false, "nudge key");
+        undo();
+      }
       session_->home();
       session_->play();
       next("arranged");

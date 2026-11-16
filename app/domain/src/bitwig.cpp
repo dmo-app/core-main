@@ -1,4 +1,5 @@
 #include "bitwig.hpp"
+#include "quick_tools.hpp"
 #include <algorithm>
 #include <cstdio>
 #include "edit.hpp"
@@ -55,7 +56,7 @@ BitwigPlan bitwigPlan(const Document& doc, const MidiExportOptions& options) {
     bt.trackId = t.id;
     bt.name = t.name;
     if (nextMidi < midi.tracks.size() && t.instrument.kind != "audio" && t.instrument.kind != "bus" &&
-        (!t.mix.mute || options.mutedTracks) &&
+        (!t.mix.mute || isFrozen(t) || options.mutedTracks) &&
         (options.onlyTracks.empty() || std::find(options.onlyTracks.begin(), options.onlyTracks.end(), t.id) != options.onlyTracks.end()))
       bt.midiTrack = (int)++nextMidi;
     const std::string prefix = twoDigits(++number) + " " + safeFilePart(t.name);

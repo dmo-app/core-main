@@ -58,6 +58,10 @@ bool toggleRackStep(Pattern& pattern, int64_t start, int64_t length, int pitch, 
 // Every second 1/16 (the "e" and "a" of the beat) plays later by swing x half a step. Moves the notes of the slot's
 // patterns from the old swing to the new one, keeping their unswung positions and lengths.
 void setRackSwing(Document& doc, const std::string& slotId, double swing);
+// One pattern's steps moved by `steps` sixteenths, wrapping, under the slot's swing: a swung note goes back to its
+// straight step first, moves, and is swung again only if it lands on an odd 1/16; a note placed off the swing (by
+// hand) moves as it is. Only this pattern changes. Returns how many notes moved. (Shift row, quick_tools.hpp.)
+int shiftPatternSteps(Pattern& pattern, int steps, double swing);
 // The slot's length in bars (1, 2, 4, 8): its patterns are cut (notes after the end go) or grow repeating.
 void setRackBars(Document& doc, const std::string& slotId, int bars);
 
