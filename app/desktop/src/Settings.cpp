@@ -7,10 +7,12 @@
 #include "MainComponent.h"
 #include "Keymap.h"
 #include "Language.h"
+#include "roles.hpp"
 #include "samples.hpp"
 #include "Theme.h"
 
 #include <algorithm>
+#include <filesystem>
 #include <iterator>
 #include <tuple>
 
@@ -401,6 +403,241 @@ class SamplersPage final : public juce::Component {
   std::vector<std::unique_ptr<Row>> rows_;
   std::unique_ptr<juce::FileChooser> chooser_;
 };
+
+// Settings > Roles (Diogo, 2026-11-16): once, the plugin that plays each role on this computer (reverb -> Valhalla,
+// bass -> Serum 2...), and for an effect role the plugin's parameters its macros move (the reverb's mix and size...).
+// SUCK, PUM, the build-ups and the AI ask for a role and never name a plugin. Kept in %APPDATA%/Core/roles.json
+// (roles.hpp); choosing a plugin reads its parameters (core-engine params, in its own process) and guesses the macros
+// by their names, and "Parameters..." changes any of them.
+std::filesystem::path rolesPath() { return std::filesystem::path(PluginCatalog::rolesFile().getFullPathName().toWideCharPointer()); }
+
+class RolesPage final : public juce::Component {
+ public:
+  using json = nlohmann::json;
+  struct Host {
+    std::function<std::vector<json>(bool instrument)> plugins;  // what the scan found
+    std::function<juce::File()> engine;
+  };
+  explicit RolesPage(Host host) : host_(std::move(host)) {
+    title_.setText("Roles", juce::dontSendNotification);
+    title_.setFont(juce::FontOptions(theme::kFontTitle, juce::Font::bold));
+    title_.setColour(juce::Label::textColourId, kTitle);
+    help_.setFont(juce::FontOptions(theme::kFontBody));
+    help_.setColour(juce::Label::textColourId, kMuted);
+    help_.setJustificationType(juce::Justification::topLeft);
+    help_.setText("Choose once the plugin for each role. SUCK, PUM, the build-ups and the AI put the role's plugin on a track and "
+                  "move its parameters; they never name a plugin. No plugin in the list: Plugins > Scan plugins first.",
+                  juce::dontSendNotification);
+    notice_.setFont(juce::FontOptions(theme::kFontBody));
+    notice_.setColour(juce::Label::textColourId, kAccentBright);
+    for (auto* c : std::initializer_list<juce::Component*>{&title_, &help_, &notice_}) addAndMakeVisible(c);
+    for (const auto& role : core::doc::roleCatalog()) {
+      auto& row = *rows_.emplace_back(std::make_unique<Row>());
+      row.role = role.id;
+      row.instrument = role.instrument;
+      row.name.setText(role.label, juce::dontSendNotification);
+      row.name.setFont(juce::FontOptions(theme::kFontStrong, juce::Font::bold));
+      row.name.setColour(juce::Label::textColourId, kText);
+      row.name.setTooltip(role.what);
+      row.params.setButtonText(juce::String::fromUTF8("Parameters\xe2\x80\xa6"));
+      row.params.setTooltip("Which of the plugin's parameters each macro moves");
+      row.params.setVisible(!role.instrument);
+      Row* r = &row;
+      row.plugin.onChange = [this, r] { choosePlugin(*r); };
+      row.params.onClick = [this, r] { chooseParams(*r); };
+      for (auto* c : std::initializer_list<juce::Component*>{&row.name, &row.plugin, &row.params}) row.addChildComponent(c);
+      row.name.setVisible(true);
+      row.plugin.setVisible(true);
+      addAndMakeVisible(row);
+    }
+    refresh();
+  }
+
+  void refresh() {
+    std::string problem;
+    map_ = core::doc::loadRoleMap(rolesPath(), &problem);
+    if (!problem.empty()) notice_.setText("roles.json could not be read (" + juce::String(problem) + "): choose the roles again.", juce::dontSendNotification);
+    for (auto& r : rows_) {
+      r->choices = host_.plugins(r->instrument);
+      r->plugin.clear(juce::dontSendNotification);
+      r->plugin.addItem("(none)", 1);
+      const core::doc::RoleBinding* b = map_.find(r->role);
+      int selected = 1;
+      for (size_t i = 0; i < r->choices.size(); ++i) {
+        const json& p = r->choices[i];
+        r->plugin.addItem(juce::String::fromUTF8(p.value("name", std::string("?")).c_str()) + "  (" +
+                              juce::String::fromUTF8(p.value("vendor", std::string()).c_str()) + ")", (int)i + 2);
+        if (b && p.value("id", std::string()) == b->plugin.value("id", std::string())) selected = (int)i + 2;
+      }
+      if (b && selected == 1) {  // chosen on another scan (the plugin moved or was removed): still shown
+        r->plugin.addItem(juce::String::fromUTF8(b->plugin.value("name", std::string("?")).c_str()) + " (not found)", 999);
+        selected = 999;
+      }
+      r->plugin.setSelectedId(selected, juce::dontSendNotification);
+      r->params.setEnabled(b != nullptr && !r->busy);
+      r->summary = summary(r->role);
+      r->repaint();
+    }
+  }
+
+  void resized() override {
+    auto r = getLocalBounds().reduced(16, 12);
+    title_.setBounds(r.removeFromTop(26));
+    help_.setBounds(r.removeFromTop(40));
+    notice_.setBounds(r.removeFromBottom(24));
+    for (auto& row : rows_) {
+      row->setBounds(r.removeFromTop(row->instrument ? 32 : 52));
+      auto head = row->getLocalBounds().removeFromTop(28);
+      row->name.setBounds(head.removeFromLeft(150));
+      if (!row->instrument) { row->params.setBounds(head.removeFromRight(110)); head.removeFromRight(6); }
+      row->plugin.setBounds(head);
+      r.removeFromTop(4);
+    }
+  }
+
+ private:
+  struct Row final : public juce::Component {
+    std::string role;
+    bool instrument = false, busy = false;
+    juce::Label name;
+    juce::ComboBox plugin;
+    juce::TextButton params;
+    std::vector<json> choices;
+    json paramList;  // the plugin's parameters, once read
+    juce::String summary;
+    void paint(juce::Graphics& g) override {
+      if (instrument) return;
+      g.setFont(juce::FontOptions(theme::kFontBody));
+      g.setColour(summary.startsWith("!") ? kAccentBright : kDim);
+      g.drawText(summary.trimCharactersAtStart("!"), getLocalBounds().withTrimmedTop(30).withTrimmedLeft(150), juce::Justification::centredLeft);
+    }
+  };
+
+  juce::String summary(const std::string& role) const {
+    const core::doc::RoleInfo* info = core::doc::findRole(role);
+    const core::doc::RoleBinding* b = map_.find(role);
+    if (!info || info->instrument || !b) return {};
+    juce::StringArray parts;
+    bool missing = false;
+    for (const auto& m : info->macros) {
+      auto it = b->params.find(m.id);
+      if (it == b->params.end()) { missing = true; parts.add(juce::String(m.label) + ": -"); continue; }
+      juce::String name = "#" + juce::String(it->second);
+      for (const auto& rr : rows_)
+        if (rr->role == role && rr->paramList.is_array())
+          for (const auto& p : rr->paramList) if (p.value("id", std::string()) == it->second) name = juce::String::fromUTF8(p.value("name", std::string()).c_str());
+      parts.add(juce::String(m.label) + ": " + name);
+    }
+    return (missing ? "!" : "") + parts.joinIntoString("   ") + (missing ? juce::String::fromUTF8("   (Parameters\xe2\x80\xa6 to choose)") : juce::String());
+  }
+
+  void store() {
+    try {
+      core::doc::saveRoleMap(map_, rolesPath());
+    } catch (const std::exception& e) {
+      notice_.setText("Not saved: " + juce::String(e.what()), juce::dontSendNotification);
+    }
+  }
+
+  // Reads the plugin's parameters in the background, then `then` on the message thread (the list, or null and why).
+  void readParams(Row& row, std::function<void(RolesPage&, Row&, const json&, const juce::String&)> then) {
+    const core::doc::RoleBinding* b = map_.find(row.role);
+    if (!b) return;
+    row.busy = true;
+    row.params.setEnabled(false);
+    notice_.setText(juce::String::fromUTF8("Reading the parameters of ") + juce::String::fromUTF8(b->plugin.value("name", std::string()).c_str()) +
+                        juce::String::fromUTF8("\xe2\x80\xa6"), juce::dontSendNotification);
+    juce::Component::SafePointer<RolesPage> safe(this);
+    const json plugin = b->plugin;
+    const std::string role = row.role;
+    const juce::File engine = host_.engine();
+    juce::Thread::launch([safe, plugin, role, engine, then] {
+      juce::String problem;
+      const json list = PluginCatalog::paramsOf(engine, plugin, &problem);
+      juce::MessageManager::callAsync([safe, role, list, problem, then] {
+        if (safe == nullptr) return;
+        for (auto& r : safe->rows_)
+          if (r->role == role) {
+            r->busy = false;
+            r->paramList = list;
+            safe->notice_.setText(list.is_array() ? juce::String() : "Could not read its parameters: " + problem, juce::dontSendNotification);
+            then(*safe, *r, list, problem);
+            safe->refresh();
+          }
+      });
+    });
+  }
+
+  void choosePlugin(Row& row) {
+    const int id = row.plugin.getSelectedId();
+    if (id == 999) return;
+    if (id <= 1 || id - 2 >= (int)row.choices.size()) {
+      map_.roles.erase(row.role);
+      row.paramList = json();
+      store();
+      refresh();
+      return;
+    }
+    map_.roles[row.role] = core::doc::RoleBinding{row.choices[(size_t)id - 2], {}, {}};
+    row.paramList = json();
+    store();
+    refresh();
+    if (row.instrument) return;
+    readParams(row, [](RolesPage& page, Row& r, const json& list, const juce::String&) {
+      if (!list.is_array()) return;
+      auto it = page.map_.roles.find(r.role);
+      if (it == page.map_.roles.end()) return;
+      it->second = core::doc::guessRoleBinding(r.role, it->second.plugin, list);
+      page.store();
+    });
+  }
+
+  void chooseParams(Row& row) {
+    if (!row.paramList.is_array()) {
+      readParams(row, [](RolesPage& page, Row& r, const json& list, const juce::String&) { if (list.is_array()) page.showParamsMenu(r); });
+      return;
+    }
+    showParamsMenu(row);
+  }
+
+  void showParamsMenu(Row& row) {
+    const core::doc::RoleInfo* info = core::doc::findRole(row.role);
+    auto it = map_.roles.find(row.role);
+    if (!info || it == map_.roles.end() || !row.paramList.is_array()) return;
+    juce::PopupMenu menu;
+    int id = 1;
+    std::vector<std::pair<std::string, std::string>> picks;  // menu id - 1 -> (macro, param id; "" = none)
+    for (const auto& m : info->macros) {
+      juce::PopupMenu sub;
+      const auto current = it->second.params.find(m.id);
+      sub.addItem(id++, "(none)", true, current == it->second.params.end());
+      picks.push_back({m.id, ""});
+      for (const auto& p : row.paramList) {
+        const std::string pid = p.value("id", std::string());
+        sub.addItem(id++, juce::String::fromUTF8(p.value("name", std::string()).c_str()), true, current != it->second.params.end() && current->second == pid);
+        picks.push_back({m.id, pid});
+      }
+      menu.addSubMenu(m.label, sub);
+    }
+    juce::Component::SafePointer<RolesPage> safe(this);
+    const std::string role = row.role;
+    menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&row.params), [safe, role, picks](int r) {
+      if (safe == nullptr || r <= 0 || r > (int)picks.size()) return;
+      auto found = safe->map_.roles.find(role);
+      if (found == safe->map_.roles.end()) return;
+      const auto& [macro, pid] = picks[(size_t)r - 1];
+      if (pid.empty()) found->second.params.erase(macro);
+      else found->second.params[macro] = pid;
+      safe->store();
+      safe->refresh();
+    });
+  }
+
+  Host host_;
+  core::doc::RoleMap map_;
+  juce::Label title_, help_, notice_;
+  std::vector<std::unique_ptr<Row>> rows_;
+};
 }  // namespace
 
 class MainComponent::SettingsPanel final : public juce::Component {
@@ -508,7 +745,17 @@ class MainComponent::SettingsPanel final : public juce::Component {
       samplersPage_ = std::make_unique<SamplersPage>(std::move(host));
       addChildComponent(*samplersPage_);
     }
-    for (auto* b : {&tabGeneral_, &tabSamplers_, &tabKeys_}) {
+    {
+      RolesPage::Host host;
+      host.plugins = [this](bool instrument) {
+        if (!o_.plugins_) return std::vector<nlohmann::json>{};
+        return instrument ? o_.plugins_->instruments() : o_.plugins_->effects();
+      };
+      host.engine = [this] { return o_.plugins_ ? o_.plugins_->engine() : juce::File(); };
+      rolesPage_ = std::make_unique<RolesPage>(std::move(host));
+      addChildComponent(*rolesPage_);
+    }
+    for (auto* b : {&tabGeneral_, &tabSamplers_, &tabRoles_, &tabKeys_}) {
       b->setClickingTogglesState(true);
       b->setRadioGroupId(4801);
       b->setColour(juce::TextButton::buttonOnColourId, kPrimary);
@@ -518,6 +765,8 @@ class MainComponent::SettingsPanel final : public juce::Component {
     tabGeneral_.setButtonText("General");
     tabSamplers_.setButtonText("Samplers");
     tabKeys_.setButtonText("Keyboard shortcuts");
+    tabRoles_.setButtonText("Roles");
+    tabRoles_.onClick = [this] { showTab(3); };
     tabGeneral_.onClick = [this] { showTab(0); };
     tabSamplers_.onClick = [this] { showTab(1); };
     tabKeys_.onClick = [this] { showTab(2); };
@@ -533,14 +782,18 @@ class MainComponent::SettingsPanel final : public juce::Component {
     g.fillRect(juce::Rectangle<int>(0, kTabs, getWidth(), 1));
   }
 
-  void showTab(int tab) {  // 0 General, 1 Samplers, 2 Keyboard shortcuts
-    tab_ = juce::jlimit(0, 2, tab);
-    (tab_ == 2 ? tabKeys_ : tab_ == 1 ? tabSamplers_ : tabGeneral_).setToggleState(true, juce::dontSendNotification);
+  void showTab(int tab) {  // 0 General, 1 Samplers, 2 Keyboard shortcuts, 3 Roles
+    tab_ = juce::jlimit(0, 3, tab);
+    (tab_ == 3 ? tabRoles_ : tab_ == 2 ? tabKeys_ : tab_ == 1 ? tabSamplers_ : tabGeneral_).setToggleState(true, juce::dontSendNotification);
     for (auto* c : getChildren())
-      if (c != &tabGeneral_ && c != &tabSamplers_ && c != &tabKeys_ && c != keysPage_.get() && c != samplersPage_.get()) c->setVisible(tab_ == 0);
+      if (c != &tabGeneral_ && c != &tabSamplers_ && c != &tabKeys_ && c != &tabRoles_ && c != keysPage_.get() && c != samplersPage_.get() &&
+          c != rolesPage_.get())
+        c->setVisible(tab_ == 0);
     keysPage_->setVisible(tab_ == 2);
     samplersPage_->setVisible(tab_ == 1);
+    rolesPage_->setVisible(tab_ == 3);
     if (tab_ == 1) samplersPage_->refresh();
+    if (tab_ == 3) rolesPage_->refresh();
     repaint();
   }
 
@@ -551,8 +804,11 @@ class MainComponent::SettingsPanel final : public juce::Component {
       tabs.removeFromLeft(6);
       tabSamplers_.setBounds(tabs.removeFromLeft(110));
       tabs.removeFromLeft(6);
+      tabRoles_.setBounds(tabs.removeFromLeft(110));
+      tabs.removeFromLeft(6);
       tabKeys_.setBounds(tabs.removeFromLeft(170));
     }
+    if (rolesPage_ != nullptr) rolesPage_->setBounds(getLocalBounds().withTrimmedTop(kTabs + 1));
     if (keysPage_ != nullptr) keysPage_->setBounds(getLocalBounds().withTrimmedTop(kTabs + 1));
     if (samplersPage_ != nullptr) samplersPage_->setBounds(getLocalBounds().withTrimmedTop(kTabs + 1));
     auto r = getLocalBounds().withTrimmedTop(kTabs + 1).reduced(16, 12);
@@ -615,9 +871,10 @@ class MainComponent::SettingsPanel final : public juce::Component {
   }
 
   static constexpr int kTabs = 40;
-  juce::TextButton tabGeneral_, tabSamplers_, tabKeys_;
+  juce::TextButton tabGeneral_, tabSamplers_, tabRoles_, tabKeys_;
   std::unique_ptr<ShortcutsPage> keysPage_;
   std::unique_ptr<SamplersPage> samplersPage_;
+  std::unique_ptr<RolesPage> rolesPage_;
   int tab_ = 0;
   MainComponent& o_;
   juce::Label languageTitle_, languageNote_, foldersTitle_, pianoTitle_;

@@ -14,6 +14,7 @@
 #include <vector>
 #include <juce_core/juce_core.h>
 #include "json.hpp"
+#include "roles.hpp"
 
 namespace core::app {
 
@@ -23,6 +24,7 @@ public:
   explicit PluginCatalog(juce::File engine);
   ~PluginCatalog();
 
+  juce::File engine() const { return engine_; }
   std::vector<json> instruments() const;  // {format, id, name, vendor, version, file, ...}
   std::vector<json> effects() const;
   std::vector<juce::String> folders() const;
@@ -40,6 +42,14 @@ public:
   // Qualifies the plugins of one file: [{id, verdict: "ok" | "unsafe", problems, warnings, cpuPct, ...}], or
   // null with problem set when the qualifying process itself crashed or hung (the file is then unsafe).
   static json qualifyFile(const juce::File& engine, const juce::File& plugin, juce::String* problem);
+
+  // The parameters of one plugin that can be automated, [{id, name, value, default, steps, text}] (core-engine params,
+  // in its own process); null with problem set when it could not be read. For Settings > Roles.
+  static json paramsOf(const juce::File& engine, const json& plugin, juce::String* problem);
+  // %APPDATA%/Core/roles.json: the role map (roles.hpp), beside plugins.json.
+  static juce::File rolesFile();
+  // The role map in that file (empty, with problem set, when it cannot be read).
+  static core::doc::RoleMap roles(std::string* problem = nullptr);
 
 private:
   void load();

@@ -20,6 +20,12 @@ target_link_libraries(domain_tests PRIVATE core_domain core_engine_lib)
 target_compile_definitions(domain_tests PRIVATE CORE_TEMPLATES_DIR="${CMAKE_SOURCE_DIR}/templates")
 add_test(NAME domain_tests COMMAND domain_tests)
 
+# The role map (Settings > Roles) and the tools that play through it (SUCK, PUM, build-up effects).
+add_executable(role_tests role_tests.cpp)
+target_include_directories(role_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(role_tests PRIVATE core_domain core_engine_lib)
+add_test(NAME role_tests COMMAND role_tests)
+
 # The command line: what the app and the scripts call.
 add_test(NAME cli_version COMMAND core-engine --version)
 set_tests_properties(cli_version PROPERTIES PASS_REGULAR_EXPRESSION "core-engine ${CORE_VERSION}")
@@ -28,7 +34,7 @@ add_test(NAME cli_demo_render COMMAND ${CMAKE_COMMAND} -DENGINE=$<TARGET_FILE:co
 add_test(NAME cli_measure COMMAND ${CMAKE_COMMAND} -DENGINE=$<TARGET_FILE:core-engine> -DWORK=${CMAKE_CURRENT_BINARY_DIR}/cli
                                   -P ${CMAKE_CURRENT_SOURCE_DIR}/cli_measure.cmake)
 
-set_tests_properties(engine_tests domain_tests cli_version cli_demo_render cli_measure PROPERTIES LABELS merge TIMEOUT 300)
+set_tests_properties(engine_tests domain_tests role_tests cli_version cli_demo_render cli_measure PROPERTIES LABELS merge TIMEOUT 300)
 
 # The app's own end-to-end test (play, undo, save/reopen, export... on the null device, with its test plugins).
 # It opens Core's window for ~20 s, so it has its own label.
