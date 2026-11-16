@@ -5,4 +5,4 @@ add_library(core_domain STATIC src/document.cpp src/history.cpp src/storage.cpp 
 target_compile_features(core_domain PUBLIC cxx_std_20)
 # Core in another language (Settings > General > Language): docs/contracts/core-language.md.
 target_sources(core_domain PRIVATE src/translation.cpp)
-target_include_directories(core_domain PUBLIC src ${CMAKE_CURRENT_SOURCE_DIR}/../../engine/third_party)
+target_include_directories(core_domain PUBLIC src ${CMAKE_CURRENT_SOURCE_DIR}/../../engine/third_party ${CMAKE_CURRENT_SOURCE_DIR}/../aifx/src)

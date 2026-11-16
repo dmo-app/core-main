@@ -32,7 +32,7 @@ Action editAction(const control::CoreFunction& f) {
   json props = json::object();
   json required = json::array();
   if (f.family != "track" && f.family != "shape") props["on"] = {{"type", "string"}, {"description", trackHint(f)}};
-  if (f.rises || f.family == "pcore" || f.family == "arrange" || f.family == "plays")
+  if (f.rises || f.family == "pcore" || f.family == "arrange" || f.family == "plays" || f.family == "gate")
     props["section"] = {{"type", "string"}, {"description", "the section's name (\"Drop\")"}};
   if (!f.presets.empty()) props["preset"] = {{"type", "string"}, {"enum", f.presets}};
   if (f.family == "track") props["name"] = {{"type", "string"}, {"description", "the track's name (else the part's)"}};
@@ -46,6 +46,10 @@ Action editAction(const control::CoreFunction& f) {
   if (f.family == "shape") required.push_back("shape");
   if (f.family == "plays") required = {"on", "section", "play"};
   if (f.family == "pcore") required.push_back("on");
+  if (f.family == "gate") {
+    required = {"on", "section"};
+    props["pattern"]["description"] = "16 steps: x on, h half, . off (\"x.xx\" repeats); instead of or over the preset";
+  }
   if (!f.args.empty()) {
     json args = json::object();
     for (const auto& a : f.args) {
@@ -79,7 +83,7 @@ std::string toolName(const std::string& functionId) {
   return out.substr(0, 64);
 }
 
-std::vector<Action> catalog(const std::vector<control::CoreFunction>& functions, bool knowledge, bool memory) {
+std::vector<Action> catalog(const std::vector<control::CoreFunction>& functions, bool knowledge, bool memory, bool listen) {
   std::vector<Action> out;
   if (memory)
     out.push_back(readAction(
@@ -107,6 +111,15 @@ std::vector<Action> catalog(const std::vector<control::CoreFunction>& functions,
                             {"properties", {{"part", {{"type", "string"}, {"description", "kick, bass, hats, cymbals, perc, build, lead, arp, pad, fx"}}},
                                             {"style", {{"type", "string"}, {"description", "o id do estilo (opcional)"}}}}},
                             {"required", {"part"}}}));
+  if (listen)
+    out.push_back(readAction("ler_kick_bass",
+                             "Ouve o kick e o bass numa secção (com os plugins): correlação do grave, sobreposição por tempo, picos e um "
+                             "conselho. Usa antes de cortar o bass (gate psy-bass-gap, duck).",
+                             {{"type", "object"},
+                              {"properties", {{"secção", {{"type", "string"}, {"description", "o nome da secção (\"Drop\"); ouve até 8 compassos"}}},
+                                              {"kick", {{"type", "string"}, {"description", "a pista do kick (opcional)"}}},
+                                              {"bass", {{"type", "string"}, {"description", "a pista do bass (opcional)"}}}}},
+                              {"required", {"secção"}}}));
   for (const auto& f : functions)
     if (f.available) out.push_back(editAction(f));
   return out;

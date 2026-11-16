@@ -1,4 +1,7 @@
 #include "song_calls.hpp"
+#include <array>
+#include "gate.hpp"
+#include "role_tools.hpp"
 #include <algorithm>
 #include <cctype>
 #include <cmath>
@@ -149,7 +152,7 @@ std::string groupKey(const Call& c) {
 }  // namespace
 
 bool isSongFamily(const std::string& family) {
-  return family == "track" || family == "pcore" || family == "shape" || family == "arrange" || family == "plays";
+  return family == "track" || family == "pcore" || family == "shape" || family == "arrange" || family == "plays" || family == "gate";
 }
 
 void addFunctions(std::vector<CoreFunction>& out, const doc::PCoreCatalog* pcore) {
@@ -224,6 +227,40 @@ void addFunctions(std::vector<CoreFunction>& out, const doc::PCoreCatalog* pcore
     f.options["play"] = {"on", "off"};
     out.push_back(std::move(f));
   }
+  {
+    CoreFunction f;
+    f.id = "gate";
+    f.family = "gate";
+    f.name = "Gate";
+    f.description = "Core AI Gate (our own plugin) chops the track in time over \"section\": a \"preset\" (the easy way), or a "
+                    "\"pattern\" of 16 steps (x on, h half, . off; \"x.xx\" repeats) at a \"rate\"; knobs change the preset. "
+                    "duck: a dip at every beat (the pump against the kick). Outside the section the gate does nothing";
+    f.tags = {"gate", "trance gate", "chop", "duck", "pump", "sidechain", "cortar", "ritmo"};
+    f.args = {{"depth", "Depth", "how far the closed steps go down (0: no chop, only the duck)", "", 0, 1, 1},
+              {"length", "Length", "how much of each step is open", "", 0.1, 1, 0.5},
+              {"smooth", "Smooth", "soft or hard edges", "ms", 0.5, 30, 3},
+              {"duck", "Duck", "the dip at every beat", "", 0, 1, 0},
+              {"mix", "Mix", "", "", 0, 1, 1}};
+    f.options["preset"] = aifx::presetIds();
+    f.options["rate"] = aifx::rateNames();
+    f.options["pattern"] = {};  // any text: checked by gate.hpp parsePattern
+    for (const auto& pr : aifx::presets()) f.extra["presetInfo"][pr.id] = pr.what;
+    out.push_back(std::move(f));
+  }
+}
+
+// The gate a call asks for: its preset (or the plain gate), then its pattern, rate and knobs.
+aifx::Settings gateOf(const Call& c) {
+  aifx::Settings g;
+  if (const aifx::Preset* pr = aifx::findPreset(text(c, "preset"))) g = aifx::fromPreset(*pr);
+  if (!text(c, "pattern").empty()) aifx::parsePattern(text(c, "pattern"), g.steps);
+  if (!text(c, "rate").empty()) g.rate = std::max(0, aifx::rateIndex(text(c, "rate")));
+  g.depth = arg(c, "depth", g.depth);
+  g.length = arg(c, "length", g.length);
+  g.smoothMs = arg(c, "smooth", g.smoothMs);
+  g.duck = arg(c, "duck", g.duck);
+  g.mix = arg(c, "mix", g.mix);
+  return g;
 }
 
 const std::pair<std::string, std::string>* Pending::newTrack(const std::string& name) const {
@@ -364,6 +401,30 @@ bool validate(const json& c, const CoreFunction& f, const doc::Document& song, c
     }
     return true;
   }
+  if (f.family == "gate") {
+    if (!needsTrack()) return false;
+    if (call.sectionName.empty() && !call.zoneSection) {
+      problems.push_back("Gate: no \"section\" given (where it chops): left out");
+      return false;
+    }
+    for (const char* k : {"preset", "rate", "pattern"})
+      if (!takeText(c, f, k, false, call, problems)) return false;
+    std::array<int, aifx::kSteps> steps{};
+    if (!text(call, "pattern").empty() && !aifx::parsePattern(text(call, "pattern"), steps)) {
+      problems.push_back("Gate pattern \"" + text(call, "pattern") + "\": 1, 2, 4, 8 or 16 of x (on), h (half), . (off): left out");
+      return false;
+    }
+    if (text(call, "preset").empty() && text(call, "pattern").empty()) {
+      problems.push_back("Gate: give a \"preset\" or a \"pattern\": left out");
+      return false;
+    }
+    const aifx::Settings g = gateOf(call);
+    if (g.depth <= 0 && g.duck <= 0) {
+      problems.push_back("Gate: depth 0 and no duck does nothing: left out");
+      return false;
+    }
+    return true;
+  }
   problems.push_back(f.name + " is not a song function: left out");
   return false;
 }
@@ -448,6 +509,19 @@ std::vector<std::string> apply(doc::Document& song, const Proposal& p, size_t& i
     }
     return lines;
   }
+  if (family == "gate") {
+    ++i;
+    if (!env.roles) throw doc::DocumentError("calls", "the role map is not loaded (Settings > Roles)");
+    int64_t a = c.startTick, b = c.endTick;
+    if (b <= a) {
+      const doc::Section* s = sectionNamed(song, c.sectionName);
+      if (!s) throw doc::DocumentError("calls", "no section " + c.sectionName);
+      a = s->startTick;
+      b = std::min(s->startTick + s->lengthTicks, song.lengthTicks);
+    }
+    const auto r = doc::toolGate(song, resolveTrack(c.trackId, made), *env.roles, a, b, gateOf(c), text(c, "preset"));
+    return {describe(c) + ": " + r.sentence};
+  }
   throw doc::DocumentError("calls", "Core cannot apply " + c.fn->name + " yet");
 }
 
@@ -462,6 +536,11 @@ std::string describe(const Call& c) {
   }
   if (family == "arrange") out = "Arrange " + where;
   else if (family == "plays") out = where + (text(c, "play") == "on" ? " plays in " : " rests in ") + c.sectionName;
+  else if (family == "gate") {
+    out = "Gate " + (text(c, "preset").empty() ? std::string() : text(c, "preset") + " ") +
+          (text(c, "pattern").empty() ? std::string() : "[" + text(c, "pattern") + "] ") + (text(c, "rate").empty() ? "" : text(c, "rate") + " ") + "on " + where;
+    for (const auto& [k, v] : c.args) out += " · " + k + " " + num(v);
+  }
   else if (family == "pcore") {
     out = "P-Core " + text(c, "part") + (text(c, "shape").empty() ? std::string() : " · " + text(c, "shape")) + " on " + where;
     for (const char* k : {"style", "scale", "root", "grid", "mode"})

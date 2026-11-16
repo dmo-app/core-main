@@ -31,6 +31,7 @@
 #include <vector>
 #include "document.hpp"
 #include "pcore.hpp"
+#include "roles.hpp"
 #include "samples.hpp"
 
 namespace core::control {
@@ -156,6 +157,7 @@ std::string describeCall(const Call& call);
 struct ApplyEnv {
   const doc::SampleIndex* samples = nullptr;
   const doc::PCoreCatalog* pcore = nullptr;  // "pcore" calls (pcore/styles.json)
+  const doc::RoleMap* roles = nullptr;       // "gate" calls: which plugin plays the gate (Settings > Roles)
 };
 // Makes every call of the proposal on `song` (the caller commits it as one undo step). chosenTrack: for the calls
 // without a track ("master" for the master). Throws doc::DocumentError when a call is refused: then nothing

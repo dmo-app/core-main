@@ -37,7 +37,7 @@ std::string toolName(const std::string& functionId);
 
 // The catalog: the read actions (consultar_manual only with the knowledge base), then one edit per function Core can
 // run now (its text choices as enums, its knobs with their ranges). lembrar_receitas only with the AI's memory (memory.hpp).
-std::vector<Action> catalog(const std::vector<control::CoreFunction>& functions, bool knowledge, bool memory = false);
+std::vector<Action> catalog(const std::vector<control::CoreFunction>& functions, bool knowledge, bool memory = false, bool listen = false);
 const Action* findAction(const std::vector<Action>& actions, const std::string& name);
 
 // The views. Anthropic: {name, description, input_schema}, the last one with cache_control (tools and system are

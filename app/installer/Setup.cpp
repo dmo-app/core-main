@@ -162,6 +162,11 @@ bool removeInstalledAppFiles(const juce::File& folder) {
   return ok;
 }
 
+// %LOCALAPPDATA%\Programs\Common\VST3: the VST3 folder of the current user (no administrator rights needed).
+juce::File userVst3Folder() {
+  return juce::File::getSpecialLocation(juce::File::windowsLocalAppData).getChildFile("Programs").getChildFile("Common").getChildFile("VST3");
+}
+
 // Unpacks this program's package into app-<version> (a .part folder first, renamed when complete), makes
 // it the current version and keeps the one before it for going back. Older versions are removed.
 juce::String install(const juce::File& folder, bool withShortcuts, bool desktop) {
@@ -189,6 +194,13 @@ juce::String install(const juce::File& folder, bool withShortcuts, bool desktop)
   const juce::String keep = folder.getChildFile("previous.txt").loadFileAsString().trim();
   for (const auto& old : folder.findChildFiles(juce::File::findDirectories, false, "app-*"))
     if (old != target && old.getFileName() != "app-" + keep) removeInstalledAppFiles(old);
+  // Core's own plugins (app/aifx: Core AI Gate) into the user's VST3 folder, where Core and other hosts find them.
+  for (const auto& bundle : target.getChildFile("vst3").findChildFiles(juce::File::findDirectories, false, "*.vst3")) {
+    const juce::File dest = userVst3Folder().getChildFile(bundle.getFileName());
+    dest.deleteRecursively();  // fails while a host has it open: the one there stays (Core still finds it)
+    userVst3Folder().createDirectory();
+    bundle.copyDirectoryTo(dest);
+  }
   const juce::File self = juce::File::getSpecialLocation(juce::File::currentExecutableFile);
   if (self != folder.getChildFile("Uninstall.exe")) self.copyFileTo(folder.getChildFile("Uninstall.exe"));
   if (withShortcuts) integrate(folder, kVersion, desktop);
@@ -229,6 +241,9 @@ juce::String uninstall(const juce::File& folder, bool withShortcuts) {
     desktopLink().deleteFile();
     juce::WindowsRegistry::deleteKey(kUninstallKey.dropLastCharacters(1));
   }
+  // Core's own plugins that the install put in the user's VST3 folder (by the names in its package).
+  for (const auto& bundle : appFolder(folder, installedVersion(folder)).getChildFile("vst3").findChildFiles(juce::File::findDirectories, false, "*.vst3"))
+    userVst3Folder().getChildFile(bundle.getFileName()).deleteRecursively();
   const juce::File self = juce::File::getSpecialLocation(juce::File::currentExecutableFile);
   bool ok = removeSamples(folder), othersLeft = false;
   for (const auto& f : folder.findChildFiles(juce::File::findFilesAndDirectories, false)) {

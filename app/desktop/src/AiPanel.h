@@ -35,6 +35,11 @@ public:
     std::function<std::vector<std::string>(const nlohmann::json& proposal)> apply;
     // The selection on the tracks (a box: tracks and bars); inactive = the whole song. The AI changes only that.
     std::function<control::Zone()> zone;
+    // The plugins Core knows (its scanned list), and a scan of only some plugin files (the AI's: Settings).
+    std::function<std::vector<nlohmann::json>()> instruments;
+    std::function<void(const juce::Array<juce::File>&, std::function<void(int found, int failed)>)> scanPlugins;
+    // Renders two tracks with their plugins (ler_kick_bass: ai::Config::listen); not set = the tool is not offered.
+    decltype(ai::Config::listen) listen;
   };
   enum class Dock { Side, Bottom };
 

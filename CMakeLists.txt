@@ -45,6 +45,7 @@ add_subdirectory(app/ai)       # the AI inside Core: the chat, its providers and
 add_subdirectory(app/sampling) # making samples from audio (no JUCE)
 add_subdirectory(app/previews) # what each pattern sounds like, for the clips' waveforms (no JUCE)
 if(CORE_BUILD_APP AND WIN32)
+  add_subdirectory(app/aifx)  # Core AI Gate: the own "AI FX" plugins, driven by the AI (VST3)
   add_subdirectory(app/selftest-plugins)  # a test synth and gain VST3 for Core.exe --self-test (never shipped)
   add_subdirectory(app/desktop)
   add_subdirectory(app/installer)  # Core Setup.exe (M6)

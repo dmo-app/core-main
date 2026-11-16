@@ -20,6 +20,7 @@
 #include "stream.hpp"
 #include "synth.hpp"
 #include "synth_roles.hpp"
+#include "kick_bass.hpp"
 
 using namespace core;
 using json = nlohmann::json;
@@ -1050,7 +1051,14 @@ void vital() {
   fs::create_directories(dir / "b" / "Vital.vst3" / "Contents");  // a VST3 bundle is a folder
   const auto found = ai::findSynth({dir / "a", dir / "b"});
   CHECK(found && *found == dir / "b" / "Vital.vst3");
+  // The AI's plugins: today the synth, looked for the same way.
+  const auto plugins = ai::aiPlugins();
+  CHECK(plugins.size() == 5 && plugins[0].file == "Vital.vst3");  // Vital, sfizz, Dragonfly Room, Airwindows, Core AI Gate
+  for (const auto& p : plugins) CHECK(!p.licence.empty() && (!p.download.empty() || p.licence == "Core"));  // ours comes with Core
+  const auto again = ai::findAiPlugin(plugins[0], {dir / "a", dir / "b"});
+  CHECK(again && *again == dir / "b" / "Vital.vst3");
   fs::remove_all(dir);
+  CHECK(!ai::findAiPlugin(plugins[0], {dir / "b"}));
 
   const json vital = {{"format", "VST3"}, {"id", "VST3-Vital-1"}, {"name", "Vital"}, {"vendor", "Vital Audio"}, {"file", "C:/x/Vital.vst3"}};
   const json other = {{"format", "VST3"}, {"id", "VST3-Serum-2"}, {"name", "Serum 2"}, {"vendor", "Xfer"}, {"file", "C:/x/Serum2.vst3"}};
@@ -1071,6 +1079,23 @@ void vital() {
 
   // Without Vital in the scan nothing changes.
   CHECK_EQ(ai::withSynthRoles(mine, json::array({other})), mine);
+
+  // The whole default map: Vital, sfizz, Dragonfly Room and Airwindows Consolidated; the user's reverb stays.
+  auto plugin = [](const char* name) {
+    return json{{"format", "VST3"}, {"id", std::string("VST3-") + name}, {"name", name}, {"vendor", "x"}, {"file", std::string("C:/x/") + name + ".vst3"}};
+  };
+  json chosen = {{"version", 1}, {"roles", {{"reverb", {{"plugin", plugin("ValhallaRoom")}, {"params", json::object()}}}}}};
+  const json all = ai::withAiRoles(chosen, json::array({vital, plugin("sfizz"), plugin("Dragonfly Room Reverb"), plugin("Airwindows Consolidated")}));
+  CHECK_EQ(all["roles"]["reverb"]["plugin"]["name"], json("ValhallaRoom"));
+  CHECK_EQ(all["roles"]["drums"]["plugin"]["name"], json("sfizz"));
+  CHECK_EQ(all["roles"]["delay"]["plugin"]["name"], json("Airwindows Consolidated"));
+  CHECK_EQ(all["roles"]["delay"]["effect"], json("TapeDelay2"));
+  CHECK_EQ(all["roles"]["sidechain"]["effect"], json("PurestGain"));
+  CHECK(!all["roles"]["reverb"].contains("effect"));
+  const json fresh2 = ai::withAiRoles(nullptr, json::array({plugin("Dragonfly Room Reverb")}));
+  CHECK_EQ(fresh2["roles"]["reverb"]["plugin"]["name"], json("Dragonfly Room Reverb"));
+  CHECK(!fresh2["roles"].contains("delay"));  // Airwindows not scanned: left empty
+  CHECK_EQ(all["roles"]["lead"]["plugin"]["name"], json("Vital"));
 }
 }  // namespace synth_t
 
@@ -1239,6 +1264,98 @@ void gatewayMode(const doc::PCoreCatalog& cat) {
 }
 }  // namespace gateway_t
 
+// What the AI hears of the kick and the bass (kick_bass.hpp, ler_kick_bass): Core's own measure, with plugins.
+namespace kick_bass_t {
+
+using ai_chat_t::answer;
+using ai_chat_t::lastToolResult;
+using ai_chat_t::toolUse;
+
+// Two bars at 120 BPM, 48 kHz: a 55 Hz kick of 120 ms on each beat; the bass at 55 Hz, either all the time, or
+// with the first 1/16 of each beat left out, or the kick upside down.
+struct Pair { std::vector<float> kick, bass; };
+Pair make(const std::string& bass) {
+  const double sr = 48000, beat = 0.5 * sr;
+  Pair p;
+  const size_t n = (size_t)(8 * beat);
+  p.kick.assign(n, 0.0f);
+  p.bass.assign(n, 0.0f);
+  for (size_t i = 0; i < n; ++i) {
+    const double inBeat = std::fmod((double)i, beat), t = (double)i / sr;
+    const float tone = (float)std::sin(2 * 3.14159265358979 * 55.0 * t);
+    if (inBeat < 0.12 * sr) p.kick[i] = 0.8f * tone * (float)(1.0 - inBeat / (0.12 * sr));
+    if (bass == "all") p.bass[i] = 0.5f * tone;
+    else if (bass == "gap" && inBeat >= beat / 4) p.bass[i] = 0.5f * tone;
+    else if (bass == "inverted") p.bass[i] = -p.kick[i];
+  }
+  return p;
+}
+
+void analysis() {
+  const Pair all = make("all"), gap = make("gap"), inv = make("inverted"), none = make("none");
+  const ai::KickBass a = ai::analyzeKickBass(all.kick, all.bass, 48000, 120);
+  const ai::KickBass g = ai::analyzeKickBass(gap.kick, gap.bass, 48000, 120);
+  const ai::KickBass v = ai::analyzeKickBass(inv.kick, inv.bass, 48000, 120);
+  CHECK(a.overlapMs > 60);                 // the bass sits under the whole kick
+  CHECK(g.overlapMs < 25);                 // the gap leaves the kick alone
+  CHECK(v.correlation < -0.9);             // they cancel
+  CHECK(a.correlation > 0.3);
+  CHECK(a.sumPeakDb > a.kickPeakDb);
+  CHECK(a.toJson()["conselho"].get<std::string>().find("psy-bass-gap") != std::string::npos);
+  CHECK(v.toJson()["conselho"].get<std::string>().find("fases") != std::string::npos);
+  CHECK(g.toJson()["conselho"].get<std::string>().find("bem separados") != std::string::npos);
+  const ai::KickBass s = ai::analyzeKickBass(none.kick, none.bass, 48000, 120);
+  CHECK(s.silentBass && !s.silentKick);
+  std::vector<float> bad(10, NAN);
+  CHECK(std::isfinite(ai::analyzeKickBass(bad, bad, 48000, 120).correlation));
+}
+
+void inTheChat(const doc::PCoreCatalog& cat) {
+  doc::Document song = doc::newTemplateDocument();
+  doc::Section drop;
+  drop.id = "sec-drop";
+  drop.name = "Drop";
+  drop.startTick = 0;
+  drop.lengthTicks = std::min<int64_t>(16 * 4 * doc::kPpq, song.lengthTicks);
+  song.sections = {drop};
+  ai::Config cfg;
+  {  // without a way to listen, the tool is not offered
+    ai::Chat chat(cfg, control::buildFunctions(&cat), &cat);
+    const json req = chat.ask("ouve", song);
+    bool offered = false;
+    for (const auto& t : req["tools"]) offered |= t.value("name", std::string()) == "ler_kick_bass";
+    CHECK(!offered);
+  }
+  int64_t heardStart = -1, heardEnd = -1;
+  std::string kickId, bassId;
+  cfg.listen = [&](const std::string& k, const std::string& b, int64_t start, int64_t end, std::vector<float>& kick, std::vector<float>& bass, double& sr) {
+    kickId = k;
+    bassId = b;
+    heardStart = start;
+    heardEnd = end;
+    const Pair p = make("all");
+    kick = p.kick;
+    bass = p.bass;
+    sr = 48000;
+    return std::string();
+  };
+  // Two tracks the AI names (the template's own names may not say kick and bass).
+  const std::string k = song.tracks.at(0).name, b = song.tracks.at(1).name;
+  ai::Chat chat(cfg, control::buildFunctions(&cat), &cat);
+  chat.ask("o kick e o bass batem?", song);
+  json req = chat.onResponse(answer(json::array({toolUse("a", "ler_kick_bass", {{"secção", "drop"}, {"kick", k}, {"bass", b}})}), "tool_use"), song);
+  CHECK(!req.is_null());
+  const json heard = lastToolResult(req);
+  CHECK(heard.contains("correlacao") && heard.contains("conselho"));
+  CHECK_EQ(heard.value("kick", std::string()), k);
+  CHECK_EQ(heardStart, (int64_t)0);
+  CHECK_EQ(heardEnd, std::min<int64_t>(8 * 4 * doc::kPpq, song.lengthTicks));  // 8 bars at most
+  req = chat.onResponse(answer(json::array({toolUse("b", "ler_kick_bass", {{"secção", "Nada"}})}), "tool_use"), song);
+  CHECK(lastToolResult(req).contains("error"));
+}
+
+}  // namespace kick_bass_t
+
 TEST("song: a beat from nothing") { song_calls_t::beatFromNothing(catalog()); }
 TEST("song: changing a part") { song_calls_t::changeAPart(catalog()); }
 TEST("song: what is left out") { song_calls_t::leftOut(catalog()); }
@@ -1267,6 +1384,8 @@ TEST("ai: the synth is Vital") { synth_t::vital(); }
 TEST("ai: the kinds of calls left out") { taxonomy_t::kinds(); }
 TEST("ai: streaming, assembled") { stream_t::assemble(catalog()); }
 TEST("ai: streaming, when it fails") { stream_t::failures(); }
+TEST("ai: kick and bass, measured") { kick_bass_t::analysis(); }
+TEST("ai: kick and bass, in the chat") { kick_bass_t::inTheChat(catalog()); }
 TEST("ai: models") { ai_knowledge_t::models(); }
 TEST("ai: knowledge base") { ai_knowledge_t::knowledgeBase(knowledgeDb()); }
 TEST("ai: the consult tool") { ai_knowledge_t::consultTool(knowledgeDb()); }
