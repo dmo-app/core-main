@@ -83,7 +83,7 @@ AiPanel::AiPanel(Host host) : host_(std::move(host)) {
   }
   for (int i = 0; i < (int)models_.size(); ++i) model_.addItem(u8(models_[(size_t)i].name), i + 1);
   model_.setSelectedId(1, juce::dontSendNotification);
-  model_.setTooltip(u8("The model: Claude Sonnet for the music, Haiku for small changes at a fraction of the cost; more (other APIs, local models) in ai-settings.json"));
+  model_.setTooltip(u8("The model: Claude Haiku by default (about 1/10 of the price), Sonnet for big requests; more (other APIs, local models) in ai-settings.json"));
   addAndMakeVisible(model_);
   for (int i = 0; i < (int)std::size(kEfforts); ++i) effort_.addItem(u8(kEfforts[i]), i + 1);
   effort_.setSelectedId(2, juce::dontSendNotification);

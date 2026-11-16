@@ -5,7 +5,7 @@ namespace core::ai {
 std::vector<ModelEntry> modelEntries(const json& settings, std::vector<std::string>* problems) {
   std::vector<ModelEntry> out;
   for (const auto& [id, name] : std::vector<std::pair<const char*, const char*>>{
-           {"claude-sonnet-5-5", "Claude Sonnet 5.5"}, {"claude-haiku-5-5", "Claude Haiku 5.5 (cheaper)"}, {"claude-opus-5-5", "Claude Opus 5.5"}}) {
+           {"claude-haiku-5-5", "Claude Haiku 5.5"}, {"claude-sonnet-5-5", "Claude Sonnet 5.5 (big requests)"}, {"claude-opus-5-5", "Claude Opus 5.5"}}) {
     ModelEntry e;
     e.name = name;
     e.config.model = id;

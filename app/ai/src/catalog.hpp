@@ -47,6 +47,13 @@ json anthropicTools(const std::vector<Action>& actions);
 json openAiTools(const std::vector<Action>& actions);
 json mcpTools(const std::vector<Action>& actions);
 
+// The gateway view (the idea of ai-daw's help/call, Apache-2.0, no code copied): the read actions as they are, then
+// two tools in place of every edit: "ajuda" (what an action takes: its schema, on demand) and "fazer" (do one: the
+// action's name and its input). The requests get much smaller; each edit is still checked the same way.
+std::vector<Action> gateway(const std::vector<Action>& offered);
+// What "ajuda" answers: with no topic, every edit (name, one line); with an action's name or a family, their schemas.
+json gatewayHelp(const std::vector<Action>& offered, const std::string& topic);
+
 // The permission policy.
 enum class Verdict { allow, deny, ask };
 const char* verdictName(Verdict v);

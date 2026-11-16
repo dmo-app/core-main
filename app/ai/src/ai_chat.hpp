@@ -34,13 +34,14 @@ struct Usage {
 
 struct Config {
   Provider provider;              // anthropic (Claude), or any OpenAI-compatible API / local server
-  std::string model = "claude-sonnet-5-5";
+  std::string model = "claude-haiku-5-5";  // the default (cost bench 2026-11-16); Sonnet for big requests
   bool pricesSet = false;         // prices given (another provider's); else Anthropic's for anthropic, 0 otherwise
   Prices prices;
   std::string effort = "medium";  // low | medium | high
   int maxTokens = 8000;
   int maxSteps = 8;               // requests per message at most
   Permissions permissions;        // what the model may do (catalog.hpp): ask, readonly, trusted
+  bool gateway = false;           // "ajuda" + "fazer" in place of every edit tool (catalog.hpp: smaller requests)
 };
 
 // Claude's tool definitions: the catalog's Anthropic view (catalog.hpp), every action offered. The chat itself offers
@@ -48,7 +49,7 @@ struct Config {
 json toolsFor(const std::vector<control::CoreFunction>& functions, bool knowledge = false);
 // The system prompt (PT-PT) and the style card (the song's P-Core style, its parts, shapes and the song shapes).
 // With the permission mode: readonly and trusted add a sentence that says so.
-json systemFor(const doc::Document& song, const doc::PCoreCatalog* pcore, const std::string& mode = "ask");
+json systemFor(const doc::Document& song, const doc::PCoreCatalog* pcore, const std::string& mode = "ask", bool gateway = false);
 
 class Chat {
 public:
@@ -98,7 +99,8 @@ private:
   const Memory* memory_;
   std::vector<std::string> shown_;
   std::vector<Action> actions_;  // the whole catalog (a denied action is refused when called)
-  json tools_;                   // what is offered: the actions not denied
+  std::vector<Action> offered_;  // the actions not denied
+  json tools_;                   // what is offered: those, or their gateway view
   int asked_ = 0;                // calls in the proposal that wait for Apply
   size_t askStart_ = 0;          // where this message's turn starts in messages_
   json messages_ = json::array();

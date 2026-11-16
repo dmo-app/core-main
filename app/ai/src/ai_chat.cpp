@@ -117,8 +117,11 @@ json toolsFor(const std::vector<control::CoreFunction>& functions, bool knowledg
   return anthropicTools(catalog(functions, knowledge));
 }
 
-json systemFor(const doc::Document& song, const doc::PCoreCatalog* pcore, const std::string& mode) {
+json systemFor(const doc::Document& song, const doc::PCoreCatalog* pcore, const std::string& mode, bool gateway) {
   std::string text = kSystem;
+  if (gateway)
+    text += "\n\nAs ações de escrita (track, pcore, shape, arrange, plays, mix...) fazem-se com a ferramenta fazer {acao, dados}. "
+            "Antes de usar uma ação pela primeira vez, pede o que ela recebe com ajuda {tema: a ação}; pede várias de uma vez se precisares.";
   if (mode == "readonly")
     text += "\n\nNeste chat só lês e explicas: o Diogo não deixou mudar a música, as ferramentas de escrita não estão disponíveis.";
   if (mode == "trusted")
@@ -131,10 +134,9 @@ Chat::Chat(Config config, std::vector<control::CoreFunction> functions, const do
            const Memory* memory)
     : config_(std::move(config)), functions_(std::move(functions)), pcore_(pcore), knowledge_(knowledge), memory_(memory),
       actions_(catalog(functions_, knowledge != nullptr, memory != nullptr)) {
-  std::vector<Action> offered;
   for (const auto& a : actions_)
-    if (decide(config_.permissions, a) != Verdict::deny) offered.push_back(a);
-  tools_ = anthropicTools(offered);
+    if (decide(config_.permissions, a) != Verdict::deny) offered_.push_back(a);
+  tools_ = anthropicTools(config_.gateway ? gateway(offered_) : offered_);
 }
 
 double Chat::cost(const Usage& u) const {
@@ -157,7 +159,7 @@ void Chat::reset() {
 json Chat::request(const doc::Document& song) const {
   return {{"model", config_.model},
           {"max_tokens", config_.maxTokens},
-          {"system", systemFor(song, pcore_, config_.permissions.mode)},
+          {"system", systemFor(song, pcore_, config_.permissions.mode, config_.gateway)},
           {"tools", tools_},
           {"messages", messages_},
           {"output_config", {{"effort", config_.effort}}},
@@ -195,6 +197,12 @@ json Chat::ask(const std::string& text, const doc::Document& song) {
 }
 
 json Chat::runTool(const std::string& name, const json& input, const doc::Document& song) {
+  if (config_.gateway && name == "ajuda") return gatewayHelp(offered_, input.value("tema", std::string()));
+  if (config_.gateway && name == "fazer") {
+    const std::string inner = input.value("acao", std::string());
+    if (inner == "ajuda" || inner == "fazer") return {{"error", "fazer takes one of Core's write actions"}};
+    return runTool(inner, input.contains("dados") && input["dados"].is_object() ? input["dados"] : json::object(), song);
+  }
   const Action* action = findAction(actions_, name);
   if (!action) return {{"error", "unknown tool " + name}};
   const Verdict verdict = decide(config_.permissions, *action);

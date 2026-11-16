@@ -8,7 +8,7 @@
 // left out, and whether the proposal applies to the song. It stops before a run that could pass the money cap.
 //
 //   core-ai-bench --out <folder> [--models claude-haiku-5-5,claude-sonnet-5-5] [--efforts low,medium]
-//                 [--scenarios beat,structure,change] [--max-usd 2] [--knowledge <core-ai-knowledge.sqlite>]
+//                 [--scenarios beat,structure,change] [--tools full,gateway] [--max-usd 2] [--knowledge <core-ai-knowledge.sqlite>]
 //                 [--pcore <pcore/styles.json>] [--key-file <file>] [--dry-run]
 // The key: ANTHROPIC_API_KEY, else --key-file (default %APPDATA%\Core\AI\anthropic-key.txt). It goes to curl in a
 // temporary header file that is deleted after each request; it is never printed or written in the report.
@@ -125,7 +125,7 @@ double worstCase(const ai::Config& c) {
 }  // namespace
 
 int main(int argc, char** argv) {
-  std::vector<std::string> models = {"claude-haiku-5-5", "claude-sonnet-5-5"}, efforts = {"low", "medium"}, wanted;
+  std::vector<std::string> models = {"claude-haiku-5-5", "claude-sonnet-5-5"}, efforts = {"low", "medium"}, wanted, toolModes = {"full"};
   double maxUsd = 2.0;
   fs::path out, knowledgeDb, pcorePath, keyFile;
   bool dry = false;
@@ -135,6 +135,7 @@ int main(int argc, char** argv) {
     if (a == "--models") models = split(next());
     else if (a == "--efforts") efforts = split(next());
     else if (a == "--scenarios") wanted = split(next());
+    else if (a == "--tools") toolModes = split(next());
     else if (a == "--max-usd") maxUsd = std::atof(next().c_str());
     else if (a == "--out") out = next();
     else if (a == "--knowledge") knowledgeDb = next();
@@ -178,9 +179,11 @@ int main(int argc, char** argv) {
   bool capped = false;
   for (const auto& sc : scenarios()) {
     if (!wanted.empty() && std::find(wanted.begin(), wanted.end(), sc.id) == wanted.end()) continue;
+    for (const auto& toolMode : toolModes)
     for (const auto& model : models)
       for (const auto& effort : efforts) {
         ai::Config cfg;
+        cfg.gateway = toolMode == "gateway";
         cfg.model = model;
         cfg.effort = effort;
         cfg.provider.apiKey = key;
@@ -200,7 +203,7 @@ int main(int argc, char** argv) {
         ai::Chat chat(cfg, functions, &cat, knowledge.get());
         json body = chat.ask(sc.prompt, song);
         if (dry) {
-          std::cout << sc.id << " " << model << " " << effort << ": first request " << body.dump().size() << " bytes, "
+          std::cout << sc.id << " " << toolMode << " " << model << " " << effort << ": first request " << body.dump().size() << " bytes, "
                     << body["tools"].size() << " tools\n";
           continue;
         }
@@ -236,14 +239,14 @@ int main(int argc, char** argv) {
         }
         int leftOut = 0;
         for (const auto& l : chat.log()) leftOut += l.rfind("left out", 0) == 0 || l.rfind("not allowed", 0) == 0;
-        json run = {{"scenario", sc.id}, {"model", model}, {"effort", effort}, {"usd", cost}, {"requests", u.requests},
+        json run = {{"scenario", sc.id}, {"tools", toolMode}, {"model", model}, {"effort", effort}, {"usd", cost}, {"requests", u.requests},
                     {"input", u.input}, {"output", u.output}, {"cacheRead", u.cacheRead}, {"cacheWrite", u.cacheWrite},
                     {"seconds", seconds}, {"calls", proposal["calls"].size()}, {"leftOut", leftOut}, {"applies", applies},
                     {"problems", p.problems}, {"reply", chat.reply()}, {"error", failure.empty() ? chat.error() : failure},
                     {"log", chat.log()}, {"proposal", proposal}};
         if (!applyError.empty()) run["applyError"] = applyError;
         runs.push_back(run);
-        std::printf("%-9s %-18s %-6s $%.4f  %d req  %5.1f s  %2zu calls  %d left out  %s%s\n", sc.id.c_str(), model.c_str(),
+        std::printf("%-9s %-7s %-18s %-6s $%.4f  %d req  %5.1f s  %2zu calls  %d left out  %s%s\n", sc.id.c_str(), toolMode.c_str(), model.c_str(),
                     effort.c_str(), cost, u.requests, seconds, proposal["calls"].size(), leftOut, applies ? "applies" : "does not apply",
                     run["error"].get<std::string>().empty() ? "" : ("  (" + run["error"].get<std::string>() + ")").c_str());
         std::fflush(stdout);
@@ -258,19 +261,19 @@ int main(int argc, char** argv) {
   std::ofstream(out / "ai-bench.json", std::ios::binary) << report.dump(1, ' ', false, json::error_handler_t::replace);
   std::ofstream md(out / "ai-bench.md", std::ios::binary);
   md << "# Core AI bench\n\nSpent: $" << spent << " (cap $" << maxUsd << ")" << (capped ? ", stopped at the cap" : "") << "\n\n";
-  md << "| scenario | model | effort | USD | requests | seconds | calls | left out | applies | error |\n|---|---|---|---|---|---|---|---|---|---|\n";
+  md << "| scenario | tools | model | effort | USD | requests | seconds | calls | left out | applies | error |\n|---|---|---|---|---|---|---|---|---|---|---|\n";
   for (const auto& r : runs) {
     char usd[32];
     std::snprintf(usd, sizeof usd, "%.4f", r["usd"].get<double>());
     char sec[32];
     std::snprintf(sec, sizeof sec, "%.1f", r["seconds"].get<double>());
-    md << "| " << r["scenario"].get<std::string>() << " | " << r["model"].get<std::string>() << " | " << r["effort"].get<std::string>() << " | "
+    md << "| " << r["scenario"].get<std::string>() << " | " << r["tools"].get<std::string>() << " | " << r["model"].get<std::string>() << " | " << r["effort"].get<std::string>() << " | "
        << usd << " | " << r["requests"].get<int>() << " | " << sec << " | " << r["calls"].get<size_t>() << " | " << r["leftOut"].get<int>()
        << " | " << (r["applies"].get<bool>() ? "yes" : "no") << " | " << r["error"].get<std::string>() << " |\n";
   }
   md << "\n## Replies\n\n";
   for (const auto& r : runs)
-    md << "**" << r["scenario"].get<std::string>() << " / " << r["model"].get<std::string>() << " / " << r["effort"].get<std::string>()
+    md << "**" << r["scenario"].get<std::string>() << " / " << r["tools"].get<std::string>() << " / " << r["model"].get<std::string>() << " / " << r["effort"].get<std::string>()
        << "**: " << r["reply"].get<std::string>() << "\n\n";
   std::printf("spent $%.4f; report in %s\n", spent, (out / "ai-bench.md").string().c_str());
   return 0;

@@ -1,3 +1,5 @@
+// The models the AI panel offers. Haiku first, the default (the cost bench of 2026-11-16: it does the beats, structures
+// and changes at ~1/10 of Sonnet's price; Sonnet for big requests).
 // The models the AI panel offers (Diogo, 2026-11-16: any API, local models too). Claude's three are built in; more
 // come from ai-settings.json in %APPDATA%\Core\AI:
 //   {"models": [{"name": "Qwen local", "provider": "openai", "baseUrl": "http://localhost:11434/v1", "model": "qwen3:14b"},

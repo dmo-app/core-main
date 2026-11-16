@@ -138,6 +138,46 @@ json mcpTools(const std::vector<Action>& actions) {
   return tools;
 }
 
+std::vector<Action> gateway(const std::vector<Action>& offered) {
+  std::vector<Action> out;
+  json names = json::array();
+  for (const auto& a : offered)
+    if (a.kind == Kind::read) out.push_back(a);
+    else names.push_back(a.name);
+  if (names.empty()) return out;
+  out.push_back(readAction("ajuda",
+                           "O que uma ação de escrita do Core recebe (o esquema dos argumentos). Sem tema: a lista das ações. "
+                           "Pede antes de usar uma ação pela primeira vez.",
+                           {{"type", "object"},
+                            {"properties", {{"tema", {{"type", "string"}, {"description", "o nome da ação (\"pcore\") ou da família; vazio = a lista"}}}}}}));
+  Action fazer;
+  fazer.name = "fazer";
+  fazer.description = "Faz uma ação de escrita do Core (entra na proposta, verificada como sempre). Os argumentos da ação vão em \"dados\", "
+                      "como \"ajuda\" os descreve.";
+  fazer.schema = {{"type", "object"},
+                  {"properties", {{"acao", {{"type", "string"}, {"enum", names}}}, {"dados", {{"type", "object"}}}}},
+                  {"required", {"acao", "dados"}}};
+  fazer.kind = Kind::edit;
+  fazer.family = "gateway";
+  out.push_back(fazer);
+  return out;
+}
+
+json gatewayHelp(const std::vector<Action>& offered, const std::string& topic) {
+  json out = json::array();
+  for (const auto& a : offered) {
+    if (a.kind == Kind::read) continue;
+    if (topic.empty()) {
+      std::string line = a.description.substr(0, a.description.find('.'));
+      out.push_back({{"acao", a.name}, {"o_que_faz", line.substr(0, 160)}});
+    } else if (a.name == topic || a.family == topic) {
+      out.push_back({{"acao", a.name}, {"descricao", a.description}, {"dados", a.schema}});
+    }
+  }
+  if (out.empty()) return {{"error", "no action or family named " + topic + "; ask with no topic for the list"}};
+  return {{"acoes", out}};
+}
+
 const char* verdictName(Verdict v) { return v == Verdict::allow ? "allow" : v == Verdict::deny ? "deny" : "ask"; }
 
 const std::vector<std::string>& permissionModes() {

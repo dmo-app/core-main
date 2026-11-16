@@ -207,7 +207,7 @@ void conversation(const doc::PCoreCatalog& cat) {
   song.name = "Dark psycore";
   ai::Chat chat(ai::Config{}, control::buildFunctions(&cat), &cat);
   json req = chat.ask("Faz uma batida no drop", song);
-  CHECK_EQ(req["model"].get<std::string>(), std::string("claude-sonnet-5-5"));
+  CHECK_EQ(req["model"].get<std::string>(), std::string("claude-haiku-5-5"));
   CHECK(req["system"].size() == 2 && req["system"][1].contains("cache_control"));
   CHECK_EQ(req["messages"].size(), (size_t)1);
   CHECK_EQ(req["output_config"]["effort"].get<std::string>(), std::string("medium"));
@@ -755,6 +755,59 @@ void alignByStyle(const doc::PCoreCatalog& cat) {
 }
 }  // namespace bench_t
 
+// The gateway view (ai-daw's help/call idea): "ajuda" + "fazer" in place of every edit tool, the same checks.
+namespace gateway_t {
+using ai_chat_t::answer;
+using ai_chat_t::lastToolResult;
+using ai_chat_t::toolUse;
+
+void gatewayMode(const doc::PCoreCatalog& cat) {
+  const auto fns = control::buildFunctions(&cat);
+  doc::Document song = doc::newEmptyDocument();
+  ai::Config c;
+  c.gateway = true;
+  ai::Chat chat(c, fns, &cat);
+  json req = chat.ask("forma e kick", song);
+  std::set<std::string> names;
+  for (const auto& t : req["tools"]) names.insert(t["name"].get<std::string>());
+  CHECK(names.count("ajuda") && names.count("fazer") && names.count("ler_musica"));
+  CHECK(!names.count("pcore") && !names.count("shape"));
+  CHECK(req["system"][0]["text"].get<std::string>().find("fazer {acao, dados}") != std::string::npos);
+  ai::Chat full(ai::Config{}, fns, &cat);
+  CHECK(req.dump().size() * 2 < full.ask("forma e kick", song).dump().size() + 2000);  // about half
+  // ajuda: the list, then one action's schema (the same as the full view's).
+  req = chat.onResponse(answer(json::array({toolUse("h", "ajuda", json::object())}), "tool_use"), song);
+  CHECK(lastToolResult(req)["acoes"].size() + 2 == ai::catalog(fns, false).size());  // the two reads are not listed
+  req = chat.onResponse(answer(json::array({toolUse("h2", "ajuda", {{"tema", "shape"}})}), "tool_use"), song);
+  const json help = lastToolResult(req);
+  CHECK(help["acoes"].size() == 1 && help["acoes"][0]["dados"] == ai::findAction(ai::catalog(fns, false), "shape")->schema);
+  req = chat.onResponse(answer(json::array({toolUse("h3", "ajuda", {{"tema", "nada"}})}), "tool_use"), song);
+  CHECK(lastToolResult(req).contains("error"));
+  // fazer: checked and gathered like a direct call; wrong ones are left out with the reason.
+  req = chat.onResponse(answer(json::array({toolUse("f1", "fazer", {{"acao", "shape"}, {"dados", {{"shape", "darkpsycore-64"}}}}),
+                                            toolUse("f2", "fazer", {{"acao", "track"}, {"dados", {{"part", "kick"}, {"name", "Kick"}}}}),
+                                            toolUse("f3", "fazer", {{"acao", "pcore"}, {"dados", {{"on", "Kick"}, {"section", "Nowhere"}}}}),
+                                            toolUse("f4", "fazer", {{"acao", "fazer"}, {"dados", json::object()}})}),
+                               "tool_use"), song);
+  CHECK_EQ(chat.proposal()["calls"].size(), (size_t)2);
+  CHECK(lastToolResult(req).contains("error"));
+  // Permissions hold inside fazer too.
+  ai::Config d = c;
+  d.permissions.deny = {"shape"};
+  ai::Chat denied(d, fns, &cat);
+  req = denied.ask("forma", song);
+  for (const auto& t : req["tools"])
+    if (t["name"] == "fazer") CHECK(t["input_schema"]["properties"]["acao"]["enum"].dump().find("\"shape\"") == std::string::npos);
+  req = denied.onResponse(answer(json::array({toolUse("f", "fazer", {{"acao", "shape"}, {"dados", {{"shape", "darkpsycore-64"}}}})}), "tool_use"), song);
+  CHECK(lastToolResult(req).contains("error") && denied.proposal()["calls"].empty());
+  // Read only: no edits, so no gateway tools.
+  ai::Config r = c;
+  r.permissions.mode = "readonly";
+  ai::Chat reader(r, fns, &cat);
+  for (const auto& t : reader.ask("explica", song)["tools"]) CHECK(t["name"] != "fazer" && t["name"] != "ajuda");
+}
+}  // namespace gateway_t
+
 TEST("song: a beat from nothing") { song_calls_t::beatFromNothing(catalog()); }
 TEST("song: changing a part") { song_calls_t::changeAPart(catalog()); }
 TEST("song: what is left out") { song_calls_t::leftOut(catalog()); }
@@ -771,6 +824,7 @@ TEST("memory: recipes, Gostei, export") { memory_t::recipes(); }
 TEST("memory: what is not confirmed fades") { memory_t::fading(); }
 TEST("memory: in the chat, with any model") { memory_t::inTheChat(catalog()); }
 TEST("song: a style's id as align") { bench_t::alignByStyle(catalog()); }
+TEST("catalog: the gateway view (ajuda / fazer)") { gateway_t::gatewayMode(catalog()); }
 TEST("ai: models") { ai_knowledge_t::models(); }
 TEST("ai: knowledge base") { ai_knowledge_t::knowledgeBase(knowledgeDb()); }
 TEST("ai: the consult tool") { ai_knowledge_t::consultTool(knowledgeDb()); }
