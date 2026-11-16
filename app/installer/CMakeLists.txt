@@ -27,6 +27,7 @@ juce_add_gui_app(CoreSetup
   NEEDS_WEB_BROWSER FALSE
   NEEDS_CURL FALSE)
 target_sources(CoreSetup PRIVATE Setup.cpp)
+target_include_directories(CoreSetup PRIVATE ${CMAKE_SOURCE_DIR}/app/ai/src)  # synth.hpp: where the AI's synth (Vital) is
 target_compile_definitions(CoreSetup PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_APPLICATION_VERSION_STRING="$<TARGET_PROPERTY:CoreApp,JUCE_VERSION>")  # the version of Core it installs
 target_link_libraries(CoreSetup PRIVATE CoreSetupData juce::juce_gui_basics PUBLIC juce::juce_recommended_config_flags)
 

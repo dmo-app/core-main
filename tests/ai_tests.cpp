@@ -17,6 +17,8 @@
 #include "provider.hpp"
 #include "score.hpp"
 #include "support/check.hpp"
+#include "synth.hpp"
+#include "synth_roles.hpp"
 
 using namespace core;
 using json = nlohmann::json;
@@ -1025,6 +1027,42 @@ void alignByStyle(const doc::PCoreCatalog& cat) {
 }
 }  // namespace bench_t
 
+// The AI's synth is Vital (Diogo, 2026-11-16): found where its installer puts it, and the default instrument roles.
+namespace synth_t {
+void vital() {
+  namespace fs = std::filesystem;
+  const fs::path dir = fs::temp_directory_path() / "core-ai-synth-test";
+  fs::remove_all(dir);
+  fs::create_directories(dir / "a");
+  fs::create_directories(dir / "b");
+  CHECK(!ai::findSynth({dir / "a", dir / "b"}));
+  fs::create_directories(dir / "b" / "Vital.vst3" / "Contents");  // a VST3 bundle is a folder
+  const auto found = ai::findSynth({dir / "a", dir / "b"});
+  CHECK(found && *found == dir / "b" / "Vital.vst3");
+  fs::remove_all(dir);
+
+  const json vital = {{"format", "VST3"}, {"id", "VST3-Vital-1"}, {"name", "Vital"}, {"vendor", "Vital Audio"}, {"file", "C:/x/Vital.vst3"}};
+  const json other = {{"format", "VST3"}, {"id", "VST3-Serum-2"}, {"name", "Serum 2"}, {"vendor", "Xfer"}, {"file", "C:/x/Serum2.vst3"}};
+  CHECK(ai::findSynthPlugin(json::array({other})).is_null());
+  CHECK_EQ(ai::findSynthPlugin(json::array({other, vital}))["id"], json("VST3-Vital-1"));
+
+  // No roles.json yet: every synth role goes to Vital; drums and the effects are not the synth's.
+  const json fresh = ai::withSynthRoles(nullptr, json::array({other, vital}));
+  for (const char* r : {"bass", "lead", "pad", "pluck"}) CHECK_EQ(fresh["roles"][r]["plugin"]["id"], json("VST3-Vital-1"));
+  CHECK(!fresh["roles"].contains("drums"));
+  CHECK(!fresh["roles"].contains("reverb"));
+
+  // The user's choice stays: bass on Serum 2 is kept, the empty roles are filled.
+  json mine = {{"version", 1}, {"roles", {{"bass", {{"plugin", other}, {"params", json::object()}}}}}};
+  const json merged = ai::withSynthRoles(mine, json::array({vital}));
+  CHECK_EQ(merged["roles"]["bass"]["plugin"]["id"], json("VST3-Serum-2"));
+  CHECK_EQ(merged["roles"]["lead"]["plugin"]["id"], json("VST3-Vital-1"));
+
+  // Without Vital in the scan nothing changes.
+  CHECK_EQ(ai::withSynthRoles(mine, json::array({other})), mine);
+}
+}  // namespace synth_t
+
 // The gateway view (ai-daw's help/call idea): "ajuda" + "fazer" in place of every edit tool, the same checks.
 namespace gateway_t {
 using ai_chat_t::answer;
@@ -1102,6 +1140,7 @@ TEST("chat: a kept chat taken up again") { review_t::restore(catalog()); }
 TEST("memory: episodes and the JSONL export") { memory_t::episodesForTraining(catalog()); }
 TEST("song: a style's id as align") { bench_t::alignByStyle(catalog()); }
 TEST("catalog: the gateway view (ajuda / fazer)") { gateway_t::gatewayMode(catalog()); }
+TEST("ai: the synth is Vital") { synth_t::vital(); }
 TEST("ai: models") { ai_knowledge_t::models(); }
 TEST("ai: knowledge base") { ai_knowledge_t::knowledgeBase(knowledgeDb()); }
 TEST("ai: the consult tool") { ai_knowledge_t::consultTool(knowledgeDb()); }
