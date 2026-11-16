@@ -256,6 +256,31 @@ TEST("freeze no motor: uma pista que é chave de sidechain continua a tocar a ch
   if (!(worst < 1e-6)) coretest::fail(__FILE__, __LINE__, coretest::pair(worst, "< 1e-6 (só A, uma vez, sem send nem bus)"));
 }
 
+TEST("freeze no motor: a automação de volume e pan da pista congelada continua audível (D57, R2)") {
+  // A pista congelada é áudio com o mixer da original: um envelope de gainDb de -60 a 0 dB e outro de pan têm de se
+  // ouvir no render, tal como na pista viva.
+  const fs::path dir = freshDir("auto");
+  const auto tone = coretest::sine(300, kSr, 96000, 0.5f);
+  const fs::path src = wavOf(dir / "stem.wav", tone, tone);
+  json a = {{"id", "A"}, {"name", "A (frozen)"}, {"instrument", "audio"}, {"audioClips", json::array({audioClip(src, 1.9)})},
+            {"envelopes", json::array({{{"param", "gainDb"}, {"points", json::array({{{"tick", 0}, {"value", -60}}, {{"tick", 2 * kBar}, {"value", 0}}})}},
+                                       {{"param", "pan"}, {"points", json::array({{{"tick", 0}, {"value", -1}}, {{"tick", 2 * kBar}, {"value", 1}}})}}})}};
+  FakeHost host;
+  core::Server server(nullptr, kSr, &host);
+  load(server, engineSong(json::array({a})));
+  render(server, json::array({{{"path", (dir / "mix.wav").string()}}}), "mix");
+  const auto m = core::readWav((dir / "mix.wav").string(), 1 << 24);
+  auto peak = [&](const std::vector<float>& x, size_t from, size_t to) {
+    float p = 0; for (size_t i = from; i < to && i < x.size(); ++i) p = std::max(p, std::fabs(x[i])); return p;
+  };
+  // 2 compassos a 150 BPM = 3,2 s: o envelope sobe ao longo do ficheiro de 1,9 s.
+  const float early = peak(m.L, 0, 2400) + peak(m.R, 0, 2400), late = peak(m.L, 86000, 90000) + peak(m.R, 86000, 90000);
+  if (!(late > 20 * early)) coretest::fail(__FILE__, __LINE__, coretest::pair(late / std::max(early, 1e-9f), "> 20 (o volume sobe)"));
+  // Pan da esquerda para a direita: no início quase tudo à esquerda, no fim mais à direita do que no início.
+  CHECK(peak(m.L, 0, 2400) > 4 * peak(m.R, 0, 2400));
+  CHECK(peak(m.R, 86000, 90000) / std::max(peak(m.L, 86000, 90000), 1e-9f) > peak(m.R, 0, 2400) / std::max(peak(m.L, 0, 2400), 1e-9f));
+}
+
 // ================================================================== documento
 
 TEST("freeze: o mixer passa para a pista de áudio e fica vivo (fader, pan, saída, sends, automação de mixer)") {
@@ -382,7 +407,10 @@ TEST("freeze: a chave de um sidechain é recusada com mensagem clara; a pista co
   CHECK(why.find("sidechain") != std::string::npos);
   CHECK(why.find("Bass") != std::string::npos);
   const fs::path dir = freshDir("sidechain");
+  const json before = toJson(d);
   CHECK_THROWS(freezeTrack(d, kick, renderFile(dir), dir));
+  CHECK(toJson(d) == before);  // D57 (R3): a recusa não muda nada
+  CHECK(d.assets.empty());
   // A Bass (com chave) congela; mexer nas notas do Kick muda o que ela ouvia: invalida.
   CHECK_EQ(cannotFreeze(d, bass), std::string());
   freezeTrack(d, bass, renderFile(dir), dir);
