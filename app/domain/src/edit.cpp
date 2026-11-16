@@ -1315,7 +1315,102 @@ std::string nextEffectId(const json& chain) {
   return "fx" + std::to_string(highest + 1);
 }
 
+// What a document keeps of a scanned plugin (the state is added when the engine gives it).
+json pluginRef(const json& plugin) {
+  if (!plugin.is_object() || !plugin.contains("id") || !plugin["id"].is_string() || !plugin.contains("file"))
+    throw DocumentError("plugin", "a plugin needs its id and its file");
+  std::string format = plugin.value("format", std::string("vst3"));
+  for (auto& c : format) if (c >= 'A' && c <= 'Z') c = (char)(c - 'A' + 'a');
+  json ref = {{"format", format}, {"id", plugin["id"]}, {"name", plugin.value("name", "Plugin")},
+              {"vendor", plugin.value("vendor", "")}, {"version", plugin.value("version", "")}, {"file", plugin["file"]}};
+  if (plugin.contains("state") && plugin["state"].is_string()) ref["state"] = plugin["state"];
+  return ref;
+}
+
 }  // namespace
+
+std::string addPluginTrack(Document& doc, const json& plugin) {
+  const json ref = pluginRef(plugin);
+  if (doc.tracks.size() >= 128) throw DocumentError("tracks", "has the maximum of 128 tracks");
+  Track t;
+  t.id = uniqueTrackId(doc, "vst");
+  t.name = ref["name"].get<std::string>().substr(0, 80);
+  t.instrument.kind = "plugin";
+  t.instrument.name.clear();
+  t.instrument.plugin = ref;
+  Pattern p;  // one 1-bar pattern over the whole song, as for the other instruments
+  p.id = "p1";
+  p.name = "1";
+  p.lengthTicks = 4 * kPpq;
+  t.patterns.push_back(p);
+  t.clips.push_back({"c1", "p1", 0, doc.lengthTicks, 0, json::object()});
+  doc.tracks.push_back(std::move(t));
+  return doc.tracks.back().id;
+}
+
+int addPluginEffect(Document& doc, const std::string& trackId, const json& plugin) {
+  const json ref = pluginRef(plugin);
+  json& chain = effectChain(doc, trackId);
+  if ((int)chain.size() >= kMaxEffectsPerChain) throw DocumentError("effects", "the chain has the maximum of 16 effects");
+  chain.push_back({{"id", nextEffectId(chain)}, {"type", "plugin"}, {"plugin", ref}, {"bypass", false}});
+  return (int)chain.size() - 1;
+}
+
+void replaceInstrumentWithPlugin(Document& doc, const std::string& trackId, const json& plugin) {
+  Track& t = trackById(doc, trackId);
+  if (!playsPatterns(t)) throw DocumentError("instrument", "an audio track or a bus has no instrument");
+  Instrument next;
+  next.kind = "plugin";
+  next.plugin = pluginRef(plugin);
+  if (t.instrument.kind == "plugin" && t.instrument.plugin.value("id", std::string()) == next.plugin.value("id", std::string()) &&
+      t.instrument.plugin.value("file", std::string()) == next.plugin.value("file", std::string()))
+    return;  // the same plugin: its state and automation stay as they are
+  if (fcoreOf(t)) removeFCore(doc, trackId);
+  dropInstrumentMoods(doc, trackId);
+  trackById(doc, trackId).instrument = next;
+  Track& t2 = trackById(doc, trackId);
+  // The old instrument's own curves and movements go; the mixer's and the effects' stay.
+  auto own = [](const std::string& p) { return p != "gainDb" && p != "pan" && p.rfind("fx:", 0) != 0; };
+  t2.automation.erase(std::remove_if(t2.automation.begin(), t2.automation.end(), [&](const Automation& a) { return own(a.param); }), t2.automation.end());
+  t2.modulators.erase(std::remove_if(t2.modulators.begin(), t2.modulators.end(), [&](const json& m) { return own(m.value("param", "")); }), t2.modulators.end());
+}
+
+std::string pluginKey(const std::string& trackId, const std::string& effectId) {
+  if (effectId.empty()) return "track:" + trackId;
+  return "fx:" + (trackId.empty() ? std::string("master") : trackId) + ":" + effectId;
+}
+
+bool hasPlugins(const Document& doc) {
+  auto chainHas = [](const json& chain) {
+    for (const auto& fx : chain) if (fx.is_object() && fx.value("type", "") == "plugin") return true;
+    return false;
+  };
+  if (chainHas(doc.masterEffects)) return true;
+  for (const auto& t : doc.tracks) if (t.instrument.kind == "plugin" || chainHas(t.effects)) return true;
+  return false;
+}
+
+int applyPluginStates(Document& doc, const json& states) {
+  if (!states.is_object()) return 0;
+  int changed = 0;
+  auto set = [&](json& plugin, const std::string& key) {
+    if (!states.contains(key) || !states[key].is_string() || !plugin.is_object()) return;
+    if (plugin.value("state", "") == states[key].get<std::string>()) return;
+    plugin["state"] = states[key];
+    ++changed;
+  };
+  auto chain = [&](json& list, const std::string& trackId) {
+    for (auto& fx : list)
+      if (fx.is_object() && fx.value("type", "") == "plugin" && fx.contains("id") && fx["id"].is_string() && fx.contains("plugin"))
+        set(fx["plugin"], pluginKey(trackId, fx["id"].get<std::string>()));
+  };
+  chain(doc.masterEffects, "");
+  for (auto& t : doc.tracks) {
+    if (t.instrument.kind == "plugin") set(t.instrument.plugin, pluginKey(t.id));
+    chain(t.effects, t.id);
+  }
+  return changed;
+}
 
 int addEffect(Document& doc, const std::string& trackId, const std::string& name) {
   if (isLegacyEffect(name)) return addEffectWith(doc, trackId, name, json::object());
@@ -1559,8 +1654,23 @@ const std::vector<Automation>* automationOf(const Document& doc, const std::stri
   const Track* t = doc.findTrack(trackId);
   return t ? &t->automation : nullptr;
 }
+// The plugin a 'vst:' parameter belongs to (the track's instrument, or a plugin effect of the chain),
+// or null: its name for the window, and whether the parameter can be automated there at all.
+const json* pluginOfParam(const Document& doc, const std::string& trackId, const std::string& param) {
+  const Track* t = trackId.empty() ? nullptr : doc.findTrack(trackId);
+  if (!trackId.empty() && !t) return nullptr;
+  if (t && param.rfind("vst:", 0) == 0 && param.size() > 4 && t->instrument.kind == "plugin") return &t->instrument.plugin;
+  if (param.rfind("fx:", 0) != 0) return nullptr;
+  const size_t colon = param.find(':', 3);
+  if (colon == std::string::npos || param.compare(colon + 1, 4, "vst:") != 0 || param.size() <= colon + 5) return nullptr;
+  const std::string id = param.substr(3, colon - 3);
+  for (const auto& fx : t ? t->effects : doc.masterEffects)
+    if (fx.value("type", std::string()) == "plugin" && fx.value("id", std::string()) == id && fx.contains("plugin")) return &fx["plugin"];
+  return nullptr;
+}
 AutomatableParam paramInfo(const Document& doc, const std::string& trackId, const std::string& param) {
   for (const auto& p : automatableParams(doc, trackId)) if (p.param == param) return p;
+  if (pluginOfParam(doc, trackId, param)) return {param, param, 0, 1, 0.5, 0.5, "", false};  // a plugin parameter, 0..1
   throw DocumentError("automation", "'" + param + "' cannot be automated here");
 }
 Automation& automationAt(Document& doc, const std::string& trackId, const std::string& param) {
@@ -1599,6 +1709,10 @@ std::vector<AutomatableParam> automatableParams(const Document& doc, const std::
   // imported song): shown with the range of its own points, so it can be seen, edited and cleared.
   for (const auto& a : t ? t->automation : doc.masterAutomation) {
     if (std::any_of(out.begin(), out.end(), [&](const AutomatableParam& p) { return p.param == a.param; }) || a.points.empty()) continue;
+    if (const json* plugin = pluginOfParam(doc, trackId, a.param)) {  // its name comes from the engine (the window asks)
+      out.push_back({a.param, plugin->value("name", std::string("Plugin")) + " · " + a.param, 0, 1, 0.5, a.points[0].value, "", false});
+      continue;
+    }
     double lo = a.points[0].value, hi = lo;
     for (const auto& p : a.points) { lo = std::min(lo, p.value); hi = std::max(hi, p.value); }
     if (hi - lo < 1e-9) { lo -= 1; hi += 1; }

@@ -79,6 +79,8 @@ struct SessionSnapshot {
   std::string device;                // the one in use ("" = none)
   // Sounds and effects that failed while playing and went silent until the next change: "track: unit".
   std::vector<std::string> failedUnits;
+  std::map<std::string, std::string> missingPlugins;  // key -> "name: why" (not loaded: silent)
+  uint64_t pluginEdits = 0;          // grows when a plugin's own editor changed it
 };
 
 class EngineSession {
@@ -128,6 +130,15 @@ public:
   // waiting: `done` runs on the message thread (empty if no answer in timeoutMs). The Mixer asks once a second.
   void cpuAsync(int timeoutMs, std::function<void(json)> done);
   void newSong();  // another song (open, new): the document the engine accepted is not this song's any more
+  // Plugins: the state of every loaded plugin ({key: base64}); waits at most timeoutMs (empty if no answer).
+  json pluginStates(int timeoutMs);
+  // The same without waiting: `done` runs later on the message thread with the states (empty if no answer).
+  void pluginStatesAsync(int timeoutMs, std::function<void(json)> done);
+  // The parameters of a loaded plugin that can be automated ([{id, name, value, default, steps, text}]);
+  // empty if it is not loaded or there is no answer in timeoutMs. UI thread.
+  json pluginParams(const std::string& key, int timeoutMs);
+  void openPluginEditor(const std::string& key);
+  void releasePlugins();  // another song (open, new): the engine's plugins start again from its states
   // New engine session: same document, loop and position; stays stopped.
   void restart();
   SessionSnapshot snapshot() const;
@@ -137,7 +148,7 @@ public:
 
 private:
   struct Action {
-    enum Kind { Play, Stop, Home, Seek, SetLoop, Export, CancelExport, SelectDevice, LiveNote, Panic, Cpu, ResetLoudness, Analysis, Listen, Watch } kind;
+    enum Kind { Play, Stop, Home, Seek, SetLoop, Export, CancelExport, SelectDevice, LiveNote, Panic, Cpu, ResetLoudness, Analysis, Listen, Watch, PluginStates, PluginParams, PluginEditor, ReleasePlugins } kind;
     int64_t tick = 0;
     std::string text;
     int bits = 24;

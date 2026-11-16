@@ -29,6 +29,7 @@
 #include "LibraryPanel.h"
 #include "PatternEditor.h"
 #include "PatternsWindow.h"
+#include "Plugins.h"
 #include "core_plugins.hpp"
 #include "Waveforms.h"
 #include "edit.hpp"
@@ -294,6 +295,11 @@ private:
   doc::Loop engineLoop() const;  // the song's loop, or the pattern's while the Patterns window plays
   void askTrackName(const std::string& trackId);
   void exportWav(int bits, bool mono = false);
+  // Plugins (VST3): what this PC has (Plugins menu > Scan), their windows and their states in the song.
+  std::unique_ptr<PluginCatalog> plugins_;
+  uint64_t pluginEditsSeen_ = 0;
+  void scanPlugins();
+  bool fetchPluginStates();  // the engine's plugin states into the document (false: no answer)
   void selectDevice(const std::string& name);
   enum class SaveResult { Failed, Saved };
   void save(bool chooseName, std::function<void(SaveResult)> then = nullptr);
@@ -465,7 +471,8 @@ private:
   void playStop();
   EngineStatus loggedStatus_ = EngineStatus::Stopped;  // the last engine status written to the log
   std::string failedSeen_;  // the failed units last shown (timerCallback)
-  bool unsaved() const { return history_.modified() || recovered_; }
+  bool unsaved() const { return history_.modified() || recovered_ || pluginsDirty_; }
+  bool pluginsDirty_ = false;  // a plugin's own window changed it since the last save
   // Autosave (M6): every minute while there are unsaved changes, a copy goes to the autosave folder (never
   // over the song); saved, or closed cleanly, it is removed. One left by a crash is offered on the next start.
   void autosaveTick();

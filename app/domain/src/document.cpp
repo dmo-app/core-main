@@ -252,10 +252,11 @@ Track parseTrack(const json& v, const std::string& path, const std::set<std::str
       catch (const std::exception& e) { throw DocumentError(ir.at("synth"), e.what()); }
     }
   } else if (t.instrument.kind == "plugin") {
-    // A VST3 reference (Serum 2) to A/B Core's sounds against, in the same engine (Diogo 2026-11-15).
+    // A plugin plays the track (Diogo 2026-11-16: Core's sound comes from plugins): {format, id, name, vendor, file, state}.
     t.instrument.plugin = ir.object("plugin");
     const json& p = t.instrument.plugin;
-    if (p.value("format", std::string()) != "vst3") throw DocumentError(join(ir.at("plugin"), "format"), "must be vst3");
+    const std::string format = p.value("format", std::string("vst3"));
+    if (format != "vst3" && format != "vst") throw DocumentError(join(ir.at("plugin"), "format"), "must be vst3 or vst");
     if (!p.contains("id") || !p["id"].is_string() || p["id"].get<std::string>().empty()) throw DocumentError(join(ir.at("plugin"), "id"), "is required");
     if (!p.contains("file") || !p["file"].is_string() || p["file"].get<std::string>().empty()) throw DocumentError(join(ir.at("plugin"), "file"), "is required");
     t.instrument.plugin.erase("missing");
@@ -565,35 +566,12 @@ void migrateLegacyBCore(Track& t) {
   if (t.extra.is_object()) t.extra.erase("bcoreMoodKnobs");
 }
 
-// Core has no VST (Diogo, 2026-11-08: Core does not use them). An older song's VST effects go from every chain with
-// their curves, and a VST track (W-Core now, see parseDocument) loses the curves of the plugin's own parameters.
+// A song saved between 2026-11-08 and 2026-11-16 turned its VST tracks into W-Core and marked them: the mark goes
+// (the plugin is not known any more; the track keeps its notes). Plugin effects and their curves stay: Core plays
+// plugins again (Diogo 2026-11-16).
 static void dropVst(Document& d) {
-  auto chain = [](json& effects, std::vector<Automation>& automation) {
-    if (!effects.is_array()) return;
-    std::set<std::string> gone;
-    for (size_t i = effects.size(); i-- > 0;) {
-      const json& fx = effects[i];
-      if (!fx.is_object() || fx.value("type", std::string()) != "plugin") continue;
-      if (fx.contains("id") && fx["id"].is_string()) gone.insert(fx["id"].get<std::string>());
-      effects.erase(effects.begin() + (std::ptrdiff_t)i);
-    }
-    automation.erase(std::remove_if(automation.begin(), automation.end(), [&](const Automation& a) {
-                       if (a.param.rfind("vst:", 0) == 0) return true;
-                       if (a.param.rfind("fx:", 0) != 0) return false;
-                       const size_t colon = a.param.find(':', 3);
-                       return colon != std::string::npos && gone.count(a.param.substr(3, colon - 3)) > 0;
-                     }), automation.end());
-  };
-  chain(d.masterEffects, d.masterAutomation);
-  for (auto& t : d.tracks) {
-    chain(t.effects, t.automation);
-    if (t.instrument.extra.is_object() && t.instrument.extra.contains("fromVst")) {
-      t.instrument.extra.erase("fromVst");
-      t.automation.erase(std::remove_if(t.automation.begin(), t.automation.end(), [](const Automation& a) {
-                           return a.param != "gainDb" && a.param != "pan" && a.param.rfind("fx:", 0) != 0;
-                         }), t.automation.end());
-    }
-  }
+  for (auto& t : d.tracks)
+    if (t.instrument.extra.is_object()) t.instrument.extra.erase("fromVst");
 }
 
 Document parseDocument(const json& input, int* migratedFrom) {
@@ -961,12 +939,12 @@ Document importProjectV2(const json& project, ImportReport* report) {
     t["id"] = tr.string("id", "", 40);
     t["name"] = tr.string("name", t["id"].get<std::string>(), 80);
     const std::string instrument = tr.string("instrument", "", 40);
-    if (instrument == "plugin") {  // no VST in Core: the track plays W-Core, its notes kept
-      tr.object("plugin");
-      t["instrument"] = {{"kind", "builtin"}, {"name", "wave"}, {"version", 1}, {"params", json::object()}};
-      tr.take("params");
+    if (instrument == "plugin") {
+      json plugin = tr.object("plugin");
+      if (plugin.contains("missing")) { plugin.erase("missing"); rep.converted.push_back(where + ".plugin.missing: dropped (decided when the plugin loads)"); }
+      t["instrument"] = {{"kind", "plugin"}, {"plugin", plugin}};
+      if (tr.take("params").is_object()) rep.kept.push_back(where + ".params: ignored for a plugin track");
       tr.take("instrumentVersion");
-      rep.converted.push_back(where + ": a VST track, now W-Core (Core has no VST)");
     } else if (instrument == "bus") {
       t["instrument"] = {{"kind", "bus"}};
     } else {

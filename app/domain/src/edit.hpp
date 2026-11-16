@@ -194,6 +194,17 @@ void setEffectSidechain(Document& doc, const std::string& trackId, int index, co
 // their automation stay; the old instrument's own settings and their automation go (they would not mean
 // anything to the new one).
 void replaceInstrument(Document& doc, const std::string& trackId, const std::string& builtin);
+
+// ---- plugins (VST3, VST2): `plugin` is what the scan found {format, id, name, vendor, version, file, ...}
+std::string addPluginTrack(Document& doc, const json& plugin);  // a track played by the plugin; returns its id
+int addPluginEffect(Document& doc, const std::string& trackId, const json& plugin);  // at the end of the chain
+// The track plays this plugin (the same one: nothing changes). Notes, clips, effects and the mixer stay.
+void replaceInstrumentWithPlugin(Document& doc, const std::string& trackId, const json& plugin);
+// Where the engine keeps a plugin: "track:<id>", or "fx:<track id or master>:<effect id>".
+std::string pluginKey(const std::string& trackId, const std::string& effectId = "");
+bool hasPlugins(const Document& doc);
+// The states the engine gave ({key: base64}) written into the document; returns how many changed.
+int applyPluginStates(Document& doc, const json& states);
 // Takes away what an instrument's mood put on the track (the W-Core mood effects, their curves, and the
 // record of the knobs a mood moved), for when the track changes instrument. The user's own effects stay.
 void dropInstrumentMoods(Document& doc, const std::string& trackId);

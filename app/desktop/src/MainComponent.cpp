@@ -486,7 +486,8 @@ public:
       else if (e.mods.isShiftDown()) owner_.selectTracksTo(id_);
       else {
         owner_.selectOnlyTrack(id_);
-        if (track_.instrument.kind == "builtin" && track_.instrument.name == doc::kWaveInstrument) owner_.openWave(id_, {id_});
+        if (track_.instrument.kind == "plugin") owner_.session_->openPluginEditor(doc::pluginKey(id_));
+        else if (track_.instrument.kind == "builtin" && track_.instrument.name == doc::kWaveInstrument) owner_.openWave(id_, {id_});
         else if (doc::isGlitch(track_)) owner_.glitch_->open(id_);
       }
       return;
@@ -1820,6 +1821,7 @@ MainComponent::MainComponent(EngineSession::Options options, doc::Document docum
   if (realOutput_) lang::use(settings_.getUserSettings()->getValue("language", "en"));  // Settings > General > Language
   if (realOutput_)  // the chosen output, unless a test asked for a backend
     options.device = settings_.getUserSettings()->getValue("audioDevice").toStdString();
+  plugins_ = std::make_unique<PluginCatalog>(juce::File(juce::String(options.engineBinary.wstring().c_str())));
   session_ = std::make_unique<EngineSession>(std::move(options), history_.current());
   globalKeys_ = std::make_unique<GlobalKeys>([this] { playStop(); });  // also in the plugin windows and docked panels
   cancelExport_.setButtonText(u8("Cancel export"));
@@ -4029,7 +4031,36 @@ void MainComponent::updateAiBadge() {
   aiBadge_->setTooltip(tip);
 }
 
+void MainComponent::scanPlugins() {
+  notice_ = u8("Scanning the plugins (each one is checked on its own)...");
+  juce::Component::SafePointer<MainComponent> self(this);
+  plugins_->scan([this, self](int found, int failed) {
+    if (self == nullptr) return;
+    notice_ = u8("Plugins: ") + juce::String(found) + u8(" found") +
+              (failed ? u8(", ") + juce::String(failed) + u8(" with problems (set aside)") : juce::String()) + ".";
+    menuItemsChanged();
+    repaint();
+  });
+}
+
+// What the plugins hold now goes into the document (no new undo step): saving, exporting, before a change that
+// replaces a plugin (so Undo brings it back as it sounded). False when the engine gave no answer.
+bool MainComponent::fetchPluginStates() {
+  if (!doc::hasPlugins(history_.current())) return true;
+  const json states = session_->pluginStates(5000);
+  if (states.empty() && snap_.missingPlugins.empty()) return false;  // no answer from the engine
+  doc::Document withStates = history_.current();
+  if (doc::applyPluginStates(withStates, states) > 0) {
+    history_.amend(withStates);
+    session_->setDocument(engineDocument());  // the same plugins: the engine keeps them as they are
+  }
+  return true;
+}
+
 MainComponent::SaveResult MainComponent::writeTo(const juce::File& target) {
+  // The plugins' sound goes into the file first (the engine's copy is never the only one).
+  if (!fetchPluginStates())
+    showError(u8("Plugins"), u8("The engine did not give the plugins' settings in time: the file keeps the ones from the last save."));
   const std::filesystem::path before = projectDir();
   try {
     if (!before.empty() && !history_.current().assets.empty())
@@ -4042,6 +4073,7 @@ MainComponent::SaveResult MainComponent::writeTo(const juce::File& target) {
   file_ = target;
   imported_ = false;
   history_.markSaved();
+  pluginsDirty_ = false;
   logLine("Saved " + target.getFullPathName());
   recovered_ = false;
   if (!unsaved()) removeOwnAutosave();  // saved: the autosave is not needed any more
@@ -4091,7 +4123,7 @@ void MainComponent::open() {
         loadProblem_.clear();
         viewStart_ = viewLength_ = 0;
         recovered_ = false;
-        session_->newSong();
+        session_->newSong(); session_->releasePlugins();
         missing_.clear();
         session_->setAssetRoot(projectDir(), false);
         documentChanged(true);
@@ -4123,7 +4155,7 @@ void MainComponent::newFromDocument(doc::Document fresh, std::function<void()> t
     loadProblem_.clear();
     viewStart_ = viewLength_ = 0;
     recovered_ = false;
-    session_->newSong();
+    session_->newSong(); session_->releasePlugins();
     notice_.clear();
     missing_.clear();
     session_->home();
@@ -4686,6 +4718,20 @@ void MainComponent::deleteTemplate(const std::string& templateId) {
 // start bass), W-Core, the hats, the snare and the sampler.
 void MainComponent::showAddTrackMenu() {
   juce::PopupMenu menu;
+  // The plugins of this PC first (Diogo 2026-11-16: the sound comes from plugins), by maker.
+  const std::vector<nlohmann::json> instruments = plugins_->instruments();
+  menu.addSectionHeader(u8("Plugin instruments"));
+  {
+    std::map<std::string, juce::PopupMenu> byVendor;
+    for (size_t i = 0; i < instruments.size(); ++i) {
+      std::string vendor = instruments[i].value("vendor", std::string());
+      if (vendor.empty()) vendor = "Other";
+      byVendor[vendor].addItem(2000 + (int)i, u8(instruments[i].value("name", std::string("Plugin"))));
+    }
+    for (auto& [vendor, sub] : byVendor) menu.addSubMenu(u8(vendor), sub);
+    if (instruments.empty()) menu.addItem(juce::PopupMenu::Item(u8("None found yet: Plugins menu > Scan plugins")).setID(99999).setEnabled(false));
+  }
+  menu.addSeparator();
   const std::vector<doc::InstrumentChoice>& native = doc::builtinInstruments();
   menu.addSectionHeader(u8("Core's own instruments"));
   for (size_t i = 0; i < native.size(); ++i)
@@ -4694,7 +4740,14 @@ void MainComponent::showAddTrackMenu() {
   menu.addSeparator();
   menu.addItem(1000, u8("Audio track (empty)"));
   menu.addItem(1001, u8("Import audio (WAV)…"));
-  menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&addTrack_), [this](int chosen) {
+  menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&addTrack_), [this, instruments](int chosen) {
+    if (chosen >= 2000 && chosen - 2000 < (int)instruments.size()) {
+      const nlohmann::json plugin = instruments[(size_t)chosen - 2000];
+      std::string id;
+      edit([&](doc::Document& d) { id = doc::addPluginTrack(d, plugin); }, u8("Add ") + u8(plugin.value("name", std::string("plugin"))));
+      if (!id.empty()) { selectTrack(id); session_->openPluginEditor(doc::pluginKey(id)); }
+      return;
+    }
     const std::vector<doc::InstrumentChoice>& list = doc::builtinInstruments();
     if (chosen >= 3000 && chosen - 3000 < (int)list.size()) {
       const doc::InstrumentChoice choice = list[(size_t)chosen - 3000];
@@ -4733,7 +4786,45 @@ void MainComponent::showTrackMenu(const std::string& trackId) {
   const doc::Track* current = history_.current().findTrack(trackId);
   // Core's own instruments (ids 800 + place in builtinInstruments()).
   juce::PopupMenu replace;
+  const std::vector<nlohmann::json> instruments = plugins_->instruments(), pluginFx = plugins_->effects();
+  auto byVendor = [](const std::vector<nlohmann::json>& list, int firstId, const std::function<bool(const nlohmann::json&)>& ticked) {
+    std::map<std::string, juce::PopupMenu> groups;
+    for (size_t i = 0; i < list.size(); ++i) {
+      std::string vendor = list[i].value("vendor", std::string());
+      if (vendor.empty()) vendor = "Other";
+      groups[vendor].addItem(juce::PopupMenu::Item(u8(list[i].value("name", std::string("Plugin")))).setID(firstId + (int)i).setTicked(ticked(list[i])));
+    }
+    juce::PopupMenu out;
+    for (auto& [vendor, sub] : groups) out.addSubMenu(u8(vendor), sub);
+    if (list.empty()) out.addItem(juce::PopupMenu::Item(u8("None found yet: Plugins menu > Scan plugins")).setID(99999).setEnabled(false));
+    return out;
+  };
+  // The track's plugins: its instrument's window, and each plugin effect's window (ids 900 + its place in the chain).
+  if (current && current->instrument.kind == "plugin")
+    menu.addItem(juce::PopupMenu::Item(u8("Open ") + u8(current->instrument.plugin.value("name", std::string("the plugin"))) + u8("…"))
+                     .setID(6).setEnabled(!snap_.missingPlugins.count(doc::pluginKey(trackId))));
+  if (current) {
+    juce::PopupMenu fxMenu;
+    for (size_t i = 0; i < current->effects.size() && i < 16; ++i) {
+      const nlohmann::json& fx = current->effects[i];
+      if (fx.value("type", std::string()) != "plugin" || !fx.contains("plugin")) continue;
+      const std::string key = doc::pluginKey(trackId, fx.value("id", std::string()));
+      juce::PopupMenu one;
+      one.addItem(juce::PopupMenu::Item(u8("Open…")).setID(900 + (int)i).setEnabled(!snap_.missingPlugins.count(key)));
+      one.addItem(juce::PopupMenu::Item(u8("On")).setID(940 + (int)i).setTicked(!doc::effectBypassed(fx)));
+      one.addItem(juce::PopupMenu::Item(u8("Remove")).setID(920 + (int)i));
+      fxMenu.addSubMenu(u8(fx["plugin"].value("name", std::string("Plugin"))), one);
+    }
+    fxMenu.addSeparator();
+    fxMenu.addSubMenu(u8("Add a plugin effect"), byVendor(pluginFx, 4000, [](const nlohmann::json&) { return false; }));
+    menu.addSubMenu(u8("Plugin effects"), fxMenu);
+  }
   if (current && doc::playsPatterns(*current)) {
+    replace.addSubMenu(u8("Plugin instruments"), byVendor(instruments, 300, [&](const nlohmann::json& p) {
+      return current->instrument.kind == "plugin" && current->instrument.plugin.value("id", std::string()) == p.value("id", std::string()) &&
+             current->instrument.plugin.value("file", std::string()) == p.value("file", std::string());
+    }));
+    replace.addSeparator();
     const std::vector<doc::InstrumentChoice>& native = doc::builtinInstruments();
     for (size_t i = 0; i < native.size(); ++i)
       replace.addItem(juce::PopupMenu::Item(u8(native[i].label)).setID(800 + (int)i)
@@ -4801,10 +4892,36 @@ void MainComponent::showTrackMenu(const std::string& trackId) {
                    .setEnabled(!snap_.exportJob.active() && doc::cannotBounce(history_.current(), trackId).empty()));
   menu.addSeparator();
   menu.addItem(3, "Remove");
-  menu.showMenuAsync(juce::PopupMenu::Options(), [this, trackId, offered](int chosen) {
+  menu.showMenuAsync(juce::PopupMenu::Options(), [this, trackId, offered, instruments, pluginFx](int chosen) {
     const doc::Track* t = history_.current().findTrack(trackId);
     if (!t) return;
     const juce::String name = u8(t->name);
+    if (chosen >= 300 && chosen - 300 < (int)instruments.size()) {
+      fetchPluginStates();  // Undo brings a replaced plugin back as it sounded, not as last saved
+      const nlohmann::json plugin = instruments[(size_t)chosen - 300];
+      edit([&](doc::Document& d) { doc::replaceInstrumentWithPlugin(d, trackId, plugin); },
+           u8("Instrument: ") + u8(plugin.value("name", std::string("plugin"))));
+      session_->openPluginEditor(doc::pluginKey(trackId));
+      return;
+    }
+    if (chosen >= 4000 && chosen - 4000 < (int)pluginFx.size()) {
+      const nlohmann::json plugin = pluginFx[(size_t)chosen - 4000];
+      int at = -1;
+      edit([&](doc::Document& d) { at = doc::addPluginEffect(d, trackId, plugin); }, u8("Add ") + u8(plugin.value("name", std::string("plugin"))));
+      if (const doc::Track* now = history_.current().findTrack(trackId); now && at >= 0 && at < (int)now->effects.size())
+        session_->openPluginEditor(doc::pluginKey(trackId, now->effects[(size_t)at].value("id", std::string())));
+      return;
+    }
+    if (chosen >= 900 && chosen < 960) {
+      const int i = (chosen - 900) % 20;
+      if (i >= (int)t->effects.size()) return;
+      const std::string fxId = t->effects[(size_t)i].value("id", std::string());
+      if (chosen < 920) session_->openPluginEditor(doc::pluginKey(trackId, fxId));
+      else if (chosen < 940) { fetchPluginStates(); edit([&](doc::Document& d) { doc::removeEffect(d, trackId, i); }, u8("Remove effect")); }
+      else edit([&](doc::Document& d) { doc::setEffectBypass(d, trackId, i, !doc::effectBypassed(d.findTrack(trackId)->effects[(size_t)i])); }, u8("Effect on/off"));
+      return;
+    }
+    if (chosen == 6) { session_->openPluginEditor(doc::pluginKey(trackId)); return; }
     if (chosen >= kOfferedSampleId && chosen - kOfferedSampleId < (int)offered.size()) {
       if (const doc::LibrarySample* s = hasSampleIndex_ ? sampleIndex_.findFile(offered[(size_t)(chosen - kOfferedSampleId)]) : nullptr) putSampleOnTrack(trackId, *s);
       return;
@@ -4853,6 +4970,7 @@ void MainComponent::askTrackName(const std::string& trackId) {
 
 // mono: one channel, (L + R) / 2 (Diogo 2026-11-09: songs and passages as examples for the AI).
 void MainComponent::exportWav(int bits, bool mono) {
+  fetchPluginStates();  // the export makes its own plugins: from what they hold now, not the last save
   const juce::String name = history_.current().name.empty() ? juce::String("Song") : u8(history_.current().name);
   const juce::File folder = exportFolder();
   chooser_ = std::make_unique<juce::FileChooser>(u8("Export WAV"), folder.getChildFile(juce::File::createLegalFileName(name) + ".wav"), "*.wav");
@@ -5227,6 +5345,7 @@ bool MainComponent::previewLibrarySample(const doc::LibrarySample& sample, const
 
 namespace { enum MenuId { kMidiNone = 200, kMidiDevice = 201, kNewEmpty = 50, kOpen = 1, kSave, kSaveAs, kExport24, kExport32, kQuit, kUndo, kRedo, kImportAudio, kRelocate, kDevice = 100,
                        kMidiDevicesEnd = 400, kPluginCoreFirst = 420 /* + place in doc::corePlugins(), up to 20 */,
+                       kPluginScan = 460, kPluginFolder, kPluginRetry,
                        kOpenLogs = 580, kAbout = 581, kExportMono = 590,
                        kSampleFolder = 1600, kSampleRescan, kSampleApply, kSampleAuto, kSampleShuffle, kSampleCatalogUndo,
                                               kRandomize = 1700 /* + strength 1..3; + 4: tempo per section; + 5: sound */, kViewLibrary = 1800, kViewInspector, kViewMixer, kViewScale = 1810 /* + 0 auto, + 1..5: 100..200 % */,
@@ -5304,6 +5423,18 @@ juce::PopupMenu MainComponent::getMenuForIndex(int index, const juce::String&) {
     menu.addSeparator();
     menu.addItem(juce::PopupMenu::Item("Quit").setID(kQuit));
   } else if (index == 3) {
+    // The VST plugins of this PC (Diogo 2026-11-16: Core's sound comes from plugins). Each file is scanned and played
+    // on its own first, in its own process: one that hangs or crashes is set aside, never taking Core down.
+    menu.addItem(juce::PopupMenu::Item(plugins_->scanning() ? u8("Scanning: ") + plugins_->progress() : u8("Scan plugins (VST3)"))
+                     .setID(kPluginScan).setEnabled(!plugins_->scanning()));
+    menu.addItem(juce::PopupMenu::Item(u8("Add a plugin folder…")).setID(kPluginFolder));
+    const auto quarantine = plugins_->quarantine();
+    menu.addItem(juce::PopupMenu::Item(u8("Try the set-aside plugins again (") + juce::String((int)quarantine.size()) + ")")
+                     .setID(kPluginRetry).setEnabled(!quarantine.empty() && !plugins_->scanning()));
+    menu.addSectionHeader(u8("Found: ") + juce::String((int)plugins_->instruments().size()) + u8(" instruments, ") +
+                          juce::String((int)plugins_->effects().size()) + u8(" effects"));
+    for (const auto& f : plugins_->folders()) menu.addItem(juce::PopupMenu::Item(f).setEnabled(false));
+    menu.addSeparator();
     // Core's own plugins, read from doc::corePlugins() (the common plug): the song, the instruments, the gestures.
     // Each opens its window on the selected track; the ones that live in an editor say where.
     {
@@ -5483,6 +5614,18 @@ void MainComponent::menuItemSelected(int id, int) {
     case kImportAudio: importAudio(); break;
     case kRelocate: relocateMissing(); break;
     case kMidiNone: openMidiInput({}); break;
+    case kPluginScan: scanPlugins(); break;
+    case kPluginRetry: plugins_->clearQuarantine(); scanPlugins(); break;
+    case kPluginFolder: {
+      chooser_ = std::make_unique<juce::FileChooser>(u8("A folder with VST3 plugins"), juce::File("C:\\Program Files\\Common Files\\VST3"));
+      juce::Component::SafePointer<MainComponent> safe(this);
+      chooser_->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectDirectories, [safe](const juce::FileChooser& fc) {
+        if (safe == nullptr || fc.getResult() == juce::File()) return;
+        safe->plugins_->addFolder(fc.getResult());
+        safe->scanPlugins();
+      });
+      break;
+    }
     default:
       if (id >= kPluginCoreFirst && id < kPluginCoreFirst + 20) {
         if (id - kPluginCoreFirst < (int)doc::corePlugins().size()) openCorePlugin(doc::corePlugins()[(size_t)(id - kPluginCoreFirst)]);
@@ -6295,6 +6438,8 @@ void MainComponent::timerCallback() {
     grabKeyboardFocus();
   if (sendPending_) { sendPending_ = false; session_->setDocument(engineDocument()); }  // a drag's latest state
   snap_ = session_->snapshot();
+  // A plugin's own window changed its sound: the song has unsaved changes (its state is taken when it is saved).
+  if (snap_.pluginEdits != pluginEditsSeen_) { pluginEditsSeen_ = snap_.pluginEdits; pluginsDirty_ = true; }
   updatePlayTick();
   // The place just clicked stays shown until the engine reports it (or 2 s pass): never back to the old place
   // for a moment when the engine's report is late (paused, or the PC busy).
@@ -6562,7 +6707,7 @@ void MainComponent::recoverAutosave(const doc::AutosaveInfo& a, const doc::Docum
   loadProblem_.clear();
   viewStart_ = viewLength_ = 0;
   recovered_ = true;
-  session_->newSong();
+  session_->newSong(); session_->releasePlugins();
   missing_.clear();
   session_->setAssetRoot(projectDir(), false);
   documentChanged(true);

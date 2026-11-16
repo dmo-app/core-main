@@ -92,6 +92,50 @@ void EngineSession::cpuAsync(int timeoutMs, std::function<void(json)> done) {
   answerLater(answer, timeoutMs, std::move(done));
 }
 
+json EngineSession::pluginStates(int timeoutMs) {
+  Action a{Action::PluginStates};
+  a.reply = std::make_shared<std::promise<json>>();
+  std::future<json> answer = a.reply->get_future();
+  queue(a);
+  if (answer.wait_for(std::chrono::milliseconds(timeoutMs)) != std::future_status::ready) return json::object();
+  try {
+    return answer.get();
+  } catch (const std::exception&) {  // dropped (engine restarted): no states
+    return json::object();
+  }
+}
+
+void EngineSession::pluginStatesAsync(int timeoutMs, std::function<void(json)> done) {
+  Action a{Action::PluginStates};
+  a.reply = std::make_shared<std::promise<json>>();
+  auto answer = std::make_shared<std::future<json>>(a.reply->get_future());
+  queue(a);
+  answerLater(answer, timeoutMs, std::move(done));
+}
+
+json EngineSession::pluginParams(const std::string& key, int timeoutMs) {
+  Action a{Action::PluginParams};
+  a.text = key;
+  a.reply = std::make_shared<std::promise<json>>();
+  std::future<json> answer = a.reply->get_future();
+  queue(a);
+  if (answer.wait_for(std::chrono::milliseconds(timeoutMs)) != std::future_status::ready) return json::array();
+  try {
+    const json list = answer.get();
+    return list.is_array() ? list : json::array();
+  } catch (const std::exception&) {  // dropped (engine restarted)
+    return json::array();
+  }
+}
+
+void EngineSession::releasePlugins() { queue({Action::ReleasePlugins}); }
+
+void EngineSession::openPluginEditor(const std::string& key) {
+  Action a{Action::PluginEditor};
+  a.text = key;
+  queue(a);
+}
+
 void EngineSession::newSong() {
   std::lock_guard<std::mutex> g(mutex_);
   ++documentEpoch_;
@@ -300,6 +344,18 @@ void EngineSession::run() {
           case Action::Cpu:
             action.reply->set_value(client_->command("engine.cpu"));
             break;
+          case Action::PluginStates:
+            action.reply->set_value(client_->command("plugins.states"));
+            break;
+          case Action::PluginParams:
+            action.reply->set_value(client_->command("plugin.params", {{"key", action.text}}));
+            break;
+          case Action::PluginEditor:
+            client_->command("plugin.editor", {{"key", action.text}, {"open", true}});
+            break;
+          case Action::ReleasePlugins:
+            client_->command("plugins.release");
+            break;
         }
       } catch (const EngineError& e) {
         std::lock_guard<std::mutex> g(mutex_);
@@ -334,7 +390,8 @@ bool EngineSession::connect() {
   o.stderrLog = options_.engineLog;
   if (!options_.dumpFolder.empty()) {
     const std::u8string folder = options_.dumpFolder.u8string();
-    o.arguments = {"serve", "--dumps", std::string(folder.begin(), folder.end())};
+    const std::u8string log = (options_.dumpFolder / "plugin-failures.log").u8string();  // one JSON line per plugin failure
+    o.arguments = {"serve", "--dumps", std::string(folder.begin(), folder.end()), "--plugin-log", std::string(log.begin(), log.end())};
   }
   auto c = std::make_unique<client::EngineClient>(o);
   c->setEventHandler([this](const json& e) { onEvent(e); });
@@ -439,6 +496,11 @@ void EngineSession::sync(std::unique_lock<std::mutex>& lock) {
     if (epoch == documentEpoch_) { acceptedDocument_ = document; snap_.hasAcceptedDocument = true; }
     snap_.acceptedRevision = std::max(snap_.acceptedRevision, result.value("acceptedRevision", revision));
     snap_.songSamples = result.value("lengthSamples", (int64_t)0);
+    // Plugins that could not be loaded: their tracks are silent ("missing").
+    snap_.missingPlugins.clear();
+    for (const auto& m : result.value("missing", json::array()))
+      if (m.is_object() && m.contains("key"))
+        snap_.missingPlugins[m.value("key", std::string())] = m.value("plugin", std::string("plugin")) + ": " + m.value("why", std::string());
     // Audio files the engine could not load (too big for its memory, unreadable): say so.
     const json missing = result.value("missingAssets", json::array());
     if (!missing.empty() && missing.is_array())
@@ -468,6 +530,7 @@ void EngineSession::onEvent(const json& event) {
     return;
   }
   if (kind == "ended") { if (transportPending_ == 0) snap_.playing = false; return; }
+  if (kind == "pluginsChanged") { ++snap_.pluginEdits; return; }
   if (kind == "job") {
     // Only the current job's events: an older job to the same file must not be taken for it.
     if (snap_.exportJob.jobId != 0 && event.value("jobId", (uint64_t)0) == snap_.exportJob.jobId) readJob(snap_.exportJob, event);
@@ -501,6 +564,8 @@ void EngineSession::onEvent(const json& event) {
   }
   snap_.failedUnits.clear();
   for (const json& u : event.value("failedUnits", json::array())) if (u.is_string()) snap_.failedUnits.push_back(u.get<std::string>());
+  for (const json& p : event.value("failedPlugins", json::array()))
+    if (p.is_object()) snap_.failedUnits.push_back(p.value("plugin", std::string("plugin")) + ": " + p.value("why", std::string("failed")));
   // The engine names each peak with the ids of the graph that produced it (the applied revision).
   snap_.trackPeaks.clear();
   if (tracks.is_object())
