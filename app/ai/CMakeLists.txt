@@ -15,3 +15,7 @@ add_custom_command(OUTPUT ${CORE_AI_KNOWLEDGE_DB}
   DEPENDS core-ai-knowledge ${CMAKE_SOURCE_DIR}/ai/knowledge/core-manual.jsonl
   COMMENT "AI knowledge base (CORE-MANUAL)")
 add_custom_target(core_ai_knowledge ALL DEPENDS ${CORE_AI_KNOWLEDGE_DB})
+
+# The cost and quality bench with the real API (tools/ai-bench): never run by ctest, it spends money.
+add_executable(core-ai-bench ${CMAKE_SOURCE_DIR}/tools/ai-bench/ai_bench.cpp)
+target_link_libraries(core-ai-bench PRIVATE core_ai)
