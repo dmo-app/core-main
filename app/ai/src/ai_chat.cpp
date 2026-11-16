@@ -138,6 +138,7 @@ double Chat::cost(const Usage& u) const {
 
 void Chat::reset() {
   messages_ = json::array();
+  askStart_ = 0;
   calls_ = json::array();
   asked_ = 0;
   log_.clear();
@@ -167,7 +168,12 @@ json Chat::ask(const std::string& text, const doc::Document& song) {
   steps_ = 0;
   usage_ = Usage{};
   ++proposalNo_;
-  messages_.push_back({{"role", "user"}, {"content", text}});
+  askStart_ = messages_.size();
+  // Tool results left from a message that stopped early go in the same turn as the new text (one user turn).
+  if (!messages_.empty() && messages_.back().value("role", std::string()) == "user" && messages_.back()["content"].is_array())
+    messages_.back()["content"].push_back({{"type", "text"}, {"text", text}});
+  else
+    messages_.push_back({{"role", "user"}, {"content", text}});
   summary_ = text.substr(0, 120);
   ++steps_;
   return request(song);
@@ -228,6 +234,7 @@ json Chat::onResponse(const json& raw, const doc::Document& song) {
   const Turn turn = readResponse(config_.provider, raw);
   if (!turn.error.empty()) {
     error_ = turn.error;
+    abandon();
     return nullptr;
   }
   usage_.add(turn.usage);
@@ -240,7 +247,10 @@ json Chat::onResponse(const json& raw, const doc::Document& song) {
     const std::string type = b.value("type", std::string());
     if (type == "text") text += (text.empty() ? "" : "\n") + b.value("text", std::string());
     if (type == "tool_use") {
-      const json out = runTool(b.value("name", std::string()), b.contains("input") ? b["input"] : json::object(), song);
+      // A call in an answer that stopped for another reason (cut off, refused) may be half written: it is not run,
+      // but it is answered, or the next request would be refused.
+      const json out = turn.stop == "tool_use" ? runTool(b.value("name", std::string()), b.contains("input") ? b["input"] : json::object(), song)
+                                               : json{{"error", "not run: the answer stopped (" + turn.stop + ")"}};
       results.push_back({{"type", "tool_result"}, {"tool_use_id", b.value("id", std::string())}, {"content", out.dump()}});
     }
   }
@@ -248,6 +258,7 @@ json Chat::onResponse(const json& raw, const doc::Document& song) {
   const std::string& stop = turn.stop;
   if (stop == "max_tokens") error_ = "the answer was cut off (max_tokens)";
   if (stop == "refusal") error_ = "the model declined";
+  if (stop != "tool_use" && !results.empty()) messages_.push_back({{"role", "user"}, {"content", results}});
   if (stop == "tool_use" && !results.empty()) {
     messages_.push_back({{"role", "user"}, {"content", results}});
     if (steps_ >= config_.maxSteps) {
@@ -264,6 +275,17 @@ json Chat::onResponse(const json& raw, const doc::Document& song) {
   }
   if (!reply_.empty()) summary_ = reply_.substr(0, 200);
   return nullptr;
+}
+
+void Chat::abandon() {
+  while (messages_.size() > askStart_) messages_.erase(messages_.size() - 1);
+  // The new text may have joined a turn of earlier tool results: take it out again.
+  if (!messages_.empty() && messages_.back().value("role", std::string()) == "user" && messages_.back()["content"].is_array()) {
+    json& c = messages_.back()["content"];
+    while (!c.empty() && c.back().value("type", std::string()) == "text") c.erase(c.size() - 1);
+  }
+  calls_ = json::array();
+  asked_ = 0;
 }
 
 json Chat::proposal() const {

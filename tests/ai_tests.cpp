@@ -533,6 +533,53 @@ void inTheChat(const doc::PCoreCatalog& cat) {
 
 }  // namespace catalog_t
 
+// Lessons of the first AI chat inside Core (core-old b16b2c8, 2026-11-03): a call in a cut-off answer is not run but is
+// answered, and a message that failed leaves the conversation.
+namespace lessons_t {
+
+using ai_chat_t::answer;
+using ai_chat_t::toolUse;
+
+void cutOffCalls(const doc::PCoreCatalog& cat) {
+  doc::Document song = doc::newEmptyDocument();
+  ai::Chat chat(ai::Config{}, control::buildFunctions(&cat), &cat);
+  chat.ask("forma", song);
+  CHECK(chat.onResponse(answer(json::array({toolUse("a", "shape", {{"shape", "darkpsycore-64"}})}), "max_tokens"), song).is_null());
+  CHECK(chat.proposal()["calls"].empty());  // not run
+  json req = chat.ask("outra vez", song);
+  const json& msgs = req["messages"];
+  // user, assistant (the cut call), user (its answer + the new text): every tool_use has its tool_result.
+  CHECK_EQ(msgs.size(), (size_t)3);
+  const json& last = msgs.back();
+  CHECK_EQ(last["role"].get<std::string>(), std::string("user"));
+  CHECK_EQ(last["content"][0]["type"].get<std::string>(), std::string("tool_result"));
+  CHECK_EQ(last["content"][0]["tool_use_id"].get<std::string>(), std::string("a"));
+  CHECK_EQ(last["content"].back()["type"].get<std::string>(), std::string("text"));
+}
+
+void failedMessages(const doc::PCoreCatalog& cat) {
+  doc::Document song = doc::newEmptyDocument();
+  ai::Chat chat(ai::Config{}, control::buildFunctions(&cat), &cat);
+  chat.ask("primeira", song);
+  chat.onResponse(answer(json::array({{{"type", "text"}, {"text", "ok"}}}), "end_turn"), song);
+  // An API error: the message leaves the conversation.
+  chat.ask("apaga tudo", song);
+  CHECK(chat.onResponse({{"type", "error"}, {"error", {{"type", "overloaded_error"}, {"message", "busy"}}}}, song).is_null());
+  json req = chat.ask("segunda", song);
+  CHECK_EQ(req["messages"].size(), (size_t)3);
+  CHECK(req["messages"].dump().find("apaga tudo") == std::string::npos);
+  // No connection (the app calls abandon): the same, with what the message had proposed.
+  chat.onResponse(answer(json::array({toolUse("s", "shape", {{"shape", "darkpsycore-64"}})}), "tool_use"), song);
+  CHECK_EQ(chat.proposal()["calls"].size(), (size_t)1);
+  chat.abandon();
+  CHECK(chat.proposal()["calls"].empty());
+  req = chat.ask("terceira", song);
+  CHECK_EQ(req["messages"].size(), (size_t)3);
+  CHECK(req["messages"].dump().find("segunda") == std::string::npos);
+}
+
+}  // namespace lessons_t
+
 TEST("song: a beat from nothing") { song_calls_t::beatFromNothing(catalog()); }
 TEST("song: changing a part") { song_calls_t::changeAPart(catalog()); }
 TEST("song: what is left out") { song_calls_t::leftOut(catalog()); }
@@ -543,6 +590,8 @@ TEST("chat: errors and limits") { ai_chat_t::errorsAndLimits(catalog()); }
 TEST("catalog: one source, every provider's view") { catalog_t::views(catalog()); }
 TEST("catalog: allow, deny, ask") { catalog_t::decide(catalog()); }
 TEST("catalog: the permissions in the chat") { catalog_t::inTheChat(catalog()); }
+TEST("chat: a cut-off call is answered, not run") { lessons_t::cutOffCalls(catalog()); }
+TEST("chat: a failed message leaves the conversation") { lessons_t::failedMessages(catalog()); }
 TEST("ai: models") { ai_knowledge_t::models(); }
 TEST("ai: knowledge base") { ai_knowledge_t::knowledgeBase(knowledgeDb()); }
 TEST("ai: the consult tool") { ai_knowledge_t::consultTool(knowledgeDb()); }

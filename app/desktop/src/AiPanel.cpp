@@ -169,7 +169,8 @@ void AiPanel::post(json body) {
 void AiPanel::answered(const json& response, const juce::String& failure) {
   if (!chat_) return;
   if (failure.isNotEmpty()) {
-    say(u8("Core"), failure);
+    chat_->abandon();  // the message never got an answer: it leaves the conversation
+    say(u8("Core"), failure + u8(" (the message was not kept: send it again)"));
     finished();
     return;
   }

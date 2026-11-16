@@ -75,6 +75,9 @@ public:
   const Usage& usage() const { return usage_; }   // this message
   const Usage& total() const { return total_; }   // the whole chat
   const Config& config() const { return config_; }
+  // The message failed (an API error, no connection): it is taken out of the conversation with what it proposed, so
+  // the next message does not carry an instruction that never worked. onResponse does it itself for an API error.
+  void abandon();
   // Forget the conversation (the totals stay).
   void reset();
 
@@ -89,6 +92,7 @@ private:
   std::vector<Action> actions_;  // the whole catalog (a denied action is refused when called)
   json tools_;                   // what is offered: the actions not denied
   int asked_ = 0;                // calls in the proposal that wait for Apply
+  size_t askStart_ = 0;          // where this message's turn starts in messages_
   json messages_ = json::array();
   json calls_ = json::array();
   std::vector<std::string> log_;
