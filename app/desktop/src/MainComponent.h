@@ -258,7 +258,9 @@ private:
   void showAddTrackMenu();
   // The Patterns window (P-Core's channel rack), a window of its own beside this one (Diogo, 2026-11-08). While it
   // plays a pattern, the engine gets that pattern alone, looped (doc::rackPlayDocument); stopping gives the song back.
-  void giveSilentTracksPlugins();  // Plugins menu: old (builtin) and empty tracks get their role's plugin
+  // Plugins menu: old (builtin) and empty tracks get their role's plugin. withBuses (a template made of only its MIDI,
+  // doc::usesRolePlugins): the Space/Echo buses get the Reverb and Delay roles too (doc::giveSongRolePlugins).
+  void giveSilentTracksPlugins(bool withBuses = false);
   // Core's tools (doc::corePlugins: the Tools panel, the Plugins menu, a track's right-click "Tools"): the same
   // functions the AI calls (role_tools.hpp). coreToolMenu: one tool's menu (where it works, then it writes) for the
   // track (""= the selected one); coreToolsMenu: every tool.

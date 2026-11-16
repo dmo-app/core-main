@@ -258,6 +258,12 @@ void setTrackRole(Document& doc, const std::string& trackId, const std::string& 
 }
 
 std::string guessInstrumentRole(const Track& t) {
+  // A role the track carries (keepOnlyMidi writes the one of its old sound) comes first.
+  if (t.extra.is_object() && t.extra.contains("role") && t.extra["role"].is_string()) {
+    const std::string r = t.extra["role"].get<std::string>();
+    const RoleInfo* info = findRole(r);
+    if (info && info->instrument) return r;
+  }
   std::string name;
   for (char c : t.name) name += (char)std::tolower((unsigned char)c);
   const auto has = [&name](std::initializer_list<const char*> words) {
@@ -292,6 +298,26 @@ int giveSilentTracksRolePlugins(Document& doc, const RoleMap& map, std::vector<s
     else if (left) left->push_back(t.name);
   }
   for (const auto& [id, role] : todo) { setTrackRole(doc, id, role, map); ++changed; }
+  return changed;
+}
+
+std::string guessBusRole(const Track& t) {
+  if (t.instrument.kind != "bus") return "";
+  std::string name;
+  for (char c : t.name) name += (char)std::tolower((unsigned char)c);
+  for (const char* w : {"space", "reverb", "verb", "room", "hall", "huge"}) if (name.find(w) != std::string::npos) return "reverb";
+  for (const char* w : {"echo", "delay"}) if (name.find(w) != std::string::npos) return "delay";
+  return "";
+}
+
+int giveSongRolePlugins(Document& doc, const RoleMap& map, std::vector<std::string>* left) {
+  int changed = giveSilentTracksRolePlugins(doc, map, left);
+  std::vector<std::pair<std::string, std::string>> buses;
+  for (const auto& t : doc.tracks) {
+    const std::string role = guessBusRole(t);
+    if (!role.empty() && map.find(role) && findRoleEffect(doc, t.id, role) < 0) buses.emplace_back(t.id, role);
+  }
+  for (const auto& [id, role] : buses) { ensureRoleEffect(doc, id, role, map); ++changed; }
   return changed;
 }
 

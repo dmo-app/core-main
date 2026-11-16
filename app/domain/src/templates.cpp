@@ -3,6 +3,7 @@
 #include <cctype>
 #include <system_error>
 #include "edit.hpp"
+#include "roles.hpp"
 #include "template_sheet.hpp"
 #include "storage.hpp"
 
@@ -99,6 +100,37 @@ Document documentFromTemplate(const SongTemplate& t) {
   d.extra["template"] = {{"id", t.info.id}, {"version", t.info.version}};
   if (!t.info.style.empty()) d.extra["template"]["style"] = t.info.style;  // what the sample suggestions look for
   return d;
+}
+
+Document keepOnlyMidi(const Document& song) {
+  Document d = song;
+  d.masterEffects = json::array();
+  const auto soundOnly = [](std::vector<Automation>& list) {
+    list.erase(std::remove_if(list.begin(), list.end(), [](const Automation& a) { return a.param != "gainDb" && a.param != "pan"; }),
+               list.end());
+  };
+  soundOnly(d.masterAutomation);
+  for (auto& t : d.tracks) {
+    t.effects = json::array();
+    t.modulators = json::array();
+    soundOnly(t.automation);
+    for (const char* tag : {" (W-Core)", "(W-Core)", " W-Core", "W-Core"}) {
+      const auto at = t.name.find(tag);
+      if (at != std::string::npos) t.name.erase(at, std::string(tag).size());
+    }
+    if (t.instrument.kind == "bus" || t.instrument.kind == "audio") continue;
+    // The part it played is kept by name ("role"), so "Accents" on the old kick stays a kick once its sound is gone.
+    const std::string role = guessInstrumentRole(t);
+    if (!role.empty()) t.extra["role"] = role;
+    Instrument none;
+    none.kind = "none";
+    t.instrument = none;
+  }
+  return d;
+}
+
+bool usesRolePlugins(const SongTemplate& t) {
+  return t.info.source.is_object() && t.info.source.value("roles", false);
 }
 
 SongTemplate templateFromDocument(const Document& song, TemplateInfo info) {

@@ -1,0 +1,7203 @@
+{
+  "description": "The MIDI of 'Hi-tech 190 (from Wake Up and Remember)' with its old sounds and effects reset: kick, KBBB bass in A, hats, percussion, crashes, lead, FM answer and arp over 296 bars at 190 BPM (intro 8, breaks of 8 and 16). Every track plays the plugin of its role from Settings > Roles (Kick: Kick 3, Bass / Lead / Arp: Serum 2, Drums: Xfer 909) and the Space, Huge and Echo buses get the Reverb and Delay roles (Pro-R 2, Timeless 3). Choose the presets, then save it as your own template.",
+  "document": {
+    "format": "core-document",
+    "lengthTicks": 1136640,
+    "master": {
+      "automation": [
+        {
+          "param": "gainDb",
+          "points": [
+            {
+              "tick": 1105920,
+              "value": 0.0
+            },
+            {
+              "tick": 1136639,
+              "value": -34.0
+            }
+          ]
+        }
+      ],
+      "gainDb": 0.0
+    },
+    "name": "Hi-tech 190 (plugins)",
+    "schemaVersion": 2,
+    "sections": [
+      {
+        "energy": 1,
+        "id": "s1",
+        "lengthTicks": 30720,
+        "name": "Intro",
+        "startTick": 0
+      },
+      {
+        "energy": 3,
+        "id": "s2",
+        "lengthTicks": 245760,
+        "name": "Groove",
+        "startTick": 30720
+      },
+      {
+        "energy": 1,
+        "id": "s3",
+        "lengthTicks": 30720,
+        "name": "Break",
+        "startTick": 276480
+      },
+      {
+        "energy": 4,
+        "id": "s4",
+        "lengthTicks": 368640,
+        "name": "Development",
+        "startTick": 307200
+      },
+      {
+        "energy": 0,
+        "id": "s5",
+        "lengthTicks": 61440,
+        "name": "Break",
+        "startTick": 675840
+      },
+      {
+        "energy": 4,
+        "id": "s6",
+        "lengthTicks": 368640,
+        "name": "Main",
+        "startTick": 737280
+      },
+      {
+        "energy": 1,
+        "id": "s7",
+        "lengthTicks": 30720,
+        "name": "Outro",
+        "startTick": 1105920
+      }
+    ],
+    "tracks": [
+      {
+        "automation": [],
+        "clips": [
+          {
+            "id": "c1",
+            "lengthTicks": 57600,
+            "patternId": "main",
+            "startTick": 30720
+          },
+          {
+            "id": "c2",
+            "lengthTicks": 3840,
+            "patternId": "fill",
+            "startTick": 88320
+          },
+          {
+            "id": "c3",
+            "lengthTicks": 53760,
+            "patternId": "main",
+            "startTick": 92160
+          },
+          {
+            "id": "c4",
+            "lengthTicks": 3840,
+            "patternId": "fill",
+            "startTick": 145920
+          },
+          {
+            "id": "c5",
+            "lengthTicks": 57600,
+            "patternId": "main",
+            "startTick": 153600
+          },
+          {
+            "id": "c6",
+            "lengthTicks": 3840,
+            "patternId": "fill",
+            "startTick": 211200
+          },
+          {
+            "id": "c7",
+            "lengthTicks": 53760,
+            "patternId": "main",
+            "startTick": 215040
+          },
+          {
+            "id": "c8",
+            "lengthTicks": 3840,
+            "patternId": "fill",
+            "startTick": 268800
+          },
+          {
+            "id": "c9",
+            "lengthTicks": 26880,
+            "patternId": "main",
+            "startTick": 307200
+          },
+          {
+            "id": "c10",
+            "lengthTicks": 3840,
+            "patternId": "fill",
+            "startTick": 334080
+          },
+          {
+            "id": "c11",
+            "lengthTicks": 53760,
+            "patternId": "main",
+            "startTick": 337920
+          },
+          {
+            "id": "c12",
+            "lengthTicks": 3840,
+            "patternId": "fill",
+            "startTick": 391680
+          },
+          {
+            "id": "c13",
+            "lengthTicks": 57600,
+            "patternId": "main",
+            "startTick": 399360
+          },
+          {
+            "id": "c14",
+            "lengthTicks": 3840,
+            "patternId": "fill",
+            "startTick": 456960
+          },
+          {
+            "id": "c15",
+            "lengthTicks": 53760,
+            "patternId": "main",
+            "startTick": 460800
+          },
+          {
+            "id": "c16",
+            "lengthTicks": 3840,
+            "patternId": "fill",
+            "startTick": 514560
+          },
+          {
+            "id": "c17",
+            "lengthTicks": 57600,
+            "patternId": "main",
+            "startTick": 522240
+          },
+          {
+            "id": "c18",
+            "lengthTicks": 3840,
+            "patternId": "fill",
+            "startTick": 579840
+          },
+          {
+            "id": "c19",
+            "lengthTicks": 23040,
+            "patternId": "main",
+            "startTick": 583680
+          },
+          {
+            "id": "c20",
+            "lengthTicks": 3840,
+            "patternId": "fill",
+            "startTick": 606720
+          },
+          {
+            "id": "c21",
+            "lengthTicks": 26880,
+            "patternId": "main",
+            "startTick": 614400
+          },
+          {
+            "id": "c22",
+            "lengthTicks": 3840,
+            "patternId": "fill",
+            "startTick": 641280
+          },
+          {
+            "id": "c23",
+            "lengthTicks": 23040,
+            "patternId": "main",
+            "startTick": 645120
+          },
+          {
+            "id": "c24",
+            "lengthTicks": 3840,
+            "patternId": "fill",
+            "startTick": 668160
+          },
+          {
+            "id": "c25",
+            "lengthTicks": 26880,
+            "patternId": "main",
+            "startTick": 737280
+          },
+          {
+            "id": "c26",
+            "lengthTicks": 3840,
+            "patternId": "fill",
+            "startTick": 764160
+          },
+          {
+            "id": "c27",
+            "lengthTicks": 57600,
+            "patternId": "main",
+            "startTick": 768000
+          },
+          {
+            "id": "c28",
+            "lengthTicks": 3840,
+            "patternId": "fill",
+            "startTick": 825600
+          },
+          {
+            "id": "c29",
+            "lengthTicks": 23040,
+            "patternId": "main",
+            "startTick": 829440
+          },
+          {
+            "id": "c30",
+            "lengthTicks": 3840,
+            "patternId": "fill",
+            "startTick": 852480
+          },
+          {
+            "id": "c31",
+            "lengthTicks": 26880,
+            "patternId": "main",
+            "startTick": 860160
+          },
+          {
+            "id": "c32",
+            "lengthTicks": 3840,
+            "patternId": "fill",
+            "startTick": 887040
+          },
+          {
+            "id": "c33",
+            "lengthTicks": 57600,
+            "patternId": "main",
+            "startTick": 890880
+          },
+          {
+            "id": "c34",
+            "lengthTicks": 3840,
+            "patternId": "fill",
+            "startTick": 948480
+          },
+          {
+            "id": "c35",
+            "lengthTicks": 23040,
+            "patternId": "main",
+            "startTick": 952320
+          },
+          {
+            "id": "c36",
+            "lengthTicks": 3840,
+            "patternId": "fill",
+            "startTick": 975360
+          },
+          {
+            "id": "c37",
+            "lengthTicks": 26880,
+            "patternId": "main",
+            "startTick": 983040
+          },
+          {
+            "id": "c38",
+            "lengthTicks": 3840,
+            "patternId": "fill",
+            "startTick": 1009920
+          },
+          {
+            "id": "c39",
+            "lengthTicks": 57600,
+            "patternId": "main",
+            "startTick": 1013760
+          },
+          {
+            "id": "c40",
+            "lengthTicks": 3840,
+            "patternId": "fill",
+            "startTick": 1071360
+          },
+          {
+            "id": "c41",
+            "lengthTicks": 30720,
+            "patternId": "main",
+            "startTick": 1075200
+          }
+        ],
+        "effects": [],
+        "id": "kick",
+        "instrument": {
+          "kind": "none"
+        },
+        "mix": {
+          "gainDb": 0.0,
+          "mute": false,
+          "pan": 0.0,
+          "solo": false
+        },
+        "name": "Kick",
+        "patterns": [
+          {
+            "id": "main",
+            "lengthTicks": 3840,
+            "name": "Four on the floor",
+            "notes": [
+              {
+                "id": "k1",
+                "length": 160,
+                "pitch": 36,
+                "tick": 0,
+                "velocity": 0.92
+              },
+              {
+                "id": "k2",
+                "length": 160,
+                "pitch": 36,
+                "tick": 960,
+                "velocity": 0.92
+              },
+              {
+                "id": "k3",
+                "length": 160,
+                "pitch": 36,
+                "tick": 1920,
+                "velocity": 0.92
+              },
+              {
+                "id": "k4",
+                "length": 160,
+                "pitch": 36,
+                "tick": 2880,
+                "velocity": 0.92
+              }
+            ]
+          },
+          {
+            "id": "fill",
+            "lengthTicks": 3840,
+            "name": "Turn",
+            "notes": [
+              {
+                "id": "k5",
+                "length": 160,
+                "pitch": 36,
+                "tick": 0,
+                "velocity": 0.92
+              },
+              {
+                "id": "k6",
+                "length": 160,
+                "pitch": 36,
+                "tick": 960,
+                "velocity": 0.92
+              },
+              {
+                "id": "k7",
+                "length": 160,
+                "pitch": 36,
+                "tick": 1920,
+                "velocity": 0.92
+              },
+              {
+                "id": "k8",
+                "length": 120,
+                "pitch": 36,
+                "tick": 2880,
+                "velocity": 0.8
+              },
+              {
+                "id": "k9",
+                "length": 120,
+                "pitch": 36,
+                "tick": 3360,
+                "velocity": 0.7
+              }
+            ]
+          }
+        ],
+        "role": "kick"
+      },
+      {
+        "automation": [],
+        "clips": [
+          {
+            "attachEdge": 3840,
+            "attachEnd": "Acid",
+            "id": "c1",
+            "lengthTicks": 61440,
+            "patternId": "pedal",
+            "startTick": 30720
+          },
+          {
+            "attachEdge": 3840,
+            "attachEnd": "Stutter up",
+            "id": "c2",
+            "lengthTicks": 57600,
+            "patternId": "walk",
+            "startTick": 92160
+          },
+          {
+            "attachEdge": 3840,
+            "attachEnd": "Gate",
+            "id": "c3",
+            "lengthTicks": 61440,
+            "patternId": "walk",
+            "startTick": 153600
+          },
+          {
+            "attachEdge": 3840,
+            "attachEnd": "Tape stop",
+            "id": "c4",
+            "lengthTicks": 57600,
+            "patternId": "walk",
+            "startTick": 215040
+          },
+          {
+            "attachEdge": 3840,
+            "attachEnd": "Stutter up",
+            "id": "c5",
+            "lengthTicks": 30720,
+            "patternId": "walk",
+            "startTick": 307200
+          },
+          {
+            "attachEdge": 3840,
+            "attachEnd": "Gate",
+            "id": "c6",
+            "lengthTicks": 15360,
+            "patternId": "push",
+            "startTick": 337920
+          },
+          {
+            "attachEdge": 3840,
+            "attachEnd": "Acid",
+            "id": "c7",
+            "lengthTicks": 15360,
+            "patternId": "walk",
+            "startTick": 353280
+          },
+          {
+            "attachEdge": 3840,
+            "attachEnd": "Stutter up",
+            "id": "c8",
+            "lengthTicks": 26880,
+            "patternId": "walk",
+            "startTick": 368640
+          },
+          {
+            "attachEdge": 3840,
+            "attachEnd": "Gate",
+            "id": "c9",
+            "lengthTicks": 15360,
+            "patternId": "push",
+            "startTick": 399360
+          },
+          {
+            "attachEdge": 3840,
+            "attachEnd": "Acid",
+            "id": "c10",
+            "lengthTicks": 15360,
+            "patternId": "walk",
+            "startTick": 414720
+          },
+          {
+            "attachEdge": 3840,
+            "attachEnd": "Stutter up",
+            "id": "c11",
+            "lengthTicks": 30720,
+            "patternId": "walk",
+            "startTick": 430080
+          },
+          {
+            "attachEdge": 3840,
+            "attachEnd": "Gate",
+            "id": "c12",
+            "lengthTicks": 15360,
+            "patternId": "push",
+            "startTick": 460800
+          },
+          {
+            "attachEdge": 3840,
+            "attachEnd": "Acid",
+            "id": "c13",
+            "lengthTicks": 15360,
+            "patternId": "walk",
+            "startTick": 476160
+          },
+          {
+            "attachEdge": 3840,
+            "attachEnd": "Stutter up",
+            "id": "c14",
+            "lengthTicks": 26880,
+            "patternId": "walk",
+            "startTick": 491520
+          },
+          {
+            "attachEdge": 3840,
+            "attachEnd": "Gate",
+            "id": "c15",
+            "lengthTicks": 15360,
+            "patternId": "push",
+            "startTick": 522240
+          },
+          {
+            "attachEdge": 3840,
+            "attachEnd": "Acid",
+            "id": "c16",
+            "lengthTicks": 15360,
+            "patternId": "walk",
+            "startTick": 537600
+          },
+          {
+            "attachEdge": 3840,
+            "attachEnd": "Stutter up",
+            "id": "c17",
+            "lengthTicks": 30720,
+            "patternId": "walk",
+            "startTick": 552960
+          },
+          {
+            "attachEdge": 3840,
+            "attachEnd": "Gate",
+            "id": "c18",
+            "lengthTicks": 15360,
+            "patternId": "push",
+            "startTick": 583680
+          },
+          {
+            "id": "c19",
+            "lengthTicks": 11520,
+            "patternId": "walk",
+            "startTick": 599040
+          },
+          {
+            "attachEdge": 3840,
+            "attachEnd": "Stutter up",
+            "id": "c20",
+            "lengthTicks": 30720,
+            "patternId": "walk",
+            "startTick": 614400
+          },
+          {
+            "attachEdge": 3840,
+            "attachEnd": "Gate",
+            "id": "c21",
+            "lengthTicks": 15360,
+            "patternId": "push",
+            "startTick": 645120
+          },
+          {
+            "id": "c22",
+            "lengthTicks": 11520,
+            "patternId": "walk",
+            "startTick": 660480
+          },
+          {
+            "attachEdge": 3840,
+            "attachEnd": "Stutter up",
+            "id": "c23",
+            "lengthTicks": 30720,
+            "patternId": "walk",
+            "startTick": 737280
+          },
+          {
+            "attachEdge": 3840,
+            "attachEnd": "Gate",
+            "id": "c24",
+            "lengthTicks": 15360,
+            "patternId": "push",
+            "startTick": 768000
+          },
+          {
+            "attachEdge": 3840,
+            "attachEnd": "Acid",
+            "id": "c25",
+            "lengthTicks": 15360,
+            "patternId": "walk",
+            "startTick": 783360
+          },
+          {
+            "attachEdge": 3840,
+            "attachEnd": "Stutter up",
+            "id": "c26",
+            "lengthTicks": 30720,
+            "patternId": "walk",
+            "startTick": 798720
+          },
+          {
+            "attachEdge": 3840,
+            "attachEnd": "Gate",
+            "id": "c27",
+            "lengthTicks": 15360,
+            "patternId": "push",
+            "startTick": 829440
+          },
+          {
+            "id": "c28",
+            "lengthTicks": 11520,
+            "patternId": "walk",
+            "startTick": 844800
+          },
+          {
+            "attachEdge": 3840,
+            "attachEnd": "Stutter up",
+            "id": "c29",
+            "lengthTicks": 30720,
+            "patternId": "walk",
+            "startTick": 860160
+          },
+          {
+            "attachEdge": 3840,
+            "attachEnd": "Gate",
+            "id": "c30",
+            "lengthTicks": 15360,
+            "patternId": "push",
+            "startTick": 890880
+          },
+          {
+            "attachEdge": 3840,
+            "attachEnd": "Acid",
+            "id": "c31",
+            "lengthTicks": 15360,
+            "patternId": "walk",
+            "startTick": 906240
+          },
+          {
+            "attachEdge": 3840,
+            "attachEnd": "Stutter up",
+            "id": "c32",
+            "lengthTicks": 30720,
+            "patternId": "walk",
+            "startTick": 921600
+          },
+          {
+            "attachEdge": 3840,
+            "attachEnd": "Gate",
+            "id": "c33",
+            "lengthTicks": 15360,
+            "patternId": "push",
+            "startTick": 952320
+          },
+          {
+            "id": "c34",
+            "lengthTicks": 11520,
+            "patternId": "walk",
+            "startTick": 967680
+          },
+          {
+            "attachEdge": 3840,
+            "attachEnd": "Stutter up",
+            "id": "c35",
+            "lengthTicks": 30720,
+            "patternId": "walk",
+            "startTick": 983040
+          },
+          {
+            "attachEdge": 3840,
+            "attachEnd": "Gate",
+            "id": "c36",
+            "lengthTicks": 15360,
+            "patternId": "push",
+            "startTick": 1013760
+          },
+          {
+            "attachEdge": 3840,
+            "attachEnd": "Acid",
+            "id": "c37",
+            "lengthTicks": 15360,
+            "patternId": "walk",
+            "startTick": 1029120
+          },
+          {
+            "attachEdge": 3840,
+            "attachEnd": "Stutter up",
+            "id": "c38",
+            "lengthTicks": 30720,
+            "patternId": "walk",
+            "startTick": 1044480
+          },
+          {
+            "attachEdge": 3840,
+            "attachEnd": "Gate",
+            "id": "c39",
+            "lengthTicks": 15360,
+            "patternId": "push",
+            "startTick": 1075200
+          },
+          {
+            "attachEdge": 3840,
+            "attachEnd": "Acid",
+            "id": "c40",
+            "lengthTicks": 15360,
+            "patternId": "walk",
+            "startTick": 1090560
+          }
+        ],
+        "effects": [],
+        "id": "bass",
+        "instrument": {
+          "kind": "none"
+        },
+        "mix": {
+          "gainDb": 0.0,
+          "mute": false,
+          "pan": 0.0,
+          "solo": false
+        },
+        "name": "Bass",
+        "patterns": [
+          {
+            "id": "walk",
+            "lengthTicks": 15360,
+            "name": "Walk",
+            "notes": [
+              {
+                "id": "wa1",
+                "length": 210,
+                "pitch": 33,
+                "tick": 240,
+                "velocity": 0.86
+              },
+              {
+                "id": "wa2",
+                "length": 210,
+                "pitch": 33,
+                "tick": 480,
+                "velocity": 0.72
+              },
+              {
+                "id": "wa3",
+                "length": 210,
+                "pitch": 34,
+                "tick": 720,
+                "velocity": 0.95
+              },
+              {
+                "id": "wa4",
+                "length": 210,
+                "pitch": 33,
+                "tick": 1200,
+                "velocity": 0.92
+              },
+              {
+                "id": "wa5",
+                "length": 210,
+                "pitch": 33,
+                "tick": 1440,
+                "velocity": 0.78
+              },
+              {
+                "id": "wa6",
+                "length": 210,
+                "pitch": 34,
+                "tick": 1680,
+                "velocity": 1.0
+              },
+              {
+                "id": "wa7",
+                "length": 210,
+                "pitch": 33,
+                "tick": 2160,
+                "velocity": 0.86
+              },
+              {
+                "id": "wa8",
+                "length": 210,
+                "pitch": 33,
+                "tick": 2400,
+                "velocity": 0.72
+              },
+              {
+                "id": "wa9",
+                "length": 210,
+                "pitch": 34,
+                "tick": 2640,
+                "velocity": 0.95
+              },
+              {
+                "id": "wa10",
+                "length": 210,
+                "pitch": 33,
+                "tick": 3120,
+                "velocity": 0.92
+              },
+              {
+                "id": "wa11",
+                "length": 210,
+                "pitch": 33,
+                "tick": 3360,
+                "velocity": 0.78
+              },
+              {
+                "id": "wa12",
+                "length": 210,
+                "pitch": 34,
+                "tick": 3600,
+                "velocity": 1.0
+              },
+              {
+                "id": "wa13",
+                "length": 210,
+                "pitch": 33,
+                "tick": 4080,
+                "velocity": 0.86
+              },
+              {
+                "id": "wa14",
+                "length": 210,
+                "pitch": 33,
+                "tick": 4320,
+                "velocity": 0.72
+              },
+              {
+                "id": "wa15",
+                "length": 210,
+                "pitch": 36,
+                "tick": 4560,
+                "velocity": 0.95
+              },
+              {
+                "id": "wa16",
+                "length": 210,
+                "pitch": 33,
+                "tick": 5040,
+                "velocity": 0.92
+              },
+              {
+                "id": "wa17",
+                "length": 210,
+                "pitch": 33,
+                "tick": 5280,
+                "velocity": 0.78
+              },
+              {
+                "id": "wa18",
+                "length": 210,
+                "pitch": 36,
+                "tick": 5520,
+                "velocity": 1.0
+              },
+              {
+                "id": "wa19",
+                "length": 210,
+                "pitch": 33,
+                "tick": 6000,
+                "velocity": 0.86
+              },
+              {
+                "id": "wa20",
+                "length": 210,
+                "pitch": 33,
+                "tick": 6240,
+                "velocity": 0.72
+              },
+              {
+                "id": "wa21",
+                "length": 210,
+                "pitch": 36,
+                "tick": 6480,
+                "velocity": 0.95
+              },
+              {
+                "id": "wa22",
+                "length": 210,
+                "pitch": 33,
+                "tick": 6960,
+                "velocity": 0.92
+              },
+              {
+                "id": "wa23",
+                "length": 210,
+                "pitch": 33,
+                "tick": 7200,
+                "velocity": 0.78
+              },
+              {
+                "id": "wa24",
+                "length": 210,
+                "pitch": 36,
+                "tick": 7440,
+                "velocity": 1.0
+              },
+              {
+                "id": "wa25",
+                "length": 210,
+                "pitch": 33,
+                "tick": 7920,
+                "velocity": 0.86
+              },
+              {
+                "id": "wa26",
+                "length": 210,
+                "pitch": 34,
+                "tick": 8160,
+                "velocity": 0.72
+              },
+              {
+                "id": "wa27",
+                "length": 210,
+                "pitch": 35,
+                "tick": 8400,
+                "velocity": 0.95
+              },
+              {
+                "id": "wa28",
+                "length": 210,
+                "pitch": 36,
+                "tick": 8880,
+                "velocity": 0.92
+              },
+              {
+                "id": "wa29",
+                "length": 210,
+                "pitch": 33,
+                "tick": 9120,
+                "velocity": 0.78
+              },
+              {
+                "id": "wa30",
+                "length": 210,
+                "pitch": 34,
+                "tick": 9360,
+                "velocity": 1.0
+              },
+              {
+                "id": "wa31",
+                "length": 210,
+                "pitch": 35,
+                "tick": 9840,
+                "velocity": 0.86
+              },
+              {
+                "id": "wa32",
+                "length": 210,
+                "pitch": 36,
+                "tick": 10080,
+                "velocity": 0.72
+              },
+              {
+                "id": "wa33",
+                "length": 210,
+                "pitch": 33,
+                "tick": 10320,
+                "velocity": 0.95
+              },
+              {
+                "id": "wa34",
+                "length": 210,
+                "pitch": 34,
+                "tick": 10800,
+                "velocity": 0.92
+              },
+              {
+                "id": "wa35",
+                "length": 210,
+                "pitch": 35,
+                "tick": 11040,
+                "velocity": 0.78
+              },
+              {
+                "id": "wa36",
+                "length": 210,
+                "pitch": 36,
+                "tick": 11280,
+                "velocity": 1.0
+              },
+              {
+                "id": "wa37",
+                "length": 210,
+                "pitch": 36,
+                "tick": 11760,
+                "velocity": 0.86
+              },
+              {
+                "id": "wa38",
+                "length": 210,
+                "pitch": 35,
+                "tick": 12000,
+                "velocity": 0.72
+              },
+              {
+                "id": "wa39",
+                "length": 210,
+                "pitch": 34,
+                "tick": 12240,
+                "velocity": 0.95
+              },
+              {
+                "id": "wa40",
+                "length": 210,
+                "pitch": 36,
+                "tick": 12720,
+                "velocity": 0.92
+              },
+              {
+                "id": "wa41",
+                "length": 210,
+                "pitch": 35,
+                "tick": 12960,
+                "velocity": 0.78
+              },
+              {
+                "id": "wa42",
+                "length": 210,
+                "pitch": 34,
+                "tick": 13200,
+                "velocity": 1.0
+              },
+              {
+                "id": "wa43",
+                "length": 210,
+                "pitch": 36,
+                "tick": 13680,
+                "velocity": 0.86
+              },
+              {
+                "id": "wa44",
+                "length": 210,
+                "pitch": 35,
+                "tick": 13920,
+                "velocity": 0.72
+              },
+              {
+                "id": "wa45",
+                "length": 210,
+                "pitch": 34,
+                "tick": 14160,
+                "velocity": 0.95
+              },
+              {
+                "id": "wa46",
+                "length": 210,
+                "pitch": 36,
+                "tick": 14640,
+                "velocity": 0.92
+              },
+              {
+                "id": "wa47",
+                "length": 210,
+                "pitch": 35,
+                "tick": 14880,
+                "velocity": 0.78
+              },
+              {
+                "id": "wa48",
+                "length": 210,
+                "pitch": 34,
+                "tick": 15120,
+                "velocity": 1.0
+              }
+            ]
+          },
+          {
+            "id": "push",
+            "lengthTicks": 15360,
+            "name": "Push",
+            "notes": [
+              {
+                "id": "pu1",
+                "length": 210,
+                "pitch": 33,
+                "tick": 240,
+                "velocity": 0.86
+              },
+              {
+                "id": "pu2",
+                "length": 210,
+                "pitch": 36,
+                "tick": 480,
+                "velocity": 0.72
+              },
+              {
+                "id": "pu3",
+                "length": 210,
+                "pitch": 33,
+                "tick": 720,
+                "velocity": 0.95
+              },
+              {
+                "id": "pu4",
+                "length": 210,
+                "pitch": 33,
+                "tick": 1200,
+                "velocity": 0.92
+              },
+              {
+                "id": "pu5",
+                "length": 210,
+                "pitch": 36,
+                "tick": 1440,
+                "velocity": 0.78
+              },
+              {
+                "id": "pu6",
+                "length": 210,
+                "pitch": 33,
+                "tick": 1680,
+                "velocity": 1.0
+              },
+              {
+                "id": "pu7",
+                "length": 210,
+                "pitch": 33,
+                "tick": 2160,
+                "velocity": 0.86
+              },
+              {
+                "id": "pu8",
+                "length": 210,
+                "pitch": 36,
+                "tick": 2400,
+                "velocity": 0.72
+              },
+              {
+                "id": "pu9",
+                "length": 210,
+                "pitch": 33,
+                "tick": 2640,
+                "velocity": 0.95
+              },
+              {
+                "id": "pu10",
+                "length": 210,
+                "pitch": 33,
+                "tick": 3120,
+                "velocity": 0.92
+              },
+              {
+                "id": "pu11",
+                "length": 210,
+                "pitch": 36,
+                "tick": 3360,
+                "velocity": 0.78
+              },
+              {
+                "id": "pu12",
+                "length": 210,
+                "pitch": 33,
+                "tick": 3600,
+                "velocity": 1.0
+              },
+              {
+                "id": "pu13",
+                "length": 210,
+                "pitch": 33,
+                "tick": 4080,
+                "velocity": 0.86
+              },
+              {
+                "id": "pu14",
+                "length": 210,
+                "pitch": 34,
+                "tick": 4320,
+                "velocity": 0.72
+              },
+              {
+                "id": "pu15",
+                "length": 210,
+                "pitch": 33,
+                "tick": 4560,
+                "velocity": 0.95
+              },
+              {
+                "id": "pu16",
+                "length": 210,
+                "pitch": 33,
+                "tick": 5040,
+                "velocity": 0.92
+              },
+              {
+                "id": "pu17",
+                "length": 210,
+                "pitch": 34,
+                "tick": 5280,
+                "velocity": 0.78
+              },
+              {
+                "id": "pu18",
+                "length": 210,
+                "pitch": 33,
+                "tick": 5520,
+                "velocity": 1.0
+              },
+              {
+                "id": "pu19",
+                "length": 210,
+                "pitch": 33,
+                "tick": 6000,
+                "velocity": 0.86
+              },
+              {
+                "id": "pu20",
+                "length": 210,
+                "pitch": 34,
+                "tick": 6240,
+                "velocity": 0.72
+              },
+              {
+                "id": "pu21",
+                "length": 210,
+                "pitch": 33,
+                "tick": 6480,
+                "velocity": 0.95
+              },
+              {
+                "id": "pu22",
+                "length": 210,
+                "pitch": 33,
+                "tick": 6960,
+                "velocity": 0.92
+              },
+              {
+                "id": "pu23",
+                "length": 210,
+                "pitch": 34,
+                "tick": 7200,
+                "velocity": 0.78
+              },
+              {
+                "id": "pu24",
+                "length": 210,
+                "pitch": 33,
+                "tick": 7440,
+                "velocity": 1.0
+              },
+              {
+                "id": "pu25",
+                "length": 210,
+                "pitch": 36,
+                "tick": 7920,
+                "velocity": 0.86
+              },
+              {
+                "id": "pu26",
+                "length": 210,
+                "pitch": 36,
+                "tick": 8160,
+                "velocity": 0.72
+              },
+              {
+                "id": "pu27",
+                "length": 210,
+                "pitch": 35,
+                "tick": 8400,
+                "velocity": 0.95
+              },
+              {
+                "id": "pu28",
+                "length": 210,
+                "pitch": 35,
+                "tick": 8880,
+                "velocity": 0.92
+              },
+              {
+                "id": "pu29",
+                "length": 210,
+                "pitch": 34,
+                "tick": 9120,
+                "velocity": 0.78
+              },
+              {
+                "id": "pu30",
+                "length": 210,
+                "pitch": 34,
+                "tick": 9360,
+                "velocity": 1.0
+              },
+              {
+                "id": "pu31",
+                "length": 210,
+                "pitch": 36,
+                "tick": 9840,
+                "velocity": 0.86
+              },
+              {
+                "id": "pu32",
+                "length": 210,
+                "pitch": 36,
+                "tick": 10080,
+                "velocity": 0.72
+              },
+              {
+                "id": "pu33",
+                "length": 210,
+                "pitch": 35,
+                "tick": 10320,
+                "velocity": 0.95
+              },
+              {
+                "id": "pu34",
+                "length": 210,
+                "pitch": 35,
+                "tick": 10800,
+                "velocity": 0.92
+              },
+              {
+                "id": "pu35",
+                "length": 210,
+                "pitch": 34,
+                "tick": 11040,
+                "velocity": 0.78
+              },
+              {
+                "id": "pu36",
+                "length": 210,
+                "pitch": 34,
+                "tick": 11280,
+                "velocity": 1.0
+              },
+              {
+                "id": "pu37",
+                "length": 210,
+                "pitch": 33,
+                "tick": 11760,
+                "velocity": 0.86
+              },
+              {
+                "id": "pu38",
+                "length": 210,
+                "pitch": 45,
+                "tick": 12000,
+                "velocity": 0.72
+              },
+              {
+                "id": "pu39",
+                "length": 210,
+                "pitch": 33,
+                "tick": 12240,
+                "velocity": 0.95
+              },
+              {
+                "id": "pu40",
+                "length": 210,
+                "pitch": 33,
+                "tick": 12720,
+                "velocity": 0.92
+              },
+              {
+                "id": "pu41",
+                "length": 210,
+                "pitch": 45,
+                "tick": 12960,
+                "velocity": 0.78
+              },
+              {
+                "id": "pu42",
+                "length": 210,
+                "pitch": 33,
+                "tick": 13200,
+                "velocity": 1.0
+              },
+              {
+                "id": "pu43",
+                "length": 210,
+                "pitch": 33,
+                "tick": 13680,
+                "velocity": 0.86
+              },
+              {
+                "id": "pu44",
+                "length": 210,
+                "pitch": 45,
+                "tick": 13920,
+                "velocity": 0.72
+              },
+              {
+                "id": "pu45",
+                "length": 210,
+                "pitch": 33,
+                "tick": 14160,
+                "velocity": 0.95
+              },
+              {
+                "id": "pu46",
+                "length": 210,
+                "pitch": 33,
+                "tick": 14640,
+                "velocity": 0.92
+              },
+              {
+                "id": "pu47",
+                "length": 210,
+                "pitch": 45,
+                "tick": 14880,
+                "velocity": 0.78
+              },
+              {
+                "id": "pu48",
+                "length": 210,
+                "pitch": 33,
+                "tick": 15120,
+                "velocity": 1.0
+              }
+            ]
+          },
+          {
+            "id": "pedal",
+            "lengthTicks": 15360,
+            "name": "Pedal",
+            "notes": [
+              {
+                "id": "pe1",
+                "length": 210,
+                "pitch": 33,
+                "tick": 240,
+                "velocity": 0.86
+              },
+              {
+                "id": "pe2",
+                "length": 210,
+                "pitch": 33,
+                "tick": 480,
+                "velocity": 0.72
+              },
+              {
+                "id": "pe3",
+                "length": 210,
+                "pitch": 33,
+                "tick": 720,
+                "velocity": 0.95
+              },
+              {
+                "id": "pe4",
+                "length": 210,
+                "pitch": 33,
+                "tick": 1200,
+                "velocity": 0.92
+              },
+              {
+                "id": "pe5",
+                "length": 210,
+                "pitch": 33,
+                "tick": 1440,
+                "velocity": 0.78
+              },
+              {
+                "id": "pe6",
+                "length": 210,
+                "pitch": 33,
+                "tick": 1680,
+                "velocity": 1.0
+              },
+              {
+                "id": "pe7",
+                "length": 210,
+                "pitch": 33,
+                "tick": 2160,
+                "velocity": 0.86
+              },
+              {
+                "id": "pe8",
+                "length": 210,
+                "pitch": 33,
+                "tick": 2400,
+                "velocity": 0.72
+              },
+              {
+                "id": "pe9",
+                "length": 210,
+                "pitch": 33,
+                "tick": 2640,
+                "velocity": 0.95
+              },
+              {
+                "id": "pe10",
+                "length": 210,
+                "pitch": 33,
+                "tick": 3120,
+                "velocity": 0.92
+              },
+              {
+                "id": "pe11",
+                "length": 210,
+                "pitch": 33,
+                "tick": 3360,
+                "velocity": 0.78
+              },
+              {
+                "id": "pe12",
+                "length": 210,
+                "pitch": 33,
+                "tick": 3600,
+                "velocity": 1.0
+              },
+              {
+                "id": "pe13",
+                "length": 210,
+                "pitch": 33,
+                "tick": 4080,
+                "velocity": 0.86
+              },
+              {
+                "id": "pe14",
+                "length": 210,
+                "pitch": 33,
+                "tick": 4320,
+                "velocity": 0.72
+              },
+              {
+                "id": "pe15",
+                "length": 210,
+                "pitch": 33,
+                "tick": 4560,
+                "velocity": 0.95
+              },
+              {
+                "id": "pe16",
+                "length": 210,
+                "pitch": 33,
+                "tick": 5040,
+                "velocity": 0.92
+              },
+              {
+                "id": "pe17",
+                "length": 210,
+                "pitch": 33,
+                "tick": 5280,
+                "velocity": 0.78
+              },
+              {
+                "id": "pe18",
+                "length": 210,
+                "pitch": 33,
+                "tick": 5520,
+                "velocity": 1.0
+              },
+              {
+                "id": "pe19",
+                "length": 210,
+                "pitch": 33,
+                "tick": 6000,
+                "velocity": 0.86
+              },
+              {
+                "id": "pe20",
+                "length": 210,
+                "pitch": 33,
+                "tick": 6240,
+                "velocity": 0.72
+              },
+              {
+                "id": "pe21",
+                "length": 210,
+                "pitch": 33,
+                "tick": 6480,
+                "velocity": 0.95
+              },
+              {
+                "id": "pe22",
+                "length": 210,
+                "pitch": 33,
+                "tick": 6960,
+                "velocity": 0.92
+              },
+              {
+                "id": "pe23",
+                "length": 210,
+                "pitch": 33,
+                "tick": 7200,
+                "velocity": 0.78
+              },
+              {
+                "id": "pe24",
+                "length": 210,
+                "pitch": 33,
+                "tick": 7440,
+                "velocity": 1.0
+              },
+              {
+                "id": "pe25",
+                "length": 210,
+                "pitch": 33,
+                "tick": 7920,
+                "velocity": 0.86
+              },
+              {
+                "id": "pe26",
+                "length": 210,
+                "pitch": 33,
+                "tick": 8160,
+                "velocity": 0.72
+              },
+              {
+                "id": "pe27",
+                "length": 210,
+                "pitch": 34,
+                "tick": 8400,
+                "velocity": 0.95
+              },
+              {
+                "id": "pe28",
+                "length": 210,
+                "pitch": 33,
+                "tick": 8880,
+                "velocity": 0.92
+              },
+              {
+                "id": "pe29",
+                "length": 210,
+                "pitch": 33,
+                "tick": 9120,
+                "velocity": 0.78
+              },
+              {
+                "id": "pe30",
+                "length": 210,
+                "pitch": 34,
+                "tick": 9360,
+                "velocity": 1.0
+              },
+              {
+                "id": "pe31",
+                "length": 210,
+                "pitch": 33,
+                "tick": 9840,
+                "velocity": 0.86
+              },
+              {
+                "id": "pe32",
+                "length": 210,
+                "pitch": 33,
+                "tick": 10080,
+                "velocity": 0.72
+              },
+              {
+                "id": "pe33",
+                "length": 210,
+                "pitch": 34,
+                "tick": 10320,
+                "velocity": 0.95
+              },
+              {
+                "id": "pe34",
+                "length": 210,
+                "pitch": 33,
+                "tick": 10800,
+                "velocity": 0.92
+              },
+              {
+                "id": "pe35",
+                "length": 210,
+                "pitch": 33,
+                "tick": 11040,
+                "velocity": 0.78
+              },
+              {
+                "id": "pe36",
+                "length": 210,
+                "pitch": 34,
+                "tick": 11280,
+                "velocity": 1.0
+              },
+              {
+                "id": "pe37",
+                "length": 210,
+                "pitch": 33,
+                "tick": 11760,
+                "velocity": 0.86
+              },
+              {
+                "id": "pe38",
+                "length": 210,
+                "pitch": 33,
+                "tick": 12000,
+                "velocity": 0.72
+              },
+              {
+                "id": "pe39",
+                "length": 210,
+                "pitch": 33,
+                "tick": 12240,
+                "velocity": 0.95
+              },
+              {
+                "id": "pe40",
+                "length": 210,
+                "pitch": 33,
+                "tick": 12720,
+                "velocity": 0.92
+              },
+              {
+                "id": "pe41",
+                "length": 210,
+                "pitch": 33,
+                "tick": 12960,
+                "velocity": 0.78
+              },
+              {
+                "id": "pe42",
+                "length": 210,
+                "pitch": 33,
+                "tick": 13200,
+                "velocity": 1.0
+              },
+              {
+                "id": "pe43",
+                "length": 210,
+                "pitch": 33,
+                "tick": 13680,
+                "velocity": 0.86
+              },
+              {
+                "id": "pe44",
+                "length": 210,
+                "pitch": 33,
+                "tick": 13920,
+                "velocity": 0.72
+              },
+              {
+                "id": "pe45",
+                "length": 210,
+                "pitch": 33,
+                "tick": 14160,
+                "velocity": 0.95
+              },
+              {
+                "id": "pe46",
+                "length": 210,
+                "pitch": 33,
+                "tick": 14640,
+                "velocity": 0.92
+              },
+              {
+                "id": "pe47",
+                "length": 210,
+                "pitch": 33,
+                "tick": 14880,
+                "velocity": 0.78
+              },
+              {
+                "id": "pe48",
+                "length": 210,
+                "pitch": 33,
+                "tick": 15120,
+                "velocity": 1.0
+              }
+            ]
+          }
+        ],
+        "role": "bass"
+      },
+      {
+        "automation": [],
+        "clips": [
+          {
+            "id": "c1",
+            "lengthTicks": 30720,
+            "patternId": "groove",
+            "startTick": 15360
+          },
+          {
+            "id": "c2",
+            "lengthTicks": 15360,
+            "patternId": "run",
+            "startTick": 46080
+          },
+          {
+            "id": "c3",
+            "lengthTicks": 46080,
+            "patternId": "groove",
+            "startTick": 61440
+          },
+          {
+            "attachEdge": 3840,
+            "attachEnd": "Roll",
+            "id": "c4",
+            "lengthTicks": 15360,
+            "patternId": "run",
+            "startTick": 107520
+          },
+          {
+            "id": "c5",
+            "lengthTicks": 26880,
+            "patternId": "groove",
+            "startTick": 122880
+          },
+          {
+            "id": "c6",
+            "lengthTicks": 15360,
+            "patternId": "groove",
+            "startTick": 153600
+          },
+          {
+            "id": "c7",
+            "lengthTicks": 15360,
+            "patternId": "run",
+            "startTick": 168960
+          },
+          {
+            "id": "c8",
+            "lengthTicks": 46080,
+            "patternId": "groove",
+            "startTick": 184320
+          },
+          {
+            "attachEdge": 3840,
+            "attachEnd": "Roll",
+            "id": "c9",
+            "lengthTicks": 15360,
+            "patternId": "run",
+            "startTick": 230400
+          },
+          {
+            "id": "c10",
+            "lengthTicks": 26880,
+            "patternId": "groove",
+            "startTick": 245760
+          },
+          {
+            "id": "c11",
+            "lengthTicks": 46080,
+            "patternId": "groove",
+            "startTick": 307200
+          },
+          {
+            "attachEdge": 3840,
+            "attachEnd": "Roll",
+            "id": "c12",
+            "lengthTicks": 15360,
+            "patternId": "run",
+            "startTick": 353280
+          },
+          {
+            "id": "c13",
+            "lengthTicks": 26880,
+            "patternId": "groove",
+            "startTick": 368640
+          },
+          {
+            "id": "c14",
+            "lengthTicks": 15360,
+            "patternId": "groove",
+            "startTick": 399360
+          },
+          {
+            "id": "c15",
+            "lengthTicks": 15360,
+            "patternId": "run",
+            "startTick": 414720
+          },
+          {
+            "id": "c16",
+            "lengthTicks": 46080,
+            "patternId": "groove",
+            "startTick": 430080
+          },
+          {
+            "attachEdge": 3840,
+            "attachEnd": "Roll",
+            "id": "c17",
+            "lengthTicks": 15360,
+            "patternId": "run",
+            "startTick": 476160
+          },
+          {
+            "id": "c18",
+            "lengthTicks": 26880,
+            "patternId": "groove",
+            "startTick": 491520
+          },
+          {
+            "id": "c19",
+            "lengthTicks": 15360,
+            "patternId": "groove",
+            "startTick": 522240
+          },
+          {
+            "id": "c20",
+            "lengthTicks": 15360,
+            "patternId": "run",
+            "startTick": 537600
+          },
+          {
+            "id": "c21",
+            "lengthTicks": 46080,
+            "patternId": "groove",
+            "startTick": 552960
+          },
+          {
+            "attachEdge": 3840,
+            "attachEnd": "Roll",
+            "id": "c22",
+            "lengthTicks": 11520,
+            "patternId": "run",
+            "startTick": 599040
+          },
+          {
+            "id": "c23",
+            "lengthTicks": 46080,
+            "patternId": "groove",
+            "startTick": 614400
+          },
+          {
+            "id": "c24",
+            "lengthTicks": 11520,
+            "patternId": "run",
+            "startTick": 660480
+          },
+          {
+            "id": "c25",
+            "lengthTicks": 46080,
+            "patternId": "groove",
+            "startTick": 737280
+          },
+          {
+            "id": "c26",
+            "lengthTicks": 15360,
+            "patternId": "run",
+            "startTick": 783360
+          },
+          {
+            "id": "c27",
+            "lengthTicks": 46080,
+            "patternId": "groove",
+            "startTick": 798720
+          },
+          {
+            "attachEdge": 3840,
+            "attachEnd": "Roll",
+            "id": "c28",
+            "lengthTicks": 11520,
+            "patternId": "run",
+            "startTick": 844800
+          },
+          {
+            "id": "c29",
+            "lengthTicks": 46080,
+            "patternId": "groove",
+            "startTick": 860160
+          },
+          {
+            "id": "c30",
+            "lengthTicks": 15360,
+            "patternId": "run",
+            "startTick": 906240
+          },
+          {
+            "id": "c31",
+            "lengthTicks": 46080,
+            "patternId": "groove",
+            "startTick": 921600
+          },
+          {
+            "attachEdge": 3840,
+            "attachEnd": "Roll",
+            "id": "c32",
+            "lengthTicks": 11520,
+            "patternId": "run",
+            "startTick": 967680
+          },
+          {
+            "id": "c33",
+            "lengthTicks": 46080,
+            "patternId": "groove",
+            "startTick": 983040
+          },
+          {
+            "id": "c34",
+            "lengthTicks": 15360,
+            "patternId": "run",
+            "startTick": 1029120
+          },
+          {
+            "id": "c35",
+            "lengthTicks": 46080,
+            "patternId": "groove",
+            "startTick": 1044480
+          },
+          {
+            "attachEdge": 3840,
+            "attachEnd": "Roll",
+            "id": "c36",
+            "lengthTicks": 15360,
+            "patternId": "run",
+            "startTick": 1090560
+          }
+        ],
+        "effects": [],
+        "id": "hats",
+        "instrument": {
+          "kind": "none"
+        },
+        "mix": {
+          "gainDb": -4.0,
+          "mute": false,
+          "pan": 0.12,
+          "sends": [
+            {
+              "gainDb": -51.6,
+              "id": "space",
+              "pre": false,
+              "to": "space"
+            }
+          ],
+          "solo": false
+        },
+        "name": "Closed hats",
+        "patterns": [
+          {
+            "id": "groove",
+            "lengthTicks": 15360,
+            "name": "Groove",
+            "notes": [
+              {
+                "id": "h1",
+                "length": 100,
+                "pitch": 42,
+                "tick": 0,
+                "velocity": 0.35
+              },
+              {
+                "id": "h3",
+                "length": 100,
+                "pitch": 42,
+                "tick": 240,
+                "velocity": 0.5
+              },
+              {
+                "id": "h5",
+                "length": 100,
+                "pitch": 42,
+                "tick": 480,
+                "velocity": 0.95
+              },
+              {
+                "id": "h7",
+                "length": 100,
+                "pitch": 42,
+                "tick": 720,
+                "velocity": 0.55
+              },
+              {
+                "id": "h9",
+                "length": 100,
+                "pitch": 42,
+                "tick": 960,
+                "velocity": 0.35
+              },
+              {
+                "id": "h11",
+                "length": 100,
+                "pitch": 42,
+                "tick": 1200,
+                "velocity": 0.5
+              },
+              {
+                "id": "h13",
+                "length": 100,
+                "pitch": 42,
+                "tick": 1440,
+                "velocity": 0.95
+              },
+              {
+                "id": "h15",
+                "length": 100,
+                "pitch": 42,
+                "tick": 1680,
+                "velocity": 0.55
+              },
+              {
+                "id": "h17",
+                "length": 100,
+                "pitch": 42,
+                "tick": 1920,
+                "velocity": 0.35
+              },
+              {
+                "id": "h19",
+                "length": 100,
+                "pitch": 42,
+                "tick": 2160,
+                "velocity": 0.5
+              },
+              {
+                "id": "h21",
+                "length": 100,
+                "pitch": 42,
+                "tick": 2400,
+                "velocity": 0.95
+              },
+              {
+                "id": "h23",
+                "length": 100,
+                "pitch": 42,
+                "tick": 2640,
+                "velocity": 0.55
+              },
+              {
+                "id": "h25",
+                "length": 100,
+                "pitch": 42,
+                "tick": 2880,
+                "velocity": 0.35
+              },
+              {
+                "id": "h27",
+                "length": 100,
+                "pitch": 42,
+                "tick": 3120,
+                "velocity": 0.5
+              },
+              {
+                "id": "h29",
+                "length": 100,
+                "pitch": 42,
+                "tick": 3360,
+                "velocity": 0.95
+              },
+              {
+                "id": "h31",
+                "length": 100,
+                "pitch": 42,
+                "tick": 3600,
+                "velocity": 0.55
+              },
+              {
+                "id": "h33",
+                "length": 100,
+                "pitch": 42,
+                "tick": 3840,
+                "velocity": 0.35
+              },
+              {
+                "id": "h35",
+                "length": 100,
+                "pitch": 42,
+                "tick": 4080,
+                "velocity": 0.5
+              },
+              {
+                "id": "h37",
+                "length": 100,
+                "pitch": 42,
+                "tick": 4320,
+                "velocity": 0.95
+              },
+              {
+                "id": "h39",
+                "length": 100,
+                "pitch": 42,
+                "tick": 4560,
+                "velocity": 0.55
+              },
+              {
+                "id": "h41",
+                "length": 100,
+                "pitch": 42,
+                "tick": 4800,
+                "velocity": 0.35
+              },
+              {
+                "id": "h43",
+                "length": 100,
+                "pitch": 42,
+                "tick": 5040,
+                "velocity": 0.5
+              },
+              {
+                "id": "h45",
+                "length": 100,
+                "pitch": 42,
+                "tick": 5280,
+                "velocity": 0.95
+              },
+              {
+                "id": "h47",
+                "length": 100,
+                "pitch": 42,
+                "tick": 5520,
+                "velocity": 0.55
+              },
+              {
+                "id": "h49",
+                "length": 100,
+                "pitch": 42,
+                "tick": 5760,
+                "velocity": 0.35
+              },
+              {
+                "id": "h51",
+                "length": 100,
+                "pitch": 42,
+                "tick": 6000,
+                "velocity": 0.5
+              },
+              {
+                "id": "h53",
+                "length": 100,
+                "pitch": 42,
+                "tick": 6240,
+                "velocity": 0.95
+              },
+              {
+                "id": "h55",
+                "length": 100,
+                "pitch": 42,
+                "tick": 6480,
+                "velocity": 0.55
+              },
+              {
+                "id": "h57",
+                "length": 100,
+                "pitch": 42,
+                "tick": 6720,
+                "velocity": 0.35
+              },
+              {
+                "id": "h59",
+                "length": 100,
+                "pitch": 42,
+                "tick": 6960,
+                "velocity": 0.5
+              },
+              {
+                "id": "h61",
+                "length": 100,
+                "pitch": 42,
+                "tick": 7200,
+                "velocity": 0.95
+              },
+              {
+                "id": "h63",
+                "length": 100,
+                "pitch": 42,
+                "tick": 7440,
+                "velocity": 0.55
+              },
+              {
+                "id": "h65",
+                "length": 100,
+                "pitch": 42,
+                "tick": 7680,
+                "velocity": 0.35
+              },
+              {
+                "id": "h67",
+                "length": 100,
+                "pitch": 42,
+                "tick": 7920,
+                "velocity": 0.5
+              },
+              {
+                "id": "h69",
+                "length": 100,
+                "pitch": 42,
+                "tick": 8160,
+                "velocity": 0.95
+              },
+              {
+                "id": "h71",
+                "length": 100,
+                "pitch": 42,
+                "tick": 8400,
+                "velocity": 0.55
+              },
+              {
+                "id": "h73",
+                "length": 100,
+                "pitch": 42,
+                "tick": 8640,
+                "velocity": 0.35
+              },
+              {
+                "id": "h75",
+                "length": 100,
+                "pitch": 42,
+                "tick": 8880,
+                "velocity": 0.5
+              },
+              {
+                "id": "h77",
+                "length": 100,
+                "pitch": 42,
+                "tick": 9120,
+                "velocity": 0.95
+              },
+              {
+                "id": "h79",
+                "length": 100,
+                "pitch": 42,
+                "tick": 9360,
+                "velocity": 0.55
+              },
+              {
+                "id": "h81",
+                "length": 100,
+                "pitch": 42,
+                "tick": 9600,
+                "velocity": 0.35
+              },
+              {
+                "id": "h83",
+                "length": 100,
+                "pitch": 42,
+                "tick": 9840,
+                "velocity": 0.5
+              },
+              {
+                "id": "h85",
+                "length": 100,
+                "pitch": 42,
+                "tick": 10080,
+                "velocity": 0.95
+              },
+              {
+                "id": "h87",
+                "length": 100,
+                "pitch": 42,
+                "tick": 10320,
+                "velocity": 0.55
+              },
+              {
+                "id": "h89",
+                "length": 100,
+                "pitch": 42,
+                "tick": 10560,
+                "velocity": 0.35
+              },
+              {
+                "id": "h91",
+                "length": 100,
+                "pitch": 42,
+                "tick": 10800,
+                "velocity": 0.5
+              },
+              {
+                "id": "h93",
+                "length": 100,
+                "pitch": 42,
+                "tick": 11040,
+                "velocity": 0.95
+              },
+              {
+                "id": "h95",
+                "length": 100,
+                "pitch": 42,
+                "tick": 11280,
+                "velocity": 0.55
+              },
+              {
+                "id": "h97",
+                "length": 100,
+                "pitch": 42,
+                "tick": 11520,
+                "velocity": 0.35
+              },
+              {
+                "id": "h99",
+                "length": 100,
+                "pitch": 42,
+                "tick": 11760,
+                "velocity": 0.5
+              },
+              {
+                "id": "h101",
+                "length": 100,
+                "pitch": 42,
+                "tick": 12000,
+                "velocity": 0.95
+              },
+              {
+                "id": "h103",
+                "length": 100,
+                "pitch": 42,
+                "tick": 12240,
+                "velocity": 0.55
+              },
+              {
+                "id": "h105",
+                "length": 100,
+                "pitch": 42,
+                "tick": 12480,
+                "velocity": 0.35
+              },
+              {
+                "id": "h107",
+                "length": 100,
+                "pitch": 42,
+                "tick": 12720,
+                "velocity": 0.5
+              },
+              {
+                "id": "h109",
+                "length": 100,
+                "pitch": 42,
+                "tick": 12960,
+                "velocity": 0.95
+              },
+              {
+                "id": "h111",
+                "length": 100,
+                "pitch": 42,
+                "tick": 13200,
+                "velocity": 0.55
+              },
+              {
+                "id": "h113",
+                "length": 100,
+                "pitch": 42,
+                "tick": 13440,
+                "velocity": 0.35
+              },
+              {
+                "id": "h115",
+                "length": 100,
+                "pitch": 42,
+                "tick": 13680,
+                "velocity": 0.5
+              },
+              {
+                "id": "h117",
+                "length": 100,
+                "pitch": 42,
+                "tick": 13920,
+                "velocity": 0.95
+              },
+              {
+                "id": "h119",
+                "length": 100,
+                "pitch": 42,
+                "tick": 14160,
+                "velocity": 0.55
+              },
+              {
+                "id": "h121",
+                "length": 100,
+                "pitch": 42,
+                "tick": 14400,
+                "velocity": 0.35
+              },
+              {
+                "id": "h123",
+                "length": 100,
+                "pitch": 42,
+                "tick": 14640,
+                "velocity": 0.5
+              },
+              {
+                "id": "h125",
+                "length": 100,
+                "pitch": 42,
+                "tick": 14880,
+                "velocity": 0.95
+              },
+              {
+                "id": "h127",
+                "length": 100,
+                "pitch": 42,
+                "tick": 15120,
+                "velocity": 0.55
+              }
+            ]
+          },
+          {
+            "id": "run",
+            "lengthTicks": 15360,
+            "name": "Run",
+            "notes": [
+              {
+                "id": "h2",
+                "length": 100,
+                "pitch": 42,
+                "tick": 0,
+                "velocity": 0.35
+              },
+              {
+                "id": "h4",
+                "length": 100,
+                "pitch": 42,
+                "tick": 240,
+                "velocity": 0.5
+              },
+              {
+                "id": "h6",
+                "length": 100,
+                "pitch": 42,
+                "tick": 480,
+                "velocity": 0.95
+              },
+              {
+                "id": "h8",
+                "length": 100,
+                "pitch": 42,
+                "tick": 720,
+                "velocity": 0.55
+              },
+              {
+                "id": "h10",
+                "length": 100,
+                "pitch": 42,
+                "tick": 960,
+                "velocity": 0.35
+              },
+              {
+                "id": "h12",
+                "length": 100,
+                "pitch": 42,
+                "tick": 1200,
+                "velocity": 0.5
+              },
+              {
+                "id": "h14",
+                "length": 100,
+                "pitch": 42,
+                "tick": 1440,
+                "velocity": 0.95
+              },
+              {
+                "id": "h16",
+                "length": 100,
+                "pitch": 42,
+                "tick": 1680,
+                "velocity": 0.55
+              },
+              {
+                "id": "h18",
+                "length": 100,
+                "pitch": 42,
+                "tick": 1920,
+                "velocity": 0.35
+              },
+              {
+                "id": "h20",
+                "length": 100,
+                "pitch": 42,
+                "tick": 2160,
+                "velocity": 0.5
+              },
+              {
+                "id": "h22",
+                "length": 100,
+                "pitch": 42,
+                "tick": 2400,
+                "velocity": 0.95
+              },
+              {
+                "id": "h24",
+                "length": 100,
+                "pitch": 42,
+                "tick": 2640,
+                "velocity": 0.55
+              },
+              {
+                "id": "h26",
+                "length": 100,
+                "pitch": 42,
+                "tick": 2880,
+                "velocity": 0.35
+              },
+              {
+                "id": "h28",
+                "length": 100,
+                "pitch": 42,
+                "tick": 3120,
+                "velocity": 0.5
+              },
+              {
+                "id": "h30",
+                "length": 100,
+                "pitch": 42,
+                "tick": 3360,
+                "velocity": 0.95
+              },
+              {
+                "id": "h32",
+                "length": 100,
+                "pitch": 42,
+                "tick": 3600,
+                "velocity": 0.55
+              },
+              {
+                "id": "h34",
+                "length": 100,
+                "pitch": 42,
+                "tick": 3840,
+                "velocity": 0.35
+              },
+              {
+                "id": "h36",
+                "length": 100,
+                "pitch": 42,
+                "tick": 4080,
+                "velocity": 0.5
+              },
+              {
+                "id": "h38",
+                "length": 100,
+                "pitch": 42,
+                "tick": 4320,
+                "velocity": 0.95
+              },
+              {
+                "id": "h40",
+                "length": 100,
+                "pitch": 42,
+                "tick": 4560,
+                "velocity": 0.55
+              },
+              {
+                "id": "h42",
+                "length": 100,
+                "pitch": 42,
+                "tick": 4800,
+                "velocity": 0.35
+              },
+              {
+                "id": "h44",
+                "length": 100,
+                "pitch": 42,
+                "tick": 5040,
+                "velocity": 0.5
+              },
+              {
+                "id": "h46",
+                "length": 100,
+                "pitch": 42,
+                "tick": 5280,
+                "velocity": 0.95
+              },
+              {
+                "id": "h48",
+                "length": 100,
+                "pitch": 42,
+                "tick": 5520,
+                "velocity": 0.55
+              },
+              {
+                "id": "h50",
+                "length": 100,
+                "pitch": 42,
+                "tick": 5760,
+                "velocity": 0.35
+              },
+              {
+                "id": "h52",
+                "length": 100,
+                "pitch": 42,
+                "tick": 6000,
+                "velocity": 0.5
+              },
+              {
+                "id": "h54",
+                "length": 100,
+                "pitch": 42,
+                "tick": 6240,
+                "velocity": 0.95
+              },
+              {
+                "id": "h56",
+                "length": 100,
+                "pitch": 42,
+                "tick": 6480,
+                "velocity": 0.55
+              },
+              {
+                "id": "h58",
+                "length": 100,
+                "pitch": 42,
+                "tick": 6720,
+                "velocity": 0.35
+              },
+              {
+                "id": "h60",
+                "length": 100,
+                "pitch": 42,
+                "tick": 6960,
+                "velocity": 0.5
+              },
+              {
+                "id": "h62",
+                "length": 100,
+                "pitch": 42,
+                "tick": 7200,
+                "velocity": 0.95
+              },
+              {
+                "id": "h64",
+                "length": 100,
+                "pitch": 42,
+                "tick": 7440,
+                "velocity": 0.55
+              },
+              {
+                "id": "h66",
+                "length": 100,
+                "pitch": 42,
+                "tick": 7680,
+                "velocity": 0.35
+              },
+              {
+                "id": "h68",
+                "length": 100,
+                "pitch": 42,
+                "tick": 7920,
+                "velocity": 0.5
+              },
+              {
+                "id": "h70",
+                "length": 100,
+                "pitch": 42,
+                "tick": 8160,
+                "velocity": 0.95
+              },
+              {
+                "id": "h72",
+                "length": 100,
+                "pitch": 42,
+                "tick": 8400,
+                "velocity": 0.55
+              },
+              {
+                "id": "h74",
+                "length": 100,
+                "pitch": 42,
+                "tick": 8640,
+                "velocity": 0.35
+              },
+              {
+                "id": "h76",
+                "length": 100,
+                "pitch": 42,
+                "tick": 8880,
+                "velocity": 0.5
+              },
+              {
+                "id": "h78",
+                "length": 100,
+                "pitch": 42,
+                "tick": 9120,
+                "velocity": 0.95
+              },
+              {
+                "id": "h80",
+                "length": 100,
+                "pitch": 42,
+                "tick": 9360,
+                "velocity": 0.55
+              },
+              {
+                "id": "h82",
+                "length": 100,
+                "pitch": 42,
+                "tick": 9600,
+                "velocity": 0.35
+              },
+              {
+                "id": "h84",
+                "length": 100,
+                "pitch": 42,
+                "tick": 9840,
+                "velocity": 0.5
+              },
+              {
+                "id": "h86",
+                "length": 100,
+                "pitch": 42,
+                "tick": 10080,
+                "velocity": 0.95
+              },
+              {
+                "id": "h88",
+                "length": 100,
+                "pitch": 42,
+                "tick": 10320,
+                "velocity": 0.55
+              },
+              {
+                "id": "h90",
+                "length": 100,
+                "pitch": 42,
+                "tick": 10560,
+                "velocity": 0.35
+              },
+              {
+                "id": "h92",
+                "length": 100,
+                "pitch": 42,
+                "tick": 10800,
+                "velocity": 0.5
+              },
+              {
+                "id": "h94",
+                "length": 100,
+                "pitch": 42,
+                "tick": 11040,
+                "velocity": 0.95
+              },
+              {
+                "id": "h96",
+                "length": 100,
+                "pitch": 42,
+                "tick": 11280,
+                "velocity": 0.55
+              },
+              {
+                "id": "h98",
+                "length": 100,
+                "pitch": 42,
+                "tick": 11520,
+                "velocity": 0.35
+              },
+              {
+                "id": "h100",
+                "length": 100,
+                "pitch": 42,
+                "tick": 11760,
+                "velocity": 0.5
+              },
+              {
+                "id": "h102",
+                "length": 100,
+                "pitch": 42,
+                "tick": 12000,
+                "velocity": 0.95
+              },
+              {
+                "id": "h104",
+                "length": 100,
+                "pitch": 42,
+                "tick": 12240,
+                "velocity": 0.55
+              },
+              {
+                "id": "h106",
+                "length": 100,
+                "pitch": 42,
+                "tick": 12480,
+                "velocity": 0.35
+              },
+              {
+                "id": "h108",
+                "length": 100,
+                "pitch": 42,
+                "tick": 12720,
+                "velocity": 0.5
+              },
+              {
+                "id": "h110",
+                "length": 100,
+                "pitch": 42,
+                "tick": 12960,
+                "velocity": 0.95
+              },
+              {
+                "id": "h112",
+                "length": 100,
+                "pitch": 42,
+                "tick": 13200,
+                "velocity": 0.55
+              },
+              {
+                "id": "h114",
+                "length": 100,
+                "pitch": 42,
+                "tick": 13440,
+                "velocity": 0.35
+              },
+              {
+                "id": "h116",
+                "length": 100,
+                "pitch": 42,
+                "tick": 13680,
+                "velocity": 0.5
+              },
+              {
+                "id": "h118",
+                "length": 100,
+                "pitch": 42,
+                "tick": 13920,
+                "velocity": 0.95
+              },
+              {
+                "id": "h120",
+                "length": 100,
+                "pitch": 42,
+                "tick": 14160,
+                "velocity": 0.55
+              },
+              {
+                "id": "h122",
+                "length": 100,
+                "pitch": 42,
+                "tick": 14400,
+                "velocity": 0.35
+              },
+              {
+                "id": "h124",
+                "length": 100,
+                "pitch": 42,
+                "tick": 14640,
+                "velocity": 0.5
+              },
+              {
+                "id": "h126",
+                "length": 100,
+                "pitch": 42,
+                "tick": 14880,
+                "velocity": 0.95
+              },
+              {
+                "id": "h128",
+                "length": 100,
+                "pitch": 42,
+                "tick": 15120,
+                "velocity": 0.55
+              },
+              {
+                "id": "h129",
+                "length": 60,
+                "pitch": 42,
+                "tick": 14400,
+                "velocity": 0.4
+              },
+              {
+                "id": "h130",
+                "length": 60,
+                "pitch": 42,
+                "tick": 14520,
+                "velocity": 0.47
+              },
+              {
+                "id": "h131",
+                "length": 60,
+                "pitch": 42,
+                "tick": 14640,
+                "velocity": 0.54
+              },
+              {
+                "id": "h132",
+                "length": 60,
+                "pitch": 42,
+                "tick": 14760,
+                "velocity": 0.61
+              },
+              {
+                "id": "h133",
+                "length": 60,
+                "pitch": 42,
+                "tick": 14880,
+                "velocity": 0.68
+              },
+              {
+                "id": "h134",
+                "length": 60,
+                "pitch": 42,
+                "tick": 15000,
+                "velocity": 0.75
+              },
+              {
+                "id": "h135",
+                "length": 60,
+                "pitch": 42,
+                "tick": 15120,
+                "velocity": 0.82
+              },
+              {
+                "id": "h136",
+                "length": 60,
+                "pitch": 42,
+                "tick": 15240,
+                "velocity": 0.89
+              }
+            ]
+          }
+        ],
+        "role": "drums"
+      },
+      {
+        "automation": [],
+        "clips": [
+          {
+            "id": "c1",
+            "lengthTicks": 61440,
+            "patternId": "offbeat",
+            "startTick": 92160
+          },
+          {
+            "id": "c2",
+            "lengthTicks": 61440,
+            "patternId": "offbeat",
+            "startTick": 215040
+          },
+          {
+            "id": "c3",
+            "lengthTicks": 153600,
+            "patternId": "offbeat",
+            "startTick": 368640
+          },
+          {
+            "id": "c4",
+            "lengthTicks": 92160,
+            "patternId": "offbeat",
+            "startTick": 583680
+          },
+          {
+            "id": "c5",
+            "lengthTicks": 184320,
+            "patternId": "offbeat",
+            "startTick": 798720
+          },
+          {
+            "id": "c6",
+            "lengthTicks": 61440,
+            "patternId": "offbeat",
+            "startTick": 1044480
+          }
+        ],
+        "effects": [],
+        "id": "open-hats",
+        "instrument": {
+          "kind": "none"
+        },
+        "mix": {
+          "gainDb": 0.0,
+          "mute": false,
+          "pan": -0.12,
+          "sends": [
+            {
+              "gainDb": -49.6,
+              "id": "space",
+              "pre": false,
+              "to": "space"
+            }
+          ],
+          "solo": false
+        },
+        "name": "Open hats",
+        "patterns": [
+          {
+            "id": "offbeat",
+            "lengthTicks": 3840,
+            "name": "Offbeat",
+            "notes": [
+              {
+                "id": "o1",
+                "length": 180,
+                "pitch": 46,
+                "tick": 480,
+                "velocity": 0.7
+              },
+              {
+                "id": "o2",
+                "length": 180,
+                "pitch": 46,
+                "tick": 1440,
+                "velocity": 0.7
+              },
+              {
+                "id": "o3",
+                "length": 180,
+                "pitch": 46,
+                "tick": 2400,
+                "velocity": 0.7
+              },
+              {
+                "id": "o4",
+                "length": 180,
+                "pitch": 46,
+                "tick": 3360,
+                "velocity": 0.7
+              }
+            ]
+          }
+        ],
+        "role": "drums"
+      },
+      {
+        "automation": [],
+        "clips": [
+          {
+            "id": "c1",
+            "lengthTicks": 7680,
+            "patternId": "a",
+            "startTick": 153600
+          },
+          {
+            "id": "c2",
+            "lengthTicks": 7680,
+            "patternId": "b",
+            "startTick": 161280
+          },
+          {
+            "id": "c3",
+            "lengthTicks": 7680,
+            "patternId": "a",
+            "startTick": 168960
+          },
+          {
+            "attachEdge": 3840,
+            "attachEnd": "Reverse",
+            "id": "c4",
+            "lengthTicks": 7680,
+            "patternId": "b",
+            "startTick": 176640
+          },
+          {
+            "id": "c5",
+            "lengthTicks": 7680,
+            "patternId": "a",
+            "startTick": 184320
+          },
+          {
+            "id": "c6",
+            "lengthTicks": 7680,
+            "patternId": "b",
+            "startTick": 192000
+          },
+          {
+            "id": "c7",
+            "lengthTicks": 7680,
+            "patternId": "a",
+            "startTick": 199680
+          },
+          {
+            "id": "c8",
+            "lengthTicks": 7680,
+            "patternId": "b",
+            "startTick": 207360
+          },
+          {
+            "id": "c9",
+            "lengthTicks": 7680,
+            "patternId": "a",
+            "startTick": 215040
+          },
+          {
+            "id": "c10",
+            "lengthTicks": 7680,
+            "patternId": "b",
+            "startTick": 222720
+          },
+          {
+            "id": "c11",
+            "lengthTicks": 7680,
+            "patternId": "a",
+            "startTick": 230400
+          },
+          {
+            "attachEdge": 3840,
+            "attachEnd": "Reverse",
+            "id": "c12",
+            "lengthTicks": 7680,
+            "patternId": "b",
+            "startTick": 238080
+          },
+          {
+            "id": "c13",
+            "lengthTicks": 7680,
+            "patternId": "a",
+            "startTick": 245760
+          },
+          {
+            "id": "c14",
+            "lengthTicks": 7680,
+            "patternId": "b",
+            "startTick": 253440
+          },
+          {
+            "id": "c15",
+            "lengthTicks": 7680,
+            "patternId": "a",
+            "startTick": 261120
+          },
+          {
+            "id": "c16",
+            "lengthTicks": 7680,
+            "patternId": "b",
+            "startTick": 268800
+          },
+          {
+            "id": "c17",
+            "lengthTicks": 7680,
+            "patternId": "a",
+            "startTick": 430080
+          },
+          {
+            "id": "c18",
+            "lengthTicks": 7680,
+            "patternId": "b",
+            "startTick": 437760
+          },
+          {
+            "id": "c19",
+            "lengthTicks": 7680,
+            "patternId": "a",
+            "startTick": 445440
+          },
+          {
+            "id": "c20",
+            "lengthTicks": 7680,
+            "patternId": "b",
+            "startTick": 453120
+          },
+          {
+            "id": "c21",
+            "lengthTicks": 7680,
+            "patternId": "a",
+            "startTick": 460800
+          },
+          {
+            "id": "c22",
+            "lengthTicks": 7680,
+            "patternId": "b",
+            "startTick": 468480
+          },
+          {
+            "id": "c23",
+            "lengthTicks": 7680,
+            "patternId": "a",
+            "startTick": 476160
+          },
+          {
+            "attachEdge": 3840,
+            "attachEnd": "Reverse",
+            "id": "c24",
+            "lengthTicks": 7680,
+            "patternId": "b",
+            "startTick": 483840
+          },
+          {
+            "id": "c25",
+            "lengthTicks": 7680,
+            "patternId": "a",
+            "startTick": 491520
+          },
+          {
+            "id": "c26",
+            "lengthTicks": 7680,
+            "patternId": "b",
+            "startTick": 499200
+          },
+          {
+            "id": "c27",
+            "lengthTicks": 7680,
+            "patternId": "a",
+            "startTick": 506880
+          },
+          {
+            "id": "c28",
+            "lengthTicks": 7680,
+            "patternId": "b",
+            "startTick": 514560
+          },
+          {
+            "id": "c29",
+            "lengthTicks": 7680,
+            "patternId": "a",
+            "startTick": 552960
+          },
+          {
+            "id": "c30",
+            "lengthTicks": 7680,
+            "patternId": "b",
+            "startTick": 560640
+          },
+          {
+            "id": "c31",
+            "lengthTicks": 7680,
+            "patternId": "a",
+            "startTick": 568320
+          },
+          {
+            "id": "c32",
+            "lengthTicks": 7680,
+            "patternId": "b",
+            "startTick": 576000
+          },
+          {
+            "id": "c33",
+            "lengthTicks": 7680,
+            "patternId": "a",
+            "startTick": 583680
+          },
+          {
+            "id": "c34",
+            "lengthTicks": 7680,
+            "patternId": "b",
+            "startTick": 591360
+          },
+          {
+            "id": "c35",
+            "lengthTicks": 7680,
+            "patternId": "a",
+            "startTick": 599040
+          },
+          {
+            "attachEdge": 3840,
+            "attachEnd": "Reverse",
+            "id": "c36",
+            "lengthTicks": 7680,
+            "patternId": "b",
+            "startTick": 606720
+          },
+          {
+            "id": "c37",
+            "lengthTicks": 7680,
+            "patternId": "a",
+            "startTick": 614400
+          },
+          {
+            "id": "c38",
+            "lengthTicks": 7680,
+            "patternId": "b",
+            "startTick": 622080
+          },
+          {
+            "id": "c39",
+            "lengthTicks": 7680,
+            "patternId": "a",
+            "startTick": 629760
+          },
+          {
+            "id": "c40",
+            "lengthTicks": 7680,
+            "patternId": "b",
+            "startTick": 637440
+          },
+          {
+            "id": "c41",
+            "lengthTicks": 7680,
+            "patternId": "a",
+            "startTick": 645120
+          },
+          {
+            "id": "c42",
+            "lengthTicks": 7680,
+            "patternId": "b",
+            "startTick": 652800
+          },
+          {
+            "id": "c43",
+            "lengthTicks": 7680,
+            "patternId": "a",
+            "startTick": 660480
+          },
+          {
+            "attachEdge": 3840,
+            "attachEnd": "Reverse",
+            "id": "c44",
+            "lengthTicks": 7680,
+            "patternId": "b",
+            "startTick": 668160
+          },
+          {
+            "id": "c45",
+            "lengthTicks": 7680,
+            "patternId": "a",
+            "startTick": 860160
+          },
+          {
+            "id": "c46",
+            "lengthTicks": 7680,
+            "patternId": "b",
+            "startTick": 867840
+          },
+          {
+            "id": "c47",
+            "lengthTicks": 7680,
+            "patternId": "a",
+            "startTick": 875520
+          },
+          {
+            "id": "c48",
+            "lengthTicks": 7680,
+            "patternId": "b",
+            "startTick": 883200
+          },
+          {
+            "id": "c49",
+            "lengthTicks": 7680,
+            "patternId": "a",
+            "startTick": 890880
+          },
+          {
+            "id": "c50",
+            "lengthTicks": 7680,
+            "patternId": "b",
+            "startTick": 898560
+          },
+          {
+            "id": "c51",
+            "lengthTicks": 7680,
+            "patternId": "a",
+            "startTick": 906240
+          },
+          {
+            "attachEdge": 3840,
+            "attachEnd": "Reverse",
+            "id": "c52",
+            "lengthTicks": 7680,
+            "patternId": "b",
+            "startTick": 913920
+          },
+          {
+            "id": "c53",
+            "lengthTicks": 7680,
+            "patternId": "a",
+            "startTick": 921600
+          },
+          {
+            "id": "c54",
+            "lengthTicks": 7680,
+            "patternId": "b",
+            "startTick": 929280
+          },
+          {
+            "id": "c55",
+            "lengthTicks": 7680,
+            "patternId": "a",
+            "startTick": 936960
+          },
+          {
+            "id": "c56",
+            "lengthTicks": 7680,
+            "patternId": "b",
+            "startTick": 944640
+          },
+          {
+            "id": "c57",
+            "lengthTicks": 7680,
+            "patternId": "a",
+            "startTick": 952320
+          },
+          {
+            "id": "c58",
+            "lengthTicks": 7680,
+            "patternId": "b",
+            "startTick": 960000
+          },
+          {
+            "id": "c59",
+            "lengthTicks": 7680,
+            "patternId": "a",
+            "startTick": 967680
+          },
+          {
+            "attachEdge": 3840,
+            "attachEnd": "Reverse",
+            "id": "c60",
+            "lengthTicks": 7680,
+            "patternId": "b",
+            "startTick": 975360
+          },
+          {
+            "id": "c61",
+            "lengthTicks": 7680,
+            "patternId": "a",
+            "startTick": 983040
+          },
+          {
+            "id": "c62",
+            "lengthTicks": 7680,
+            "patternId": "b",
+            "startTick": 990720
+          },
+          {
+            "id": "c63",
+            "lengthTicks": 7680,
+            "patternId": "a",
+            "startTick": 998400
+          },
+          {
+            "id": "c64",
+            "lengthTicks": 7680,
+            "patternId": "b",
+            "startTick": 1006080
+          },
+          {
+            "id": "c65",
+            "lengthTicks": 7680,
+            "patternId": "a",
+            "startTick": 1013760
+          },
+          {
+            "id": "c66",
+            "lengthTicks": 7680,
+            "patternId": "b",
+            "startTick": 1021440
+          },
+          {
+            "id": "c67",
+            "lengthTicks": 7680,
+            "patternId": "a",
+            "startTick": 1029120
+          },
+          {
+            "attachEdge": 3840,
+            "attachEnd": "Reverse",
+            "id": "c68",
+            "lengthTicks": 7680,
+            "patternId": "b",
+            "startTick": 1036800
+          },
+          {
+            "id": "c69",
+            "lengthTicks": 7680,
+            "patternId": "a",
+            "startTick": 1044480
+          },
+          {
+            "id": "c70",
+            "lengthTicks": 7680,
+            "patternId": "b",
+            "startTick": 1052160
+          },
+          {
+            "id": "c71",
+            "lengthTicks": 7680,
+            "patternId": "a",
+            "startTick": 1059840
+          },
+          {
+            "id": "c72",
+            "lengthTicks": 7680,
+            "patternId": "b",
+            "startTick": 1067520
+          },
+          {
+            "id": "c73",
+            "lengthTicks": 7680,
+            "patternId": "a",
+            "startTick": 1075200
+          },
+          {
+            "id": "c74",
+            "lengthTicks": 7680,
+            "patternId": "b",
+            "startTick": 1082880
+          },
+          {
+            "id": "c75",
+            "lengthTicks": 7680,
+            "patternId": "a",
+            "startTick": 1090560
+          },
+          {
+            "attachEdge": 3840,
+            "attachEnd": "Reverse",
+            "id": "c76",
+            "lengthTicks": 7680,
+            "patternId": "b",
+            "startTick": 1098240
+          }
+        ],
+        "effects": [],
+        "id": "perc",
+        "instrument": {
+          "kind": "none"
+        },
+        "mix": {
+          "gainDb": 0.0,
+          "mute": false,
+          "pan": -0.3,
+          "sends": [
+            {
+              "gainDb": -45.6,
+              "id": "space",
+              "pre": false,
+              "to": "space"
+            },
+            {
+              "gainDb": -37.0,
+              "id": "echo",
+              "pre": false,
+              "to": "echo"
+            }
+          ],
+          "solo": false
+        },
+        "name": "Percussion",
+        "patterns": [
+          {
+            "id": "a",
+            "lengthTicks": 7680,
+            "name": "Perc A",
+            "notes": [
+              {
+                "id": "pa1",
+                "length": 120,
+                "pitch": 60,
+                "tick": 720,
+                "velocity": 0.9
+              },
+              {
+                "id": "pa2",
+                "length": 120,
+                "pitch": 60,
+                "tick": 1680,
+                "velocity": 0.6
+              },
+              {
+                "id": "pa3",
+                "length": 120,
+                "pitch": 60,
+                "tick": 2400,
+                "velocity": 0.6
+              },
+              {
+                "id": "pa4",
+                "length": 120,
+                "pitch": 61,
+                "tick": 3360,
+                "velocity": 0.6
+              },
+              {
+                "id": "pa5",
+                "length": 120,
+                "pitch": 60,
+                "tick": 4560,
+                "velocity": 0.9
+              },
+              {
+                "id": "pa6",
+                "length": 120,
+                "pitch": 60,
+                "tick": 5520,
+                "velocity": 0.6
+              },
+              {
+                "id": "pa7",
+                "length": 120,
+                "pitch": 60,
+                "tick": 6240,
+                "velocity": 0.6
+              },
+              {
+                "id": "pa8",
+                "length": 120,
+                "pitch": 61,
+                "tick": 7200,
+                "velocity": 0.6
+              }
+            ]
+          },
+          {
+            "id": "b",
+            "lengthTicks": 7680,
+            "name": "Perc B",
+            "notes": [
+              {
+                "id": "pb1",
+                "length": 120,
+                "pitch": 60,
+                "tick": 240,
+                "velocity": 0.6
+              },
+              {
+                "id": "pb2",
+                "length": 120,
+                "pitch": 61,
+                "tick": 1440,
+                "velocity": 0.9
+              },
+              {
+                "id": "pb3",
+                "length": 120,
+                "pitch": 60,
+                "tick": 2160,
+                "velocity": 0.9
+              },
+              {
+                "id": "pb4",
+                "length": 120,
+                "pitch": 60,
+                "tick": 2640,
+                "velocity": 0.6
+              },
+              {
+                "id": "pb5",
+                "length": 120,
+                "pitch": 60,
+                "tick": 3600,
+                "velocity": 0.9
+              },
+              {
+                "id": "pb6",
+                "length": 120,
+                "pitch": 60,
+                "tick": 4080,
+                "velocity": 0.6
+              },
+              {
+                "id": "pb7",
+                "length": 120,
+                "pitch": 61,
+                "tick": 5280,
+                "velocity": 0.9
+              },
+              {
+                "id": "pb8",
+                "length": 120,
+                "pitch": 60,
+                "tick": 6000,
+                "velocity": 0.9
+              },
+              {
+                "id": "pb9",
+                "length": 120,
+                "pitch": 60,
+                "tick": 6480,
+                "velocity": 0.6
+              },
+              {
+                "id": "pb10",
+                "length": 120,
+                "pitch": 60,
+                "tick": 7440,
+                "velocity": 0.9
+              }
+            ]
+          }
+        ],
+        "role": "drums"
+      },
+      {
+        "automation": [],
+        "clips": [
+          {
+            "id": "c1",
+            "lengthTicks": 30720,
+            "patternId": "hits",
+            "startTick": 276480
+          },
+          {
+            "id": "c2",
+            "lengthTicks": 61440,
+            "patternId": "hits",
+            "startTick": 675840
+          }
+        ],
+        "effects": [],
+        "id": "accents",
+        "instrument": {
+          "kind": "none"
+        },
+        "mix": {
+          "gainDb": 0.0,
+          "mute": false,
+          "pan": 0.25,
+          "sends": [
+            {
+              "gainDb": -10.0,
+              "id": "huge",
+              "pre": false,
+              "to": "huge"
+            }
+          ],
+          "solo": false
+        },
+        "name": "Accents",
+        "patterns": [
+          {
+            "id": "hits",
+            "lengthTicks": 7680,
+            "name": "Hits",
+            "notes": [
+              {
+                "id": "n1",
+                "length": 120,
+                "pitch": 36,
+                "tick": 720,
+                "velocity": 0.7
+              },
+              {
+                "id": "n2",
+                "length": 120,
+                "pitch": 36,
+                "tick": 2400,
+                "velocity": 0.7
+              },
+              {
+                "id": "n3",
+                "length": 120,
+                "pitch": 36,
+                "tick": 4560,
+                "velocity": 0.7
+              },
+              {
+                "id": "n4",
+                "length": 120,
+                "pitch": 36,
+                "tick": 6240,
+                "velocity": 0.7
+              },
+              {
+                "id": "n5",
+                "length": 120,
+                "pitch": 36,
+                "tick": 6960,
+                "velocity": 0.7
+              }
+            ]
+          }
+        ],
+        "role": "kick"
+      },
+      {
+        "automation": [],
+        "clips": [
+          {
+            "id": "c1",
+            "lengthTicks": 3840,
+            "patternId": "hit",
+            "startTick": 30720
+          },
+          {
+            "id": "c2",
+            "lengthTicks": 3840,
+            "patternId": "hit",
+            "startTick": 276480
+          },
+          {
+            "id": "c3",
+            "lengthTicks": 3840,
+            "patternId": "hit",
+            "startTick": 307200
+          },
+          {
+            "id": "c4",
+            "lengthTicks": 3840,
+            "patternId": "hit",
+            "startTick": 675840
+          },
+          {
+            "id": "c5",
+            "lengthTicks": 3840,
+            "patternId": "hit",
+            "startTick": 737280
+          }
+        ],
+        "effects": [],
+        "id": "impact",
+        "instrument": {
+          "kind": "none"
+        },
+        "mix": {
+          "gainDb": 0.0,
+          "mute": false,
+          "pan": 0.0,
+          "solo": false
+        },
+        "name": "Impacts",
+        "patterns": [
+          {
+            "id": "hit",
+            "lengthTicks": 3840,
+            "name": "Hit",
+            "notes": [
+              {
+                "id": "n1",
+                "length": 1920,
+                "pitch": 36,
+                "tick": 0,
+                "velocity": 0.95
+              }
+            ]
+          }
+        ],
+        "role": "kick"
+      },
+      {
+        "automation": [],
+        "clips": [
+          {
+            "id": "c1",
+            "lengthTicks": 3840,
+            "patternId": "hit",
+            "startTick": 30720
+          },
+          {
+            "id": "c2",
+            "lengthTicks": 3840,
+            "patternId": "hit",
+            "startTick": 307200
+          },
+          {
+            "id": "c3",
+            "lengthTicks": 3840,
+            "patternId": "hit",
+            "startTick": 737280
+          },
+          {
+            "id": "c4",
+            "lengthTicks": 3840,
+            "patternId": "hit",
+            "startTick": 153600
+          },
+          {
+            "id": "c5",
+            "lengthTicks": 3840,
+            "patternId": "hit",
+            "startTick": 522240
+          },
+          {
+            "id": "c6",
+            "lengthTicks": 3840,
+            "patternId": "hit",
+            "startTick": 860160
+          },
+          {
+            "id": "c7",
+            "lengthTicks": 3840,
+            "patternId": "hit",
+            "startTick": 983040
+          }
+        ],
+        "effects": [],
+        "id": "crash",
+        "instrument": {
+          "kind": "none"
+        },
+        "mix": {
+          "gainDb": 0.0,
+          "mute": false,
+          "pan": 0.0,
+          "sends": [
+            {
+              "gainDb": -41.6,
+              "id": "space",
+              "pre": false,
+              "to": "space"
+            }
+          ],
+          "solo": false
+        },
+        "name": "Crash",
+        "patterns": [
+          {
+            "id": "hit",
+            "lengthTicks": 3840,
+            "name": "Hit",
+            "notes": [
+              {
+                "id": "n1",
+                "length": 1920,
+                "pitch": 46,
+                "tick": 0,
+                "velocity": 0.95
+              }
+            ]
+          }
+        ],
+        "role": "drums"
+      },
+      {
+        "automation": [],
+        "clips": [
+          {
+            "attachEdge": 7680,
+            "attachEnd": "Ping-pong",
+            "attachStart": "Open",
+            "id": "c1",
+            "lengthTicks": 61440,
+            "patternId": "phrase-b",
+            "startTick": 184320
+          },
+          {
+            "attachEdge": 3840,
+            "attachEnd": "Echo",
+            "id": "c2",
+            "lengthTicks": 30720,
+            "patternId": "phrase-a",
+            "startTick": 245760
+          },
+          {
+            "attachEdge": 7680,
+            "attachEnd": "Ping-pong",
+            "attachMiddle": "Texture",
+            "attachStart": "Open",
+            "id": "c3",
+            "lengthTicks": 30720,
+            "patternId": "phrase-a",
+            "startTick": 276480
+          },
+          {
+            "attachEdge": 3840,
+            "attachEnd": "Echo",
+            "id": "c4",
+            "lengthTicks": 61440,
+            "patternId": "phrase-b",
+            "startTick": 430080
+          },
+          {
+            "attachEdge": 7680,
+            "attachEnd": "Ping-pong",
+            "attachStart": "Open",
+            "id": "c5",
+            "lengthTicks": 30720,
+            "patternId": "phrase-a",
+            "startTick": 491520
+          },
+          {
+            "attachEdge": 3840,
+            "attachEnd": "Echo",
+            "attachMiddle": "Texture",
+            "id": "c6",
+            "lengthTicks": 61440,
+            "patternId": "phrase-b",
+            "startTick": 583680
+          },
+          {
+            "attachEdge": 7680,
+            "attachEnd": "Ping-pong",
+            "attachStart": "Open",
+            "id": "c7",
+            "lengthTicks": 30720,
+            "patternId": "phrase-a",
+            "startTick": 645120
+          },
+          {
+            "attachEdge": 3840,
+            "attachEnd": "Echo",
+            "id": "c8",
+            "lengthTicks": 61440,
+            "patternId": "phrase-b",
+            "startTick": 675840
+          },
+          {
+            "attachEdge": 7680,
+            "attachEnd": "Ping-pong",
+            "attachMiddle": "Texture",
+            "attachStart": "Open",
+            "id": "c9",
+            "lengthTicks": 61440,
+            "patternId": "phrase-b",
+            "startTick": 798720
+          },
+          {
+            "attachEdge": 3840,
+            "attachEnd": "Echo",
+            "id": "c10",
+            "lengthTicks": 61440,
+            "patternId": "phrase-a",
+            "startTick": 860160
+          },
+          {
+            "attachEdge": 7680,
+            "attachEnd": "Ping-pong",
+            "attachStart": "Open",
+            "id": "c11",
+            "lengthTicks": 61440,
+            "patternId": "phrase-a",
+            "startTick": 983040
+          },
+          {
+            "attachEdge": 3840,
+            "attachEnd": "Echo",
+            "attachMiddle": "Texture",
+            "id": "c12",
+            "lengthTicks": 61440,
+            "patternId": "phrase-b",
+            "startTick": 1044480
+          }
+        ],
+        "effects": [],
+        "id": "lead",
+        "instrument": {
+          "kind": "none"
+        },
+        "mix": {
+          "gainDb": 0.0,
+          "mute": false,
+          "pan": 0.0,
+          "solo": false
+        },
+        "name": "Lead",
+        "patterns": [
+          {
+            "id": "phrase-a",
+            "lengthTicks": 61440,
+            "name": "Phrase A (16 bars)",
+            "notes": [
+              {
+                "id": "ph1",
+                "length": 132,
+                "pitch": 57,
+                "tick": 0,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph2",
+                "length": 132,
+                "pitch": 70,
+                "tick": 480,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph3",
+                "length": 132,
+                "pitch": 58,
+                "tick": 720,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph4",
+                "length": 132,
+                "pitch": 69,
+                "tick": 960,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph5",
+                "length": 132,
+                "pitch": 63,
+                "tick": 1200,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph6",
+                "length": 132,
+                "pitch": 57,
+                "tick": 1680,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph7",
+                "length": 132,
+                "pitch": 70,
+                "tick": 2160,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph8",
+                "length": 132,
+                "pitch": 58,
+                "tick": 2400,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph9",
+                "length": 132,
+                "pitch": 63,
+                "tick": 2880,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph10",
+                "length": 132,
+                "pitch": 57,
+                "tick": 3360,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph11",
+                "length": 132,
+                "pitch": 70,
+                "tick": 3840,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph12",
+                "length": 132,
+                "pitch": 58,
+                "tick": 4080,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph13",
+                "length": 132,
+                "pitch": 63,
+                "tick": 4560,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph14",
+                "length": 132,
+                "pitch": 57,
+                "tick": 5040,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph15",
+                "length": 132,
+                "pitch": 70,
+                "tick": 5520,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph16",
+                "length": 132,
+                "pitch": 58,
+                "tick": 5760,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph17",
+                "length": 132,
+                "pitch": 63,
+                "tick": 6240,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph18",
+                "length": 132,
+                "pitch": 57,
+                "tick": 6720,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph19",
+                "length": 132,
+                "pitch": 69,
+                "tick": 6960,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph20",
+                "length": 132,
+                "pitch": 70,
+                "tick": 7200,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph21",
+                "length": 132,
+                "pitch": 58,
+                "tick": 7440,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph22",
+                "length": 132,
+                "pitch": 57,
+                "tick": 7680,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph23",
+                "length": 132,
+                "pitch": 70,
+                "tick": 8160,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph24",
+                "length": 132,
+                "pitch": 58,
+                "tick": 8400,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph25",
+                "length": 132,
+                "pitch": 69,
+                "tick": 8640,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph26",
+                "length": 132,
+                "pitch": 63,
+                "tick": 8880,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph27",
+                "length": 132,
+                "pitch": 57,
+                "tick": 9360,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph28",
+                "length": 132,
+                "pitch": 70,
+                "tick": 9840,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph29",
+                "length": 132,
+                "pitch": 58,
+                "tick": 10080,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph30",
+                "length": 132,
+                "pitch": 63,
+                "tick": 10560,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph31",
+                "length": 132,
+                "pitch": 57,
+                "tick": 11040,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph32",
+                "length": 132,
+                "pitch": 70,
+                "tick": 11520,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph33",
+                "length": 132,
+                "pitch": 58,
+                "tick": 11760,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph34",
+                "length": 132,
+                "pitch": 63,
+                "tick": 12240,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph35",
+                "length": 132,
+                "pitch": 57,
+                "tick": 12720,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph36",
+                "length": 132,
+                "pitch": 70,
+                "tick": 13200,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph37",
+                "length": 132,
+                "pitch": 58,
+                "tick": 13440,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph38",
+                "length": 132,
+                "pitch": 63,
+                "tick": 13920,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph39",
+                "length": 66,
+                "pitch": 57,
+                "tick": 14400,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph40",
+                "length": 66,
+                "pitch": 57,
+                "tick": 14520,
+                "velocity": 0.6
+              },
+              {
+                "id": "ph41",
+                "length": 132,
+                "pitch": 69,
+                "tick": 14640,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph42",
+                "length": 66,
+                "pitch": 70,
+                "tick": 14880,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph43",
+                "length": 66,
+                "pitch": 70,
+                "tick": 15000,
+                "velocity": 0.6
+              },
+              {
+                "id": "ph44",
+                "length": 132,
+                "pitch": 58,
+                "tick": 15120,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph45",
+                "length": 132,
+                "pitch": 57,
+                "tick": 15360,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph46",
+                "length": 132,
+                "pitch": 70,
+                "tick": 15840,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph47",
+                "length": 132,
+                "pitch": 58,
+                "tick": 16080,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph48",
+                "length": 132,
+                "pitch": 69,
+                "tick": 16320,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph49",
+                "length": 132,
+                "pitch": 63,
+                "tick": 16560,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph50",
+                "length": 132,
+                "pitch": 57,
+                "tick": 17040,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph51",
+                "length": 132,
+                "pitch": 70,
+                "tick": 17520,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph52",
+                "length": 132,
+                "pitch": 58,
+                "tick": 17760,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph53",
+                "length": 132,
+                "pitch": 63,
+                "tick": 18240,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph54",
+                "length": 132,
+                "pitch": 57,
+                "tick": 18720,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph55",
+                "length": 132,
+                "pitch": 70,
+                "tick": 19200,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph56",
+                "length": 132,
+                "pitch": 58,
+                "tick": 19440,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph57",
+                "length": 132,
+                "pitch": 63,
+                "tick": 19920,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph58",
+                "length": 132,
+                "pitch": 57,
+                "tick": 20400,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph59",
+                "length": 132,
+                "pitch": 70,
+                "tick": 20880,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph60",
+                "length": 132,
+                "pitch": 58,
+                "tick": 21120,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph61",
+                "length": 132,
+                "pitch": 63,
+                "tick": 21600,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph62",
+                "length": 132,
+                "pitch": 57,
+                "tick": 22080,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph63",
+                "length": 132,
+                "pitch": 69,
+                "tick": 22320,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph64",
+                "length": 132,
+                "pitch": 70,
+                "tick": 22560,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph65",
+                "length": 132,
+                "pitch": 58,
+                "tick": 22800,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph66",
+                "length": 132,
+                "pitch": 62,
+                "tick": 23040,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph67",
+                "length": 132,
+                "pitch": 75,
+                "tick": 23520,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph68",
+                "length": 132,
+                "pitch": 63,
+                "tick": 23760,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph69",
+                "length": 132,
+                "pitch": 74,
+                "tick": 24000,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph70",
+                "length": 132,
+                "pitch": 68,
+                "tick": 24240,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph71",
+                "length": 132,
+                "pitch": 62,
+                "tick": 24720,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph72",
+                "length": 132,
+                "pitch": 75,
+                "tick": 25200,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph73",
+                "length": 132,
+                "pitch": 63,
+                "tick": 25440,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph74",
+                "length": 132,
+                "pitch": 68,
+                "tick": 25920,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph75",
+                "length": 132,
+                "pitch": 62,
+                "tick": 26400,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph76",
+                "length": 132,
+                "pitch": 75,
+                "tick": 26880,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph77",
+                "length": 132,
+                "pitch": 63,
+                "tick": 27120,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph78",
+                "length": 132,
+                "pitch": 68,
+                "tick": 27600,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph79",
+                "length": 132,
+                "pitch": 62,
+                "tick": 28080,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph80",
+                "length": 132,
+                "pitch": 75,
+                "tick": 28560,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph81",
+                "length": 132,
+                "pitch": 63,
+                "tick": 28800,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph82",
+                "length": 132,
+                "pitch": 68,
+                "tick": 29280,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph83",
+                "length": 66,
+                "pitch": 62,
+                "tick": 29760,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph84",
+                "length": 66,
+                "pitch": 62,
+                "tick": 29880,
+                "velocity": 0.6
+              },
+              {
+                "id": "ph85",
+                "length": 132,
+                "pitch": 74,
+                "tick": 30000,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph86",
+                "length": 66,
+                "pitch": 75,
+                "tick": 30240,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph87",
+                "length": 66,
+                "pitch": 75,
+                "tick": 30360,
+                "velocity": 0.6
+              },
+              {
+                "id": "ph88",
+                "length": 132,
+                "pitch": 63,
+                "tick": 30480,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph89",
+                "length": 132,
+                "pitch": 57,
+                "tick": 30720,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph90",
+                "length": 132,
+                "pitch": 69,
+                "tick": 30960,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph91",
+                "length": 132,
+                "pitch": 70,
+                "tick": 31200,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph92",
+                "length": 132,
+                "pitch": 63,
+                "tick": 31440,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph93",
+                "length": 132,
+                "pitch": 58,
+                "tick": 32160,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph94",
+                "length": 132,
+                "pitch": 57,
+                "tick": 32400,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph95",
+                "length": 132,
+                "pitch": 69,
+                "tick": 32640,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph96",
+                "length": 132,
+                "pitch": 63,
+                "tick": 33120,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph97",
+                "length": 132,
+                "pitch": 70,
+                "tick": 33600,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph98",
+                "length": 132,
+                "pitch": 58,
+                "tick": 33840,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph99",
+                "length": 132,
+                "pitch": 57,
+                "tick": 34080,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph100",
+                "length": 132,
+                "pitch": 69,
+                "tick": 34320,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph101",
+                "length": 132,
+                "pitch": 63,
+                "tick": 34800,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph102",
+                "length": 132,
+                "pitch": 58,
+                "tick": 35520,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph103",
+                "length": 132,
+                "pitch": 57,
+                "tick": 35760,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph104",
+                "length": 132,
+                "pitch": 69,
+                "tick": 36000,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph105",
+                "length": 132,
+                "pitch": 63,
+                "tick": 36480,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph106",
+                "length": 132,
+                "pitch": 58,
+                "tick": 37200,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph107",
+                "length": 132,
+                "pitch": 57,
+                "tick": 37440,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph108",
+                "length": 132,
+                "pitch": 69,
+                "tick": 37680,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph109",
+                "length": 132,
+                "pitch": 63,
+                "tick": 38160,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph110",
+                "length": 132,
+                "pitch": 57,
+                "tick": 38400,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph111",
+                "length": 132,
+                "pitch": 69,
+                "tick": 38640,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph112",
+                "length": 132,
+                "pitch": 70,
+                "tick": 38880,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph113",
+                "length": 132,
+                "pitch": 63,
+                "tick": 39120,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph114",
+                "length": 132,
+                "pitch": 58,
+                "tick": 39840,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph115",
+                "length": 132,
+                "pitch": 57,
+                "tick": 40080,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph116",
+                "length": 132,
+                "pitch": 69,
+                "tick": 40320,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph117",
+                "length": 132,
+                "pitch": 63,
+                "tick": 40800,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph118",
+                "length": 132,
+                "pitch": 70,
+                "tick": 41280,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph119",
+                "length": 132,
+                "pitch": 58,
+                "tick": 41520,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph120",
+                "length": 132,
+                "pitch": 57,
+                "tick": 41760,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph121",
+                "length": 132,
+                "pitch": 69,
+                "tick": 42000,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph122",
+                "length": 132,
+                "pitch": 63,
+                "tick": 42480,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph123",
+                "length": 132,
+                "pitch": 58,
+                "tick": 43200,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph124",
+                "length": 132,
+                "pitch": 57,
+                "tick": 43440,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph125",
+                "length": 132,
+                "pitch": 69,
+                "tick": 43680,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph126",
+                "length": 132,
+                "pitch": 63,
+                "tick": 44160,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph127",
+                "length": 132,
+                "pitch": 58,
+                "tick": 44880,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph128",
+                "length": 66,
+                "pitch": 57,
+                "tick": 45120,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph129",
+                "length": 66,
+                "pitch": 57,
+                "tick": 45240,
+                "velocity": 0.6
+              },
+              {
+                "id": "ph130",
+                "length": 132,
+                "pitch": 69,
+                "tick": 45360,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph131",
+                "length": 132,
+                "pitch": 63,
+                "tick": 45840,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph132",
+                "length": 132,
+                "pitch": 69,
+                "tick": 46080,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph133",
+                "length": 132,
+                "pitch": 58,
+                "tick": 46560,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph134",
+                "length": 132,
+                "pitch": 70,
+                "tick": 46800,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph135",
+                "length": 132,
+                "pitch": 57,
+                "tick": 47040,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph136",
+                "length": 132,
+                "pitch": 75,
+                "tick": 47280,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph137",
+                "length": 132,
+                "pitch": 69,
+                "tick": 47760,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph138",
+                "length": 132,
+                "pitch": 58,
+                "tick": 48240,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph139",
+                "length": 132,
+                "pitch": 70,
+                "tick": 48480,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph140",
+                "length": 132,
+                "pitch": 75,
+                "tick": 48960,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph141",
+                "length": 132,
+                "pitch": 69,
+                "tick": 49440,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph142",
+                "length": 132,
+                "pitch": 58,
+                "tick": 49920,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph143",
+                "length": 132,
+                "pitch": 70,
+                "tick": 50160,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph144",
+                "length": 132,
+                "pitch": 75,
+                "tick": 50640,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph145",
+                "length": 132,
+                "pitch": 69,
+                "tick": 51120,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph146",
+                "length": 132,
+                "pitch": 58,
+                "tick": 51600,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph147",
+                "length": 132,
+                "pitch": 70,
+                "tick": 51840,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph148",
+                "length": 132,
+                "pitch": 75,
+                "tick": 52320,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph149",
+                "length": 132,
+                "pitch": 69,
+                "tick": 52800,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph150",
+                "length": 132,
+                "pitch": 57,
+                "tick": 53040,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph151",
+                "length": 132,
+                "pitch": 58,
+                "tick": 53280,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph152",
+                "length": 132,
+                "pitch": 70,
+                "tick": 53520,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph153",
+                "length": 132,
+                "pitch": 57,
+                "tick": 53760,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph154",
+                "length": 132,
+                "pitch": 70,
+                "tick": 54240,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph155",
+                "length": 132,
+                "pitch": 58,
+                "tick": 54480,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph156",
+                "length": 132,
+                "pitch": 69,
+                "tick": 54720,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph157",
+                "length": 132,
+                "pitch": 63,
+                "tick": 54960,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph158",
+                "length": 132,
+                "pitch": 57,
+                "tick": 55440,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph159",
+                "length": 132,
+                "pitch": 70,
+                "tick": 55920,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph160",
+                "length": 66,
+                "pitch": 58,
+                "tick": 56160,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph161",
+                "length": 66,
+                "pitch": 58,
+                "tick": 56280,
+                "velocity": 0.6
+              },
+              {
+                "id": "ph162",
+                "length": 66,
+                "pitch": 63,
+                "tick": 56640,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph163",
+                "length": 66,
+                "pitch": 63,
+                "tick": 56760,
+                "velocity": 0.6
+              },
+              {
+                "id": "ph164",
+                "length": 66,
+                "pitch": 57,
+                "tick": 57120,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph165",
+                "length": 66,
+                "pitch": 57,
+                "tick": 57240,
+                "velocity": 0.6
+              },
+              {
+                "id": "ph166",
+                "length": 132,
+                "pitch": 57,
+                "tick": 57600,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph167",
+                "length": 132,
+                "pitch": 60,
+                "tick": 58080,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph168",
+                "length": 132,
+                "pitch": 62,
+                "tick": 58560,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph169",
+                "length": 132,
+                "pitch": 64,
+                "tick": 58800,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph170",
+                "length": 132,
+                "pitch": 65,
+                "tick": 59280,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph171",
+                "length": 132,
+                "pitch": 67,
+                "tick": 59520,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph172",
+                "length": 132,
+                "pitch": 69,
+                "tick": 60000,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph173",
+                "length": 66,
+                "pitch": 70,
+                "tick": 60480,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph174",
+                "length": 66,
+                "pitch": 70,
+                "tick": 60600,
+                "velocity": 0.6
+              },
+              {
+                "id": "ph175",
+                "length": 132,
+                "pitch": 72,
+                "tick": 60720,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph176",
+                "length": 66,
+                "pitch": 74,
+                "tick": 60960,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph177",
+                "length": 66,
+                "pitch": 74,
+                "tick": 61080,
+                "velocity": 0.6
+              },
+              {
+                "id": "ph178",
+                "length": 66,
+                "pitch": 76,
+                "tick": 61200,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph179",
+                "length": 66,
+                "pitch": 76,
+                "tick": 61320,
+                "velocity": 0.6
+              }
+            ]
+          },
+          {
+            "id": "phrase-b",
+            "lengthTicks": 61440,
+            "name": "Phrase B (16 bars)",
+            "notes": [
+              {
+                "id": "ph1",
+                "length": 132,
+                "pitch": 57,
+                "tick": 0,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph2",
+                "length": 132,
+                "pitch": 69,
+                "tick": 240,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph3",
+                "length": 132,
+                "pitch": 70,
+                "tick": 480,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph4",
+                "length": 132,
+                "pitch": 63,
+                "tick": 720,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph5",
+                "length": 132,
+                "pitch": 58,
+                "tick": 1440,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph6",
+                "length": 132,
+                "pitch": 57,
+                "tick": 1680,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph7",
+                "length": 132,
+                "pitch": 69,
+                "tick": 1920,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph8",
+                "length": 132,
+                "pitch": 63,
+                "tick": 2400,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph9",
+                "length": 132,
+                "pitch": 70,
+                "tick": 2880,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph10",
+                "length": 132,
+                "pitch": 58,
+                "tick": 3120,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph11",
+                "length": 132,
+                "pitch": 57,
+                "tick": 3360,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph12",
+                "length": 132,
+                "pitch": 69,
+                "tick": 3600,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph13",
+                "length": 132,
+                "pitch": 63,
+                "tick": 4080,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph14",
+                "length": 132,
+                "pitch": 58,
+                "tick": 4800,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph15",
+                "length": 132,
+                "pitch": 57,
+                "tick": 5040,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph16",
+                "length": 132,
+                "pitch": 69,
+                "tick": 5280,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph17",
+                "length": 132,
+                "pitch": 63,
+                "tick": 5760,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph18",
+                "length": 132,
+                "pitch": 58,
+                "tick": 6480,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph19",
+                "length": 132,
+                "pitch": 57,
+                "tick": 6720,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph20",
+                "length": 132,
+                "pitch": 69,
+                "tick": 6960,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph21",
+                "length": 132,
+                "pitch": 63,
+                "tick": 7440,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph22",
+                "length": 132,
+                "pitch": 57,
+                "tick": 7680,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph23",
+                "length": 132,
+                "pitch": 69,
+                "tick": 7920,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph24",
+                "length": 132,
+                "pitch": 70,
+                "tick": 8160,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph25",
+                "length": 132,
+                "pitch": 63,
+                "tick": 8400,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph26",
+                "length": 132,
+                "pitch": 58,
+                "tick": 9120,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph27",
+                "length": 132,
+                "pitch": 57,
+                "tick": 9360,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph28",
+                "length": 132,
+                "pitch": 69,
+                "tick": 9600,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph29",
+                "length": 132,
+                "pitch": 63,
+                "tick": 10080,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph30",
+                "length": 132,
+                "pitch": 70,
+                "tick": 10560,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph31",
+                "length": 132,
+                "pitch": 58,
+                "tick": 10800,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph32",
+                "length": 132,
+                "pitch": 57,
+                "tick": 11040,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph33",
+                "length": 132,
+                "pitch": 69,
+                "tick": 11280,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph34",
+                "length": 132,
+                "pitch": 63,
+                "tick": 11760,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph35",
+                "length": 132,
+                "pitch": 58,
+                "tick": 12480,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph36",
+                "length": 132,
+                "pitch": 57,
+                "tick": 12720,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph37",
+                "length": 132,
+                "pitch": 69,
+                "tick": 12960,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph38",
+                "length": 132,
+                "pitch": 63,
+                "tick": 13440,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph39",
+                "length": 132,
+                "pitch": 58,
+                "tick": 14160,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph40",
+                "length": 66,
+                "pitch": 57,
+                "tick": 14400,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph41",
+                "length": 66,
+                "pitch": 57,
+                "tick": 14520,
+                "velocity": 0.6
+              },
+              {
+                "id": "ph42",
+                "length": 132,
+                "pitch": 69,
+                "tick": 14640,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph43",
+                "length": 132,
+                "pitch": 63,
+                "tick": 15120,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph44",
+                "length": 132,
+                "pitch": 64,
+                "tick": 15360,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph45",
+                "length": 132,
+                "pitch": 76,
+                "tick": 15600,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph46",
+                "length": 132,
+                "pitch": 77,
+                "tick": 15840,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph47",
+                "length": 132,
+                "pitch": 70,
+                "tick": 16080,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph48",
+                "length": 132,
+                "pitch": 65,
+                "tick": 16800,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph49",
+                "length": 132,
+                "pitch": 64,
+                "tick": 17040,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph50",
+                "length": 132,
+                "pitch": 76,
+                "tick": 17280,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph51",
+                "length": 132,
+                "pitch": 70,
+                "tick": 17760,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph52",
+                "length": 132,
+                "pitch": 77,
+                "tick": 18240,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph53",
+                "length": 132,
+                "pitch": 65,
+                "tick": 18480,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph54",
+                "length": 132,
+                "pitch": 64,
+                "tick": 18720,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph55",
+                "length": 132,
+                "pitch": 76,
+                "tick": 18960,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph56",
+                "length": 132,
+                "pitch": 70,
+                "tick": 19440,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph57",
+                "length": 132,
+                "pitch": 65,
+                "tick": 20160,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph58",
+                "length": 132,
+                "pitch": 64,
+                "tick": 20400,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph59",
+                "length": 132,
+                "pitch": 76,
+                "tick": 20640,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph60",
+                "length": 132,
+                "pitch": 70,
+                "tick": 21120,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph61",
+                "length": 132,
+                "pitch": 65,
+                "tick": 21840,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph62",
+                "length": 132,
+                "pitch": 64,
+                "tick": 22080,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph63",
+                "length": 132,
+                "pitch": 76,
+                "tick": 22320,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph64",
+                "length": 132,
+                "pitch": 70,
+                "tick": 22800,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph65",
+                "length": 132,
+                "pitch": 57,
+                "tick": 23040,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph66",
+                "length": 132,
+                "pitch": 69,
+                "tick": 23280,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph67",
+                "length": 132,
+                "pitch": 70,
+                "tick": 23520,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph68",
+                "length": 132,
+                "pitch": 63,
+                "tick": 23760,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph69",
+                "length": 132,
+                "pitch": 58,
+                "tick": 24480,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph70",
+                "length": 132,
+                "pitch": 57,
+                "tick": 24720,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph71",
+                "length": 132,
+                "pitch": 69,
+                "tick": 24960,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph72",
+                "length": 132,
+                "pitch": 63,
+                "tick": 25440,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph73",
+                "length": 132,
+                "pitch": 70,
+                "tick": 25920,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph74",
+                "length": 132,
+                "pitch": 58,
+                "tick": 26160,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph75",
+                "length": 132,
+                "pitch": 57,
+                "tick": 26400,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph76",
+                "length": 132,
+                "pitch": 69,
+                "tick": 26640,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph77",
+                "length": 132,
+                "pitch": 63,
+                "tick": 27120,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph78",
+                "length": 132,
+                "pitch": 58,
+                "tick": 27840,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph79",
+                "length": 132,
+                "pitch": 57,
+                "tick": 28080,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph80",
+                "length": 132,
+                "pitch": 69,
+                "tick": 28320,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph81",
+                "length": 132,
+                "pitch": 63,
+                "tick": 28800,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph82",
+                "length": 132,
+                "pitch": 58,
+                "tick": 29520,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph83",
+                "length": 66,
+                "pitch": 57,
+                "tick": 29760,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph84",
+                "length": 66,
+                "pitch": 57,
+                "tick": 29880,
+                "velocity": 0.6
+              },
+              {
+                "id": "ph85",
+                "length": 132,
+                "pitch": 69,
+                "tick": 30000,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph86",
+                "length": 132,
+                "pitch": 63,
+                "tick": 30480,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph87",
+                "length": 132,
+                "pitch": 57,
+                "tick": 30720,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph88",
+                "length": 132,
+                "pitch": 70,
+                "tick": 31200,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph89",
+                "length": 132,
+                "pitch": 58,
+                "tick": 31440,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph90",
+                "length": 132,
+                "pitch": 69,
+                "tick": 31680,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph91",
+                "length": 132,
+                "pitch": 63,
+                "tick": 31920,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph92",
+                "length": 132,
+                "pitch": 57,
+                "tick": 32400,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph93",
+                "length": 132,
+                "pitch": 70,
+                "tick": 32880,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph94",
+                "length": 132,
+                "pitch": 58,
+                "tick": 33120,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph95",
+                "length": 132,
+                "pitch": 63,
+                "tick": 33600,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph96",
+                "length": 132,
+                "pitch": 57,
+                "tick": 34080,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph97",
+                "length": 132,
+                "pitch": 70,
+                "tick": 34560,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph98",
+                "length": 132,
+                "pitch": 58,
+                "tick": 34800,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph99",
+                "length": 132,
+                "pitch": 63,
+                "tick": 35280,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph100",
+                "length": 132,
+                "pitch": 57,
+                "tick": 35760,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph101",
+                "length": 132,
+                "pitch": 70,
+                "tick": 36240,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph102",
+                "length": 132,
+                "pitch": 58,
+                "tick": 36480,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph103",
+                "length": 132,
+                "pitch": 63,
+                "tick": 36960,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph104",
+                "length": 132,
+                "pitch": 57,
+                "tick": 37440,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph105",
+                "length": 132,
+                "pitch": 69,
+                "tick": 37680,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph106",
+                "length": 132,
+                "pitch": 70,
+                "tick": 37920,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph107",
+                "length": 132,
+                "pitch": 58,
+                "tick": 38160,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph108",
+                "length": 132,
+                "pitch": 69,
+                "tick": 38400,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph109",
+                "length": 132,
+                "pitch": 58,
+                "tick": 38880,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph110",
+                "length": 132,
+                "pitch": 70,
+                "tick": 39120,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph111",
+                "length": 132,
+                "pitch": 57,
+                "tick": 39360,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph112",
+                "length": 132,
+                "pitch": 75,
+                "tick": 39600,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph113",
+                "length": 132,
+                "pitch": 69,
+                "tick": 40080,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph114",
+                "length": 132,
+                "pitch": 58,
+                "tick": 40560,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph115",
+                "length": 132,
+                "pitch": 70,
+                "tick": 40800,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph116",
+                "length": 132,
+                "pitch": 75,
+                "tick": 41280,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph117",
+                "length": 132,
+                "pitch": 69,
+                "tick": 41760,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph118",
+                "length": 132,
+                "pitch": 70,
+                "tick": 42240,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph119",
+                "length": 132,
+                "pitch": 58,
+                "tick": 42480,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph120",
+                "length": 132,
+                "pitch": 63,
+                "tick": 42960,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph121",
+                "length": 132,
+                "pitch": 57,
+                "tick": 43440,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph122",
+                "length": 132,
+                "pitch": 70,
+                "tick": 43920,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph123",
+                "length": 132,
+                "pitch": 58,
+                "tick": 44160,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph124",
+                "length": 132,
+                "pitch": 63,
+                "tick": 44640,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph125",
+                "length": 66,
+                "pitch": 57,
+                "tick": 45120,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph126",
+                "length": 66,
+                "pitch": 57,
+                "tick": 45240,
+                "velocity": 0.6
+              },
+              {
+                "id": "ph127",
+                "length": 132,
+                "pitch": 69,
+                "tick": 45360,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph128",
+                "length": 66,
+                "pitch": 70,
+                "tick": 45600,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph129",
+                "length": 66,
+                "pitch": 70,
+                "tick": 45720,
+                "velocity": 0.6
+              },
+              {
+                "id": "ph130",
+                "length": 132,
+                "pitch": 58,
+                "tick": 45840,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph131",
+                "length": 132,
+                "pitch": 57,
+                "tick": 46080,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph132",
+                "length": 132,
+                "pitch": 70,
+                "tick": 46560,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph133",
+                "length": 132,
+                "pitch": 58,
+                "tick": 46800,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph134",
+                "length": 132,
+                "pitch": 69,
+                "tick": 47040,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph135",
+                "length": 132,
+                "pitch": 63,
+                "tick": 47280,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph136",
+                "length": 132,
+                "pitch": 57,
+                "tick": 47760,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph137",
+                "length": 132,
+                "pitch": 70,
+                "tick": 48240,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph138",
+                "length": 132,
+                "pitch": 58,
+                "tick": 48480,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph139",
+                "length": 132,
+                "pitch": 63,
+                "tick": 48960,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph140",
+                "length": 132,
+                "pitch": 57,
+                "tick": 49440,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph141",
+                "length": 132,
+                "pitch": 75,
+                "tick": 49920,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph142",
+                "length": 132,
+                "pitch": 63,
+                "tick": 50160,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph143",
+                "length": 132,
+                "pitch": 68,
+                "tick": 50640,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph144",
+                "length": 132,
+                "pitch": 62,
+                "tick": 51120,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph145",
+                "length": 132,
+                "pitch": 75,
+                "tick": 51600,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph146",
+                "length": 132,
+                "pitch": 63,
+                "tick": 51840,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph147",
+                "length": 132,
+                "pitch": 68,
+                "tick": 52320,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph148",
+                "length": 132,
+                "pitch": 62,
+                "tick": 52800,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph149",
+                "length": 132,
+                "pitch": 74,
+                "tick": 53040,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph150",
+                "length": 132,
+                "pitch": 75,
+                "tick": 53280,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph151",
+                "length": 132,
+                "pitch": 63,
+                "tick": 53520,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph152",
+                "length": 132,
+                "pitch": 69,
+                "tick": 53760,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph153",
+                "length": 132,
+                "pitch": 58,
+                "tick": 54240,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph154",
+                "length": 132,
+                "pitch": 70,
+                "tick": 54480,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph155",
+                "length": 132,
+                "pitch": 57,
+                "tick": 54720,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph156",
+                "length": 132,
+                "pitch": 75,
+                "tick": 54960,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph157",
+                "length": 132,
+                "pitch": 69,
+                "tick": 55440,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph158",
+                "length": 132,
+                "pitch": 58,
+                "tick": 55920,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph159",
+                "length": 66,
+                "pitch": 70,
+                "tick": 56160,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph160",
+                "length": 66,
+                "pitch": 70,
+                "tick": 56280,
+                "velocity": 0.6
+              },
+              {
+                "id": "ph161",
+                "length": 66,
+                "pitch": 75,
+                "tick": 56640,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph162",
+                "length": 66,
+                "pitch": 75,
+                "tick": 56760,
+                "velocity": 0.6
+              },
+              {
+                "id": "ph163",
+                "length": 66,
+                "pitch": 69,
+                "tick": 57120,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph164",
+                "length": 66,
+                "pitch": 69,
+                "tick": 57240,
+                "velocity": 0.6
+              },
+              {
+                "id": "ph165",
+                "length": 132,
+                "pitch": 81,
+                "tick": 57600,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph166",
+                "length": 132,
+                "pitch": 79,
+                "tick": 58080,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph167",
+                "length": 132,
+                "pitch": 77,
+                "tick": 58320,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph168",
+                "length": 132,
+                "pitch": 76,
+                "tick": 58800,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph169",
+                "length": 132,
+                "pitch": 74,
+                "tick": 59040,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph170",
+                "length": 132,
+                "pitch": 72,
+                "tick": 59520,
+                "velocity": 0.95
+              },
+              {
+                "id": "ph171",
+                "length": 66,
+                "pitch": 70,
+                "tick": 60000,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph172",
+                "length": 66,
+                "pitch": 70,
+                "tick": 60120,
+                "velocity": 0.6
+              },
+              {
+                "id": "ph173",
+                "length": 132,
+                "pitch": 69,
+                "tick": 60240,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph174",
+                "length": 66,
+                "pitch": 67,
+                "tick": 60720,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph175",
+                "length": 66,
+                "pitch": 67,
+                "tick": 60840,
+                "velocity": 0.6
+              },
+              {
+                "id": "ph176",
+                "length": 66,
+                "pitch": 65,
+                "tick": 60960,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph177",
+                "length": 66,
+                "pitch": 65,
+                "tick": 61080,
+                "velocity": 0.6
+              },
+              {
+                "id": "ph178",
+                "length": 66,
+                "pitch": 64,
+                "tick": 61200,
+                "velocity": 0.75
+              },
+              {
+                "id": "ph179",
+                "length": 66,
+                "pitch": 64,
+                "tick": 61320,
+                "velocity": 0.6
+              }
+            ]
+          }
+        ],
+        "role": "lead"
+      },
+      {
+        "automation": [],
+        "clips": [
+          {
+            "attachEdge": 7680,
+            "attachEnd": "Flanger jet",
+            "id": "c1",
+            "lengthTicks": 61440,
+            "patternId": "answer",
+            "startTick": 92160
+          },
+          {
+            "attachEdge": 7680,
+            "attachEnd": "Flanger jet",
+            "id": "c2",
+            "lengthTicks": 30720,
+            "patternId": "answer",
+            "startTick": 153600
+          },
+          {
+            "attachEdge": 7680,
+            "attachEnd": "Flanger jet",
+            "id": "c3",
+            "lengthTicks": 61440,
+            "patternId": "answer",
+            "startTick": 368640
+          },
+          {
+            "attachEdge": 7680,
+            "attachEnd": "Flanger jet",
+            "id": "c4",
+            "lengthTicks": 30720,
+            "patternId": "answer",
+            "startTick": 522240
+          },
+          {
+            "attachEdge": 7680,
+            "attachEnd": "Flanger jet",
+            "id": "c5",
+            "lengthTicks": 30720,
+            "patternId": "answer",
+            "startTick": 552960
+          },
+          {
+            "attachEdge": 7680,
+            "attachEnd": "Flanger jet",
+            "id": "c6",
+            "lengthTicks": 61440,
+            "patternId": "answer",
+            "startTick": 921600
+          }
+        ],
+        "effects": [],
+        "id": "fm",
+        "instrument": {
+          "kind": "none"
+        },
+        "mix": {
+          "gainDb": 0.0,
+          "mute": false,
+          "pan": 0.0,
+          "solo": false
+        },
+        "name": "FM answer",
+        "patterns": [
+          {
+            "id": "answer",
+            "lengthTicks": 7680,
+            "name": "Answer",
+            "notes": [
+              {
+                "id": "an1",
+                "length": 168,
+                "pitch": 63,
+                "tick": 4320,
+                "velocity": 0.75
+              },
+              {
+                "id": "an2",
+                "length": 168,
+                "pitch": 64,
+                "tick": 5280,
+                "velocity": 0.75
+              },
+              {
+                "id": "an3",
+                "length": 168,
+                "pitch": 63,
+                "tick": 6240,
+                "velocity": 0.75
+              },
+              {
+                "id": "an4",
+                "length": 168,
+                "pitch": 60,
+                "tick": 6720,
+                "velocity": 0.95
+              }
+            ]
+          }
+        ],
+        "role": "lead"
+      },
+      {
+        "automation": [],
+        "clips": [
+          {
+            "id": "c1",
+            "lengthTicks": 30720,
+            "patternId": "arp",
+            "startTick": 245760
+          },
+          {
+            "id": "c2",
+            "lengthTicks": 122880,
+            "patternId": "arp",
+            "startTick": 552960
+          },
+          {
+            "id": "c3",
+            "lengthTicks": 61440,
+            "patternId": "arp",
+            "startTick": 860160
+          },
+          {
+            "id": "c4",
+            "lengthTicks": 61440,
+            "patternId": "arp",
+            "startTick": 1044480
+          }
+        ],
+        "effects": [],
+        "id": "arp",
+        "instrument": {
+          "kind": "none"
+        },
+        "mix": {
+          "gainDb": 0.0,
+          "mute": false,
+          "pan": 0.0,
+          "solo": false
+        },
+        "name": "Arp",
+        "patterns": [
+          {
+            "id": "arp",
+            "lengthTicks": 15360,
+            "name": "Arp (3 over 16)",
+            "notes": [
+              {
+                "id": "ar1",
+                "length": 96,
+                "pitch": 69,
+                "tick": 0,
+                "velocity": 0.95
+              },
+              {
+                "id": "ar2",
+                "length": 96,
+                "pitch": 72,
+                "tick": 240,
+                "velocity": 0.75
+              },
+              {
+                "id": "ar3",
+                "length": 96,
+                "pitch": 76,
+                "tick": 480,
+                "velocity": 0.75
+              },
+              {
+                "id": "ar4",
+                "length": 96,
+                "pitch": 72,
+                "tick": 960,
+                "velocity": 0.95
+              },
+              {
+                "id": "ar5",
+                "length": 96,
+                "pitch": 76,
+                "tick": 1200,
+                "velocity": 0.75
+              },
+              {
+                "id": "ar6",
+                "length": 96,
+                "pitch": 69,
+                "tick": 1440,
+                "velocity": 0.75
+              },
+              {
+                "id": "ar7",
+                "length": 96,
+                "pitch": 76,
+                "tick": 1920,
+                "velocity": 0.95
+              },
+              {
+                "id": "ar8",
+                "length": 96,
+                "pitch": 69,
+                "tick": 2160,
+                "velocity": 0.75
+              },
+              {
+                "id": "ar9",
+                "length": 96,
+                "pitch": 72,
+                "tick": 2400,
+                "velocity": 0.75
+              },
+              {
+                "id": "ar10",
+                "length": 96,
+                "pitch": 69,
+                "tick": 2880,
+                "velocity": 0.95
+              },
+              {
+                "id": "ar11",
+                "length": 96,
+                "pitch": 72,
+                "tick": 3120,
+                "velocity": 0.75
+              },
+              {
+                "id": "ar12",
+                "length": 96,
+                "pitch": 76,
+                "tick": 3360,
+                "velocity": 0.75
+              },
+              {
+                "id": "ar13",
+                "length": 96,
+                "pitch": 72,
+                "tick": 3840,
+                "velocity": 0.95
+              },
+              {
+                "id": "ar14",
+                "length": 96,
+                "pitch": 76,
+                "tick": 4080,
+                "velocity": 0.75
+              },
+              {
+                "id": "ar15",
+                "length": 96,
+                "pitch": 69,
+                "tick": 4320,
+                "velocity": 0.75
+              },
+              {
+                "id": "ar16",
+                "length": 96,
+                "pitch": 76,
+                "tick": 4800,
+                "velocity": 0.95
+              },
+              {
+                "id": "ar17",
+                "length": 96,
+                "pitch": 69,
+                "tick": 5040,
+                "velocity": 0.75
+              },
+              {
+                "id": "ar18",
+                "length": 96,
+                "pitch": 72,
+                "tick": 5280,
+                "velocity": 0.75
+              },
+              {
+                "id": "ar19",
+                "length": 96,
+                "pitch": 69,
+                "tick": 5760,
+                "velocity": 0.95
+              },
+              {
+                "id": "ar20",
+                "length": 96,
+                "pitch": 72,
+                "tick": 6000,
+                "velocity": 0.75
+              },
+              {
+                "id": "ar21",
+                "length": 96,
+                "pitch": 76,
+                "tick": 6240,
+                "velocity": 0.75
+              },
+              {
+                "id": "ar22",
+                "length": 96,
+                "pitch": 72,
+                "tick": 6720,
+                "velocity": 0.95
+              },
+              {
+                "id": "ar23",
+                "length": 96,
+                "pitch": 76,
+                "tick": 6960,
+                "velocity": 0.75
+              },
+              {
+                "id": "ar24",
+                "length": 96,
+                "pitch": 69,
+                "tick": 7200,
+                "velocity": 0.75
+              },
+              {
+                "id": "ar25",
+                "length": 96,
+                "pitch": 76,
+                "tick": 7680,
+                "velocity": 0.95
+              },
+              {
+                "id": "ar26",
+                "length": 96,
+                "pitch": 69,
+                "tick": 7920,
+                "velocity": 0.75
+              },
+              {
+                "id": "ar27",
+                "length": 96,
+                "pitch": 72,
+                "tick": 8160,
+                "velocity": 0.75
+              },
+              {
+                "id": "ar28",
+                "length": 96,
+                "pitch": 69,
+                "tick": 8640,
+                "velocity": 0.95
+              },
+              {
+                "id": "ar29",
+                "length": 96,
+                "pitch": 72,
+                "tick": 8880,
+                "velocity": 0.75
+              },
+              {
+                "id": "ar30",
+                "length": 96,
+                "pitch": 76,
+                "tick": 9120,
+                "velocity": 0.75
+              },
+              {
+                "id": "ar31",
+                "length": 96,
+                "pitch": 72,
+                "tick": 9600,
+                "velocity": 0.95
+              },
+              {
+                "id": "ar32",
+                "length": 96,
+                "pitch": 76,
+                "tick": 9840,
+                "velocity": 0.75
+              },
+              {
+                "id": "ar33",
+                "length": 96,
+                "pitch": 69,
+                "tick": 10080,
+                "velocity": 0.75
+              },
+              {
+                "id": "ar34",
+                "length": 96,
+                "pitch": 76,
+                "tick": 10560,
+                "velocity": 0.95
+              },
+              {
+                "id": "ar35",
+                "length": 96,
+                "pitch": 69,
+                "tick": 10800,
+                "velocity": 0.75
+              },
+              {
+                "id": "ar36",
+                "length": 96,
+                "pitch": 72,
+                "tick": 11040,
+                "velocity": 0.75
+              },
+              {
+                "id": "ar37",
+                "length": 96,
+                "pitch": 74,
+                "tick": 11520,
+                "velocity": 0.95
+              },
+              {
+                "id": "ar38",
+                "length": 96,
+                "pitch": 77,
+                "tick": 11760,
+                "velocity": 0.75
+              },
+              {
+                "id": "ar39",
+                "length": 96,
+                "pitch": 81,
+                "tick": 12000,
+                "velocity": 0.75
+              },
+              {
+                "id": "ar40",
+                "length": 96,
+                "pitch": 77,
+                "tick": 12480,
+                "velocity": 0.95
+              },
+              {
+                "id": "ar41",
+                "length": 96,
+                "pitch": 81,
+                "tick": 12720,
+                "velocity": 0.75
+              },
+              {
+                "id": "ar42",
+                "length": 96,
+                "pitch": 74,
+                "tick": 12960,
+                "velocity": 0.75
+              },
+              {
+                "id": "ar43",
+                "length": 96,
+                "pitch": 81,
+                "tick": 13440,
+                "velocity": 0.95
+              },
+              {
+                "id": "ar44",
+                "length": 96,
+                "pitch": 74,
+                "tick": 13680,
+                "velocity": 0.75
+              },
+              {
+                "id": "ar45",
+                "length": 96,
+                "pitch": 77,
+                "tick": 13920,
+                "velocity": 0.75
+              },
+              {
+                "id": "ar46",
+                "length": 96,
+                "pitch": 74,
+                "tick": 14400,
+                "velocity": 0.95
+              },
+              {
+                "id": "ar47",
+                "length": 96,
+                "pitch": 77,
+                "tick": 14640,
+                "velocity": 0.75
+              },
+              {
+                "id": "ar48",
+                "length": 96,
+                "pitch": 81,
+                "tick": 14880,
+                "velocity": 0.75
+              }
+            ]
+          }
+        ],
+        "role": "pluck"
+      },
+      {
+        "automation": [],
+        "clips": [],
+        "color": "#257bf4",
+        "effects": [],
+        "id": "space",
+        "instrument": {
+          "kind": "bus"
+        },
+        "mix": {
+          "gainDb": 0.0,
+          "mute": false,
+          "pan": 0.0,
+          "solo": false
+        },
+        "name": "Space",
+        "patterns": []
+      },
+      {
+        "automation": [],
+        "clips": [],
+        "color": "#f4d125",
+        "effects": [],
+        "id": "echo",
+        "instrument": {
+          "kind": "bus"
+        },
+        "mix": {
+          "gainDb": 0.0,
+          "mute": false,
+          "pan": 0.0,
+          "solo": false
+        },
+        "name": "Echo",
+        "patterns": []
+      },
+      {
+        "automation": [],
+        "clips": [],
+        "color": "#25f459",
+        "effects": [],
+        "id": "huge",
+        "instrument": {
+          "kind": "bus"
+        },
+        "mix": {
+          "gainDb": 0.0,
+          "mute": false,
+          "pan": 0.0,
+          "solo": false
+        },
+        "name": "Huge",
+        "patterns": []
+      }
+    ],
+    "transport": {
+      "bpm": 190.0,
+      "loop": {
+        "enabled": false,
+        "endTick": 368640,
+        "startTick": 307200
+      },
+      "ppq": 960,
+      "timeSignature": [
+        4,
+        4
+      ]
+    },
+    "ui": {}
+  },
+  "ficha": "# Hi-tech 190 (plugins)\n\nFicha do template `hitech-plugins` (versão 1). Estilo: Hi-tech.\n\nThe MIDI of 'Hi-tech 190 (from Wake Up and Remember)' with its old sounds and effects reset: kick, KBBB bass in A, hats, percussion, crashes, lead, FM answer and arp over 296 bars at 190 BPM (intro 8, breaks of 8 and 16). Every track plays the plugin of its role from Settings > Roles (Kick: Kick 3, Bass / Lead / Arp: Serum 2, Drums: Xfer 909) and the Space, Huge and Echo buses get the Reverb and Delay roles (Pro-R 2, Timeless 3). Choose the presets, then save it as your own template.\n\nFeito a partir de \"hitech-ref\", do tick 0 ao 0 (compassos 1.1 a 1.1).\n\n## Tempo e forma\n\n- BPM: 190\n- Duração: 296 compassos (1136640 ticks, 960 por semínima)\n\n| Secção | Começa | Duração |\n|---|---|---|\n| Intro | 1.1 | 8 compassos |\n| Groove | 9.1 | 64 compassos |\n| Break | 73.1 | 8 compassos |\n| Development | 81.1 | 96 compassos |\n| Break | 177.1 | 16 compassos |\n| Main | 193.1 | 96 compassos |\n| Outro | 289.1 | 8 compassos |\n\n## Master\n\n- Ganho: 0 dB\n\nAutomação:\n\n| Parâmetro | Pontos | Mín. | Máx. | Começa | Acaba |\n|---|---|---|---|---|---|\n| `gainDb` | 2 | -34 | 0 | 0 em 289.1 | -34 em 296.4 |\n\n## Pistas\n\n### Kick (`kick`)\n\n- Instrumento: none (`none`, versão 1)\n\n- Mistura: ganho 0 dB, pan 0\n- Notas: 1012, de C2 a C2, em 41 clips e 2 padrões\n\n### Bass (`bass`)\n\n- Instrumento: none (`none`, versão 1)\n\n- Mistura: ganho 0 dB, pan 0\n- Notas: 2976, de A1 a A2, em 40 clips e 3 padrões\n\n### Closed hats (`hats`)\n\n- Instrumento: none (`none`, versão 1)\n\n- Mistura: ganho -4 dB, pan 0.12\n- Envio para `space`: -51.6 dB\n- Notas: 4128, de F#2 a F#2, em 36 clips e 2 padrões\n\n### Open hats (`open-hats`)\n\n- Instrumento: none (`none`, versão 1)\n\n- Mistura: ganho 0 dB, pan -0.12\n- Envio para `space`: -49.6 dB\n- Notas: 640, de A#2 a A#2, em 6 clips e 1 padrões\n\n### Percussion (`perc`)\n\n- Instrumento: none (`none`, versão 1)\n\n- Mistura: ganho 0 dB, pan -0.3\n- Envio para `space`: -45.6 dB\n- Envio para `echo`: -37 dB\n- Notas: 684, de C4 a C#4, em 76 clips e 2 padrões\n\n### Accents (`accents`)\n\n- Instrumento: none (`none`, versão 1)\n\n- Mistura: ganho 0 dB, pan 0.25\n- Envio para `huge`: -10 dB\n- Notas: 60, de C2 a C2, em 2 clips e 1 padrões\n\n### Impacts (`impact`)\n\n- Instrumento: none (`none`, versão 1)\n\n- Mistura: ganho 0 dB, pan 0\n- Notas: 5, de C2 a C2, em 5 clips e 1 padrões\n\n### Crash (`crash`)\n\n- Instrumento: none (`none`, versão 1)\n\n- Mistura: ganho 0 dB, pan 0\n- Envio para `space`: -41.6 dB\n- Notas: 7, de A#2 a A#2, em 7 clips e 1 padrões\n\n### Lead (`lead`)\n\n- Instrumento: none (`none`, versão 1)\n\n- Mistura: ganho 0 dB, pan 0\n- Notas: 1784, de A3 a A5, em 12 clips e 2 padrões\n\n### FM answer (`fm`)\n\n- Instrumento: none (`none`, versão 1)\n\n- Mistura: ganho 0 dB, pan 0\n- Notas: 144, de C4 a E4, em 6 clips e 1 padrões\n\n### Arp (`arp`)\n\n- Instrumento: none (`none`, versão 1)\n\n- Mistura: ganho 0 dB, pan 0\n- Notas: 864, de A4 a A5, em 4 clips e 1 padrões\n\n### Space (`space`)\n\n- Instrumento: bus (`bus`, versão 1)\n\n- Mistura: ganho 0 dB, pan 0\n\n### Echo (`echo`)\n\n- Instrumento: bus (`bus`, versão 1)\n\n- Mistura: ganho 0 dB, pan 0\n\n### Huge (`huge`)\n\n- Instrumento: bus (`bus`, versão 1)\n\n- Mistura: ganho 0 dB, pan 0\n",
+  "format": "core-template",
+  "id": "hitech-plugins",
+  "name": "Hi-tech 190 (plugins)",
+  "schemaVersion": 1,
+  "source": {
+    "from": "hitech-ref",
+    "kind": "builtin",
+    "roles": true
+  },
+  "style": "Hi-tech",
+  "version": 1
+}
