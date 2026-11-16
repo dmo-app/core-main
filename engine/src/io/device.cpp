@@ -22,13 +22,23 @@
 namespace core {
 namespace {
 
-// M5: the live workers (RtWorkerPool) get what the device's own thread gets: the MMCSS "Pro Audio" task
-// and time-critical priority, so a busy PC does not delay them.
-void proAudioThread() {
+// #78 / M5: the live workers (RtWorkerPool) get what the device's own thread gets: the MMCSS "Pro Audio" task
+// and time-critical priority, so a busy PC does not delay them. The handle goes back on the same thread when the
+// worker ends (proAudioThreadEnd). A failed registration returns null: the worker keeps time-critical priority only.
+void* proAudioThread() {
 #ifdef _WIN32
-  DWORD task = 0;
-  AvSetMmThreadCharacteristicsW(L"Pro Audio", &task);
   SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL);
+  DWORD task = 0;
+  return (void*)AvSetMmThreadCharacteristicsW(L"Pro Audio", &task);
+#else
+  return nullptr;
+#endif
+}
+void proAudioThreadEnd(void* token) {
+#ifdef _WIN32
+  if (token) AvRevertMmThreadCharacteristics((HANDLE)token);
+#else
+  (void)token;
 #endif
 }
 
@@ -100,6 +110,17 @@ class MiniaudioOutput final : public AudioOutput {
     contextReady_ = true;
   }
 
+  // #78: what the device's thread really got. miniaudio registers it with MMCSS when the device starts (on that
+  // thread) and reverts it when it stops; a failed registration leaves the handle null and the device plays on at
+  // its realtime priority (the fallback), so the start never fails because of it.
+  std::string scheduling() const {
+#ifdef _WIN32
+    if (context_.backend == ma_backend_wasapi)
+      return device_.wasapi.hAvrtHandle ? "Pro Audio" : "realtime priority (MMCSS registration failed)";
+#endif
+    return "realtime priority";
+  }
+
 public:
   ~MiniaudioOutput() override { stop(); if (contextReady_) ma_context_uninit(&context_); }
 
@@ -135,6 +156,7 @@ public:
     // Windows' multimedia scheduler (MMCSS) "Pro Audio" task, as DAWs do: the audio thread is scheduled
     // ahead of ordinary work even when every core is busy.
     config.wasapi.usage = ma_wasapi_usage_pro_audio;
+    rtThreadExit().store(&proAudioThreadEnd);  // before init: a worker that sees the init sees its exit too
     rtThreadInit().store(&proAudioThread);
     if (args.value("exclusive", false)) config.playback.shareMode = ma_share_mode_exclusive;
     // Find the requested device by name (substring).
@@ -168,7 +190,7 @@ public:
             {"periods", (int)periods}, {"latencyMs", period * periods * 1000.0 / device_.sampleRate},
             {"internalSampleRate", device_.playback.internalSampleRate},
             {"backend", ma_get_backend_name(context_.backend)}, {"device", device_.playback.name},
-            {"exclusive", device_.playback.shareMode == ma_share_mode_exclusive}, {"scheduling", "Pro Audio"}};
+            {"exclusive", device_.playback.shareMode == ma_share_mode_exclusive}, {"scheduling", scheduling()}};
   }
 
   void stop() override {

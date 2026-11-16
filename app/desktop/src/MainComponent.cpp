@@ -2246,6 +2246,12 @@ void MainComponent::edit(const std::function<void(doc::Document&)>& change, cons
   const doc::Loop before = history_.current().loop;
   if (history_.inGesture()) history_.updateGesture(next);
   else history_.commit(next, label.toStdString());
+  // F1: an edit that changed what a frozen track rendered unfroze it in the same Undo step: say so.
+  if (!history_.unfrozenByLastChange().empty()) {
+    juce::String names;
+    for (const auto& n : history_.unfrozenByLastChange()) names << (names.isEmpty() ? "" : ", ") << u8(n);
+    notice_ = names + u8(" changed, so the frozen audio no longer matched: unfrozen (Ctrl+Z brings it back).");
+  }
   // During a drag the engine gets the song at most once per frame (the timer), not on every mouse move:
   // turning the whole song into the engine's form is the slow part of an edit on a long song.
   if (patternPlay_) patternPlay_->preview.reset();  // an edit ends a template's preview: the song plays its own notes
@@ -4866,7 +4872,8 @@ void MainComponent::toggleFreeze(const std::string& trackId) {
   job->since = juce::Time::getMillisecondCounter();
   job->start = history_.current();
   freezePath_ = job->path;
-  session_->exportFiles({{job->path, trackId, true}}, 0, history_.current().lengthTicks, 32);
+  // F1: pre-fader (the mixer moves to the frozen audio and stays live), 32-bit float (no clipping before the fader).
+  session_->exportFiles({{job->path, trackId, true, false, true}}, 0, history_.current().lengthTicks, 32);
   snap_.exportJob = session_->snapshot().exportJob;
   notice_ = u8("Freezing ") + u8(t->name) + u8("...");
   freeze_ = std::move(job);

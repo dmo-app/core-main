@@ -113,7 +113,8 @@ public:
   // Several files in one job (the mix and/or stems by track id, "" = the mix) over a region of the song
   // (endTick -1: the song's end). The files are put in place together when all are written.
   // withoutMasterGain: a track's stem for a bounce, without the master gain (it gets it again when it plays).
-  struct ExportFile { std::string pathUtf8, trackId; bool withoutMasterGain = false; bool mono = false; };
+  // preFader (F1 Freeze): the track before its fader, pan, sends and buses; its mixer stays live on the frozen audio.
+  struct ExportFile { std::string pathUtf8, trackId; bool withoutMasterGain = false; bool mono = false; bool preFader = false; };
   void exportFiles(const std::vector<ExportFile>& files, int64_t startTick, int64_t endTick, int bits);
   void cancelExport();
   void selectDevice(const std::string& name);  // also used by later restarts

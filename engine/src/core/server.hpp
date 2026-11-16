@@ -49,6 +49,9 @@ public:
   virtual std::string vstPreset(const std::string& key) { (void)key; return {}; }
 };
 
+// M5 live workers when engine.start does not say: CORE_LIVE_THREADS, else 0 (off until the soak, Diogo 2026-11-16).
+int defaultLiveThreads();
+
 class Server {
 public:
   static constexpr int kProtocolVersion = 1;

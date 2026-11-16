@@ -1,5 +1,6 @@
 #include "quick_tools.hpp"
 #include <algorithm>
+#include <cstdio>
 #include "edit.hpp"
 #include "pattern_rack.hpp"
 
@@ -10,6 +11,45 @@ constexpr int64_t kBar = 4 * kPpq;
 constexpr int64_t kSixteenth = kPpq / 4;
 const char* kFrozenKey = "frozen";          // on the source: the audio track it plays from
 const char* kFrozenFromKey = "frozenFrom";  // on the audio track: the source
+const char* kFrozenPrintKey = "frozenPrint";  // on the source: what the render heard (freezePrint)
+
+bool mixerParam(const std::string& param) { return param == "gainDb" || param == "pan"; }
+
+// What a freeze render of the track hears, as text: its saved form without the mixer (fader, pan, sends, mute, the
+// mixer's automation) and without the freeze's own marks, the tracks that key its sidechains, and the tempo and the
+// length of the song.
+std::string freezePrint(const Document& doc, const std::string& trackId) {
+  const Track* t = doc.findTrack(trackId);
+  if (!t) return {};
+  Document one = doc;
+  Track clean = *t;
+  clean.mix = Mix{};
+  clean.automation.erase(std::remove_if(clean.automation.begin(), clean.automation.end(),
+                                        [](const Automation& a) { return mixerParam(a.param); }),
+                         clean.automation.end());
+  if (clean.extra.is_object()) { clean.extra.erase(kFrozenKey); clean.extra.erase(kFrozenPrintKey); }
+  one.tracks = {clean};
+  for (const auto& fx : t->effects)
+    if (fx.is_object() && fx.contains("sidechain") && fx["sidechain"].is_string())
+      if (const Track* key = doc.findTrack(fx["sidechain"].get<std::string>())) one.tracks.push_back(*key);
+  const json saved = toJson(one);
+  json out = saved["tracks"];
+  // The tempo, not the rest of the transport (the loop is not in a render).
+  const json transport = saved.value("transport", json::object());
+  out.push_back({{"lengthTicks", doc.lengthTicks}, {"bpm", transport.value("bpm", json())}, {"tempoMap", transport.value("tempoMap", json())}});
+  return out.dump();
+}
+
+uint64_t fnv1a(const std::string& text) {  // the same on every compiler (std::hash is not)
+  uint64_t h = 1469598103934665603ull;
+  for (unsigned char c : text) { h ^= c; h *= 1099511628211ull; }
+  return h;
+}
+std::string printHash(const Document& doc, const std::string& trackId) {
+  char buf[17];
+  std::snprintf(buf, sizeof buf, "%016llx", (unsigned long long)fnv1a(freezePrint(doc, trackId)));
+  return buf;
+}
 
 void sortNotes(Pattern& p) {
   std::stable_sort(p.notes.begin(), p.notes.end(), [](const Note& a, const Note& b) { return a.tick < b.tick; });
@@ -165,6 +205,11 @@ std::string cannotFreeze(const Document& doc, const std::string& trackId) {
   for (const auto& fx : t->effects) plugins = plugins || (fx.is_object() && fx.value("type", std::string()) == "plugin");
   if (!plugins) return "The track has no plugins: there is nothing to freeze.";
   if (t->clips.empty()) return "The track plays nothing in the song.";
+  for (const auto& o : doc.tracks)
+    for (const auto& fx : o.effects)
+      if (fx.is_object() && fx.contains("sidechain") && fx["sidechain"] == trackId)
+        return "This track is the sidechain key of " + o.name +
+               ": frozen, its plugins are unloaded and that sidechain would go silent. Remove the sidechain first.";
   return cannotBounce(doc, trackId);
 }
 
@@ -172,6 +217,7 @@ Printed freezeTrack(Document& doc, const std::string& trackId, const std::filesy
                     const std::filesystem::path& projectDir) {
   if (const std::string why = cannotFreeze(doc, trackId); !why.empty()) throw DocumentError("tracks", why);
   Document next = doc;
+  const Track before = *next.findTrack(trackId);
   Printed out = placeBounce(next, trackId, file, projectDir, 0, next.lengthTicks);
   Track& printed = trackById(next, out.trackId);
   const std::string bounce = " (bounce)", frozen = " (frozen)";  // the same length: the name still fits
@@ -179,23 +225,24 @@ Printed freezeTrack(Document& doc, const std::string& trackId, const std::filesy
     printed.name.replace(printed.name.size() - bounce.size(), bounce.size(), frozen);
   if (!printed.extra.is_object()) printed.extra = json::object();
   printed.extra[kFrozenFromKey] = trackId;
+  // The render is pre-fader: the mixer moves to the audio track and stays live (a bounce bakes it, a freeze does not).
+  printed.mix = before.mix;
+  for (const auto& a : before.automation) if (mixerParam(a.param)) printed.automation.push_back(a);
   Track& source = trackById(next, trackId);  // placeBounce muted it
+  source.automation.erase(std::remove_if(source.automation.begin(), source.automation.end(),
+                                         [](const Automation& a) { return mixerParam(a.param); }),
+                          source.automation.end());
   if (!source.extra.is_object()) source.extra = json::object();
   source.extra[kFrozenKey] = out.trackId;
+  source.extra[kFrozenPrintKey] = printHash(next, trackId);
+  checkRouting(next);  // the sends and the output moved to the audio track: still no loop
   doc = std::move(next);
   return out;
 }
 
 bool freezeStillMatches(const Document& start, const Document& now, const std::string& trackId) {
-  if (start.lengthTicks != now.lengthTicks || start.bpm != now.bpm || start.tempoMap.size() != now.tempoMap.size()) return false;
-  const Track* a = start.findTrack(trackId);
-  const Track* b = now.findTrack(trackId);
-  if (!a || !b) return false;
-  // What the render heard: the track's own saved form (notes, patterns, clips, instrument, effects, mix, automation).
-  Document one = start, two = now;
-  one.tracks = {*a};
-  two.tracks = {*b};
-  return toJson(one)["tracks"] == toJson(two)["tracks"];
+  if (!start.findTrack(trackId) || !now.findTrack(trackId)) return false;
+  return freezePrint(start, trackId) == freezePrint(now, trackId);
 }
 
 void unfreezeTrack(Document& doc, const std::string& trackId) {
@@ -204,10 +251,30 @@ void unfreezeTrack(Document& doc, const std::string& trackId) {
   const std::string audio = frozenInto(source);
   if (audio.empty()) throw DocumentError("tracks", "the track is not frozen");
   source.extra.erase(kFrozenKey);
+  source.extra.erase(kFrozenPrintKey);
   source.mix.mute = false;
   // Only the audio this freeze made: the user may have deleted it, and its id may now be another track's freeze.
-  if (const Track* a = next.findTrack(audio); a && extraString(a->extra, kFrozenFromKey) == trackId) removeTrack(next, audio);
+  if (const Track* a = next.findTrack(audio); a && extraString(a->extra, kFrozenFromKey) == trackId) {
+    // The mixer comes back from the audio track, with what was done to it while frozen.
+    source.mix = a->mix;
+    for (const auto& au : a->automation) if (mixerParam(au.param)) source.automation.push_back(au);
+    removeTrack(next, audio);
+  }
   doc = std::move(next);
+}
+
+std::vector<std::string> unfreezeStale(Document& doc) {
+  std::vector<std::string> names;
+  for (size_t i = 0; i < doc.tracks.size(); ++i) {
+    const Track& t = doc.tracks[i];
+    if (!isFrozen(t)) continue;
+    const std::string kept = extraString(t.extra, kFrozenPrintKey);
+    if (kept.empty() || kept == printHash(doc, t.id)) continue;  // a song frozen before the fingerprint: kept
+    names.push_back(t.name);
+    unfreezeTrack(doc, t.id);
+    i = (size_t)-1;  // the list changed: from the start (each pass unfreezes one, so this ends)
+  }
+  return names;
 }
 
 } // namespace core::doc

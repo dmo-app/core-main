@@ -25,12 +25,21 @@
 
 namespace core {
 
-// Set by the device layer (Windows: MMCSS "Pro Audio" and time-critical priority); every worker calls it
-// once, before its first job. Null: the workers keep the default priority (tests, Linux).
-using RtThreadInit = void (*)();
+// #78 MMCSS. Set by the device layer (Windows: the MMCSS "Pro Audio" task and time-critical priority). Each worker
+// calls init once, before its first job, and keeps what it returned; when the worker ends (the pool is destroyed: an
+// engine restart, another device, another sample rate) it gives that back to the exit it took with it, on its own
+// thread, so the registration never outlives the thread (teardown symmetric with the start). init returns null when
+// the registration failed: the worker carries on at its default priority (the fallback), and is counted. Null init:
+// the workers keep the default priority (tests, Linux).
+using RtThreadInit = void* (*)();
+using RtThreadExit = void (*)(void* token);
 inline std::atomic<RtThreadInit>& rtThreadInit() {
   static std::atomic<RtThreadInit> init{nullptr};
   return init;
+}
+inline std::atomic<RtThreadExit>& rtThreadExit() {
+  static std::atomic<RtThreadExit> exit{nullptr};
+  return exit;
 }
 
 class RtWorkerPool {
@@ -104,6 +113,10 @@ public:
 
   // Tests: a worker sleeps this long before each job it takes (a worker the OS let run late).
   std::atomic<int64_t> testDelayNs{0};
+  // #78: workers that called the init (they had a first job), and those whose registration failed (fallback).
+  int registered() const { return registered_.load(std::memory_order_acquire); }
+  int registrationFailures() const { return registrationFailures_.load(std::memory_order_acquire); }
+
   // Tests: semaphore releases not yet taken by their worker, over all workers (at most one each).
   int pendingWakes() const {
     int n = 0;
@@ -131,14 +144,21 @@ private:
   }
   void loop(Worker& w) {
     bool initialised = false;
+    void* token = nullptr;
+    RtThreadExit exit = nullptr;
     for (;;) {
       w.wake.acquire();
       w.pending.store(false);  // before state is read: an ask from here on releases again
-      if (stop_.load()) return;
+      if (stop_.load()) break;
       int expected = 1;
       if (!w.state.compare_exchange_strong(expected, 2)) continue;  // taken back (or an old wake)
       if (!initialised) {
-        if (RtThreadInit init = rtThreadInit().load()) init();
+        if (RtThreadInit init = rtThreadInit().load()) {
+          exit = rtThreadExit().load();  // the pair taken together: the exit that matches this init
+          token = init();
+          registered_.fetch_add(1, std::memory_order_acq_rel);
+          if (!token) registrationFailures_.fetch_add(1, std::memory_order_acq_rel);
+        }
         initialised = true;
       }
       setFloatMode(mode_);
@@ -152,6 +172,7 @@ private:
       }
       w.state.store(0, std::memory_order_release);  // publishes what the jobs wrote
     }
+    if (token && exit) exit(token);  // on this thread, as MMCSS asks
   }
 
   std::vector<std::unique_ptr<Worker>> workers_;
@@ -162,6 +183,7 @@ private:
   std::atomic<int> next_{0};
   std::atomic<bool> failed_{false};
   std::atomic<bool> stop_{false};
+  std::atomic<int> registered_{0}, registrationFailures_{0};
 };
 
 } // namespace core

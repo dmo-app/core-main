@@ -207,7 +207,10 @@ public:
   // With buses (M7a), a track's stem goes through its buses and sends; a bus's stem is the bus with every
   // track that feeds it. withoutMasterGain: the stem leaves out the master gain too (a bounce: the audio goes back
   // through the master gain when it plays, so it must not have it twice).
-  void setSolo(int track, bool withoutMasterGain = false);
+  // preFader (F1 Freeze): the track's own sound after its instrument and inserts, before its fader, pan, sends,
+  // mute and buses (the same tap as its sidechain key), at 0 dB to the output. Every other track is silent but
+  // still plays, so a sidechain key it gives is there. The mixer stays live on the frozen audio.
+  void setSolo(int track, bool withoutMasterGain = false, bool preFader = false);
   int trackCount() const { return (int)tracks_.size(); }
   const std::string& trackId(int index) const { return tracks_[index].id; }
 
@@ -364,6 +367,8 @@ private:
   std::vector<int> order_;      // processing order: tracks before the buses they feed (no buses: as listed)
   std::vector<char> stemOk_;    // setSolo: the tracks the stem plays
   bool stemWithoutMasterGain_ = false;
+  bool preFader_ = false;  // setSolo: the soloed track's pre-fader tap only
+  int tapOut_ = -1;        // the tapped track's output while it goes straight to the stem (restored by setSolo)
   std::vector<std::unique_ptr<Effect>> masterEffects_;
   float masterReduction_ = 0;
   bool anyMasterEffect_ = false;

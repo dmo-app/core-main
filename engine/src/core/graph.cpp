@@ -772,9 +772,18 @@ void Graph::markSolo(int track, const std::function<void(int)>& mark) {
   goUp(track);
 }
 
-void Graph::setSolo(int track, bool withoutMasterGain) {
+void Graph::setSolo(int track, bool withoutMasterGain, bool preFader) {
+  if (preFader_ && solo_ >= 0 && solo_ < (int)tracks_.size()) tracks_[(size_t)solo_].out = tapOut_;
+  preFader_ = false;
+  tapOut_ = -1;
   solo_ = track;
-  stemWithoutMasterGain_ = track >= 0 && withoutMasterGain;
+  stemWithoutMasterGain_ = track >= 0 && (withoutMasterGain || preFader);
+  if (preFader && track >= 0 && track < (int)tracks_.size()) {
+    // The tap goes straight to the stem, not through the track's buses (every sum reads TrackRt::out).
+    preFader_ = true;
+    tapOut_ = tracks_[(size_t)track].out;
+    tracks_[(size_t)track].out = -1;
+  }
   stemOk_.assign(tracks_.size(), 0);
   if (track >= 0 && track < (int)tracks_.size()) markSolo(track, [&](int k) { stemOk_[(size_t)k] = 1; });
 }
@@ -1273,13 +1282,16 @@ void Graph::runTrack(int i, const Step& st, float* buf, float* bufR, EventLog* l
     right = bufR;
   }
   if (t.keySource) sink.key(t, st, buf, right);  // M7c: after its inserts, before its fader and mute
-  const bool audible = !t.mute && (solo_ >= 0 ? stemOk_[(size_t)i] != 0 : (!anySolo_ || t.soloOk));
+  // F1 Freeze (setSolo preFader): the tapped track at unity, no pan, no sends; every other track silent.
+  const bool tap = preFader_ && i == solo_;
+  const bool audible = !preFader_ && !t.mute && (solo_ >= 0 ? stemOk_[(size_t)i] != 0 : (!anySolo_ || t.soloOk));
   // The master gain only on what reaches the master: a bus's inputs get it once, at the bus's fader.
   const double fader = audible ? std::pow(10.0, gainDb / 20) : 0.0;
   double g = t.out < 0 ? fader * st.masterGain : fader;
   double angle = (pan + 1) * 0.25 * 3.141592653589793;  // constant-power pan
   double gl = g * std::cos(angle) * 1.4142135623730951, gr = g * std::sin(angle) * 1.4142135623730951;
-  const double pl = fader * std::cos(angle) * 1.4142135623730951, pr = fader * std::sin(angle) * 1.4142135623730951;
+  double pl = fader * std::cos(angle) * 1.4142135623730951, pr = fader * std::sin(angle) * 1.4142135623730951;
+  if (tap) gl = gr = pl = pr = 1.0;
   if (!t.gainInit) { t.toL = gl; t.toR = gr; t.postToL = pl; t.postToR = pr; t.gainInit = true; }
   if (aligned != t.rampBlock) {
     t.fromL = t.toL; t.fromR = t.toR; t.toL = gl; t.toR = gr;

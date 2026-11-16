@@ -1,4 +1,5 @@
 #include "history.hpp"
+#include "quick_tools.hpp"
 
 namespace core::doc {
 
@@ -35,8 +36,10 @@ bool History::cancelsLastStep(const Document& next, const std::string& label) {
   return true;
 }
 
-void History::commit(const Document& next, const std::string& label) {
+void History::commit(const Document& proposed, const std::string& label) {
   if (gesture_) endGesture();
+  Document next = proposed;
+  unfrozen_ = unfreezeStale(next);
   if (sameContent(next, current_)) return;
   if (cancelsLastStep(next, label)) {
     current_ = next;
@@ -58,9 +61,11 @@ void History::beginGesture(const std::string& label) {
   gestureLabel_ = label;
 }
 
-void History::updateGesture(const Document& next) {
+void History::updateGesture(const Document& proposed) {
   if (!gesture_) beginGesture("");
-  current_ = next;
+  Document next = proposed;
+  unfrozen_ = unfreezeStale(next);
+  current_ = std::move(next);
   ++revision_;
 }
 
