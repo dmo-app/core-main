@@ -1,8 +1,4 @@
 #include "edit.hpp"
-#include "glitch.hpp"
-#include "wcore.hpp"
-#include "fcore.hpp"
-#include "corefx_legacy.hpp"
 #include <algorithm>
 #include <cctype>
 #include <climits>
@@ -309,41 +305,26 @@ std::string uniqueTrackId(const Document& doc, const std::string& base) {
   return id;
 }
 
-std::string addTrack(Document& doc, const std::string& instrument, const std::string& name) {
+// A track for notes with no instrument yet (Diogo 2026-11-16: the sound comes from plugins): its notes play once a
+// plugin is chosen for it. ole names it ("kick", "bass"...) when no name is given.
+std::string addTrack(Document& doc, const std::string& role, const std::string& name) {
   if (doc.tracks.size() >= 128) throw DocumentError("tracks", "has the maximum of 128 tracks");
   Track t;
-  t.id = uniqueTrackId(doc, instrument);
-  // "bass" asks for Core's bass: W-Core with its start bass (B-Core was removed 2026-11-09, Diogo: "o b-core
-  // deixa de existir, vão para synth"). "elastic" is B-Core's old name, asked for by older callers.
-  const bool bass = instrument == "bass" || instrument == "elastic";
-  const std::string plays = bass ? std::string(kWaveInstrument) : instrument;
+  t.id = uniqueTrackId(doc, role.empty() ? std::string("track") : role);
   std::string label = name;
   if (label.empty())
-    for (const auto& c : builtinInstruments()) if ((bass ? std::string("bass") : plays) == c.name) label = c.label;
-  t.name = label.empty() ? instrument : label;
-  t.instrument.kind = "builtin";
-  t.instrument.name = plays;
-  if (instrument == "sampler") t.instrument.version = kSamplerVersion;
-  if (plays == "kick") t.instrument.version = 2;  // Core's one kick (2026-11-07)
-  if (plays == kWaveInstrument) makeFreshWave(t.instrument);  // version 2, with version 1's movements
+    for (const auto& c : builtinInstruments()) if (role == c.name) label = c.label;
+  t.name = (label.empty() ? (role.empty() ? std::string("Track") : role) : label).substr(0, 80);
+  t.instrument.kind = "none";
   // One 1-bar pattern played over the whole song: edit it and hear it at once.
   Pattern p;
   p.id = "p1";
   p.name = "1";
   p.lengthTicks = 4 * kPpq;
-  // Core Glitch walks its path while a note is held: one note over the whole bar, so it plays as soon as it has a sound.
-  if (plays == kGlitchInstrument) {
-    t.instrument.synth = freshGlitchSynth();
-    Note n;
-    n.id = "n1"; n.tick = 0; n.length = 4 * kPpq; n.pitch = 60; n.velocity = 1.0;
-    p.notes.push_back(n);
-  }
   t.patterns.push_back(p);
   t.clips.push_back({"c1", "p1", 0, doc.lengthTicks, 0, json::object()});
   doc.tracks.push_back(std::move(t));
-  const std::string id = doc.tracks.back().id;
-  if (bass) setWave(doc, id, kWaveStartBass);  // a new Bass starts on Core's start bass, not on the lead's knobs
-  return id;
+  return doc.tracks.back().id;
 }
 
 std::string duplicateTrack(Document& doc, const std::string& trackId) {
@@ -1225,38 +1206,16 @@ static std::vector<EffectPreset> presetRecipes() {
        {{"time", 5}, {"feedback", 0.55}, {"tone", 2500}, {"lowcut", 200}, {"pingpong", 0.7}, {"duck", 0}, {"mix", 0.3}}}};
 }
 
-// The presets of the old saturation / delay / reverb / space / echo / spiral / flux are Core FX presets now: the
-// same sound, written as Core FX values (corefx_legacy.cpp); `from` keeps which module they came from.
 const std::vector<EffectPreset>& effectPresets() {
-  static const std::vector<EffectPreset> presets = [] {
-    std::vector<EffectPreset> out = presetRecipes();
-    const EffectInfo* fx = findEffect("corefx");
-    for (auto& p : out) {
-      if (!isLegacyEffect(p.effect) || !fx) continue;
-      json given = json::object();
-      for (const auto& [k, v] : p.values) given[k] = v;
-      const json all = coreFxFrom(p.effect, given);
-      p.from = p.effect;
-      p.effect = "corefx";
-      p.values.clear();
-      for (const auto& info : fx->params)
-        if (all.contains(info.name) && all[info.name].get<double>() != info.def) p.values.push_back({info.name, all[info.name].get<double>()});
-    }
-    return out;
-  }();
+  static const std::vector<EffectPreset> presets = presetRecipes();
   return presets;
 }
 
 const EffectPreset* findEffectPreset(const std::string& effect, const std::string& name) {
-  // An old effect's name (a rack or a recipe written before Core FX) finds its preset in Core FX.
-  const std::string want = isLegacyEffect(effect) ? "corefx" : effect;
   for (const auto& p : effectPresets())
-    if (want == p.effect && name == p.name && (want != "corefx" || !isLegacyEffect(effect) || effect == (p.from ? p.from : ""))) return &p;
-  for (const auto& p : effectPresets())
-    if (want == p.effect && name == p.name) return &p;
+    if (effect == p.effect && name == p.name) return &p;
   return nullptr;
 }
-
 
 const EffectInfo* findEffect(const std::string& name) {
   for (const auto& e : builtinEffects()) if (name == e.name) return &e;
@@ -1365,7 +1324,6 @@ void replaceInstrumentWithPlugin(Document& doc, const std::string& trackId, cons
   if (t.instrument.kind == "plugin" && t.instrument.plugin.value("id", std::string()) == next.plugin.value("id", std::string()) &&
       t.instrument.plugin.value("file", std::string()) == next.plugin.value("file", std::string()))
     return;  // the same plugin: its state and automation stay as they are
-  if (fcoreOf(t)) removeFCore(doc, trackId);
   dropInstrumentMoods(doc, trackId);
   trackById(doc, trackId).instrument = next;
   Track& t2 = trackById(doc, trackId);
@@ -1413,7 +1371,6 @@ int applyPluginStates(Document& doc, const json& states) {
 }
 
 int addEffect(Document& doc, const std::string& trackId, const std::string& name) {
-  if (isLegacyEffect(name)) return addEffectWith(doc, trackId, name, json::object());
   const EffectInfo* info = findEffect(name);
   if (!info) throw DocumentError("effects", "unknown effect '" + name + "'");
   json& chain = effectChain(doc, trackId);
@@ -1425,11 +1382,6 @@ int addEffect(Document& doc, const std::string& trackId, const std::string& name
 }
 
 int addEffectWith(Document& doc, const std::string& trackId, const std::string& name, const json& params) {
-  if (isLegacyEffect(name)) {
-    const int at = addEffect(doc, trackId, "corefx");
-    effectChain(doc, trackId)[(size_t)at]["params"] = coreFxFrom(name, params, doc.bpm);
-    return at;
-  }
   const int at = addEffect(doc, trackId, name);
   if (params.is_object())
     for (const auto& [k, v] : params.items()) if (v.is_number()) setEffectParam(doc, trackId, at, k, v.get<double>());
@@ -1555,44 +1507,19 @@ void dropInstrumentMoods(Document& doc, const std::string& trackId) {
     for (const char* k : keys) tt.extra.erase(std::string(k) + "Knobs");
 }
 
-void replaceInstrument(Document& doc, const std::string& trackId, const std::string& builtin) {
-  // "Bass": W-Core with the start bass (the knobs of whatever played before are not a bass).
-  if (builtin == "bass" || builtin == "elastic") {
-    Document next = doc;
-    replaceInstrument(next, trackId, kWaveInstrument);
-    setWave(next, trackId, kWaveStartBass);
-    doc = std::move(next);
-    return;
-  }
+// Core's own instruments left Core (2026-11-16): the track keeps its notes and waits for a plugin. uiltin is only a
+// name kept for older callers; the old instrument's own settings, curves and movements go.
+void replaceInstrument(Document& doc, const std::string& trackId, const std::string&) {
   Track& t = trackById(doc, trackId);
   if (!playsPatterns(t)) throw DocumentError("instrument", "an audio track or a bus has no instrument");
-  if (std::none_of(builtinInstruments().begin(), builtinInstruments().end(), [&](const InstrumentChoice& c) { return builtin == c.name; }))
-    throw DocumentError("instrument", "unknown instrument '" + builtin + "'");
-  if (t.instrument.kind == "builtin" && t.instrument.name == builtin) return;  // the same one: nothing to change
-  Instrument next;
-  next.kind = "builtin";
-  next.name = builtin;
-  // The newest version, as a new track gets it: a kick put in at version 1 would be migrated (and its knobs
-  // cleared) the next time the song is opened, so the saved song would not be the one on screen.
-  if (builtin == "sampler") next.version = kSamplerVersion;  // was 3: the save read-back made it 4 and refused (sweep D2)
-  if (builtin == "kick") next.version = 2;
-  if (builtin == kGlitchInstrument) next.synth = freshGlitchSynth();
-  if (fcoreOf(t)) removeFCore(doc, trackId);  // before the change: it puts the old instrument back as it was (sweep PL3)
+  if (t.instrument.kind == "none") return;
   dropInstrumentMoods(doc, trackId);
-  trackById(doc, trackId).instrument = next;  // (the old kind's unknown fields would not fit the new one: they go too)
   Track& t2 = trackById(doc, trackId);
-  // Automation of the old instrument's own settings goes; the mixer's and the effects' stays.
-  t2.automation.erase(std::remove_if(t2.automation.begin(), t2.automation.end(), [](const Automation& a) {
-                       return a.param != "gainDb" && a.param != "pan" && a.param.rfind("fx:", 0) != 0;
-                     }), t2.automation.end());
-  // Keep mixer/insert modulation and parameters shared with the new instrument. A dangling
-  // instrument destination would make the engine refuse this and every subsequent edit.
-  const InstrumentInfo* info = next.kind == "builtin" ? findInstrumentInfo(next.name) : nullptr;
-  t2.modulators.erase(std::remove_if(t2.modulators.begin(), t2.modulators.end(), [&](const json& m) {
-    const std::string param = m.value("param", "");
-    if (param == "gainDb" || param == "pan" || param.rfind("fx:", 0) == 0) return false;
-    return !info || std::none_of(info->params.begin(), info->params.end(), [&](const InstrumentParamInfo& p) { return param == p.name; });
-  }), t2.modulators.end());
+  t2.instrument = Instrument{};
+  t2.instrument.kind = "none";
+  auto own = [](const std::string& p) { return p != "gainDb" && p != "pan" && p.rfind("fx:", 0) != 0; };
+  t2.automation.erase(std::remove_if(t2.automation.begin(), t2.automation.end(), [&](const Automation& a) { return own(a.param); }), t2.automation.end());
+  t2.modulators.erase(std::remove_if(t2.modulators.begin(), t2.modulators.end(), [&](const json& m) { return own(m.value("param", "")); }), t2.modulators.end());
 }
 
 void removeEffect(Document& doc, const std::string& trackId, int index) {

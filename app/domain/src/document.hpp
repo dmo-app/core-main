@@ -77,7 +77,7 @@ constexpr double kMinSampleLoopSeconds = 0.002;
 // band-limited when played above its rate (version 4).
 constexpr int kSamplerVersion = 4;
 struct Instrument {
-  std::string kind = "builtin";        // "builtin" | "audio" (a track of audio clips) | "bus" | "plugin"
+  std::string kind = "none";           // "plugin" | "none" (notes, no instrument yet) | "audio" | "bus" | "builtin" (an old Core instrument, kept, not played)
   std::string name;                    // builtin: kick | wave (W-Core) | hats | drums | sampler (validated by the engine)
   int version = 1;                     // builtin sound version
   std::map<std::string, double> params;  // only the values set; the engine fills the defaults

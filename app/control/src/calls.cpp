@@ -5,12 +5,8 @@
 #include <set>
 #include <sstream>
 #include <string_view>
-#include "core_plugins.hpp"
 #include "edit.hpp"
-#include "fcore.hpp"
-#include "rcore.hpp"
 #include "stutter.hpp"
-#include "wcore.hpp"
 
 namespace core::control {
 
@@ -152,75 +148,13 @@ CoreFunction pluginFunction(const std::string& id, const char* family) {
   CoreFunction f;
   f.id = id;
   f.family = family;
-  const doc::CorePluginInfo* info = doc::findCorePlugin(id);
-  f.name = info ? doc::corePluginCallName(*info) : id;
+  f.name = id == "stutter" ? "STUTTER" : id == "voicestutter" ? "VOICE STUTTER" : id;
   return f;
-}
-
-// A Core synth: an instrument with layers, presets and moods.
-std::optional<CoreFunction> describeSynth(const std::string& id, const char* instrument, const std::vector<doc::SoundLayer>& layers,
-                                          bool shortHints) {
-  const doc::InstrumentInfo* info = doc::findInstrumentInfo(instrument);
-  if (!info) return std::nullopt;
-  CoreFunction f = pluginFunction(id, "instrument");
-  for (const auto& prm : info->params) {
-    // W-Core's waves 2..4 and the cards' lights are the window's: the function sets wave 1 (the state stays small).
-    if (doc::isWaveLayerParam(prm.name) || std::string(prm.name).rfind("sec_", 0) == 0) continue;
-    std::string hint;
-    for (const auto& l : layers)
-      for (const auto& k : l.knobs)
-        if (prm.name == std::string(k.param)) {
-          if (!shortHints) {
-            hint = std::string(l.name) + ": " + k.info;
-          } else {  // its first sentence: the state stays small
-            const std::string text = k.info;
-            hint = text.substr(0, std::min(text.size(), text.find(". ") + 1));
-            if (hint.size() > 72) hint = hint.substr(0, hint.rfind(' ', 70)) + "...";
-          }
-        }
-    f.args.push_back({prm.name, prm.label, hint, prm.unit, prm.min, prm.max, prm.def});
-  }
-  return f;
-}
-
-bool synthCheck(const char* instrument, const CoreFunction& f, const doc::Track* track, Call& call) {
-  if (!track) return true;
-  const bool already = track->instrument.kind == "builtin" && track->instrument.name == instrument;
-  if (!already) call.warnings.push_back(f.name + " replaces the instrument of " + track->name + " (its notes stay)");
-  return true;
 }
 
 const std::vector<PluginCalls>& pluginCalls() {
   static const std::vector<PluginCalls> list = [] {
     std::vector<PluginCalls> v;
-    {
-      PluginCalls w;
-      w.id = "wcore";
-      w.needsNotes = true;
-      w.describe = [] {
-        auto f = describeSynth("wcore", doc::kWaveInstrument, doc::waveLayers(), true);
-        if (!f) return f;
-        f->role = "lead";
-        f->description = "Core's own synth (bass, lead, pad, drone): turns a note track into W-Core (notes kept) or changes the W-Core already "
-                         "there; \"preset\": a whole sound, \"args\": its knobs on top, \"mood\": a mood on top (\"dry\" takes it away)";
-        f->tags = {"bass", "baixo", "lead", "pad", "drone", "synth", "pluck", "fm", "noise", "w-core", "wave", "melodia"};
-        for (const auto& pr : doc::wavePresets()) f->presets.push_back(pr.id);
-        for (const auto& m : doc::waveMoods()) f->options["mood"].push_back(m.id);
-        for (const auto& pr : doc::wavePresets()) {  // its first sentence too
-          const std::string what = pr.info;
-          f->extra["presetInfo"][pr.id] = {{"name", pr.name}, {"style", pr.style}, {"what", what.substr(0, std::min(what.size(), what.find(". ") + 1))}};
-        }
-        return f;
-      };
-      w.check = [](const CoreFunction& f, const doc::Track* t, Call& call, std::vector<std::string>&) { return synthCheck(doc::kWaveInstrument, f, t, call); };
-      w.apply = [](doc::Document& song, const Call& c, const std::string& where) {
-        doc::setWave(song, where, c.preset);  // keeps W-Core when it is there; the preset's values, if any
-        if (c.texts.count("mood")) doc::setWaveMood(song, {where}, c.texts.at("mood"));
-        for (const auto& [k, val] : c.args) doc::setInstrumentParam(song, where, k, val);  // the knobs given win over preset and mood
-        return describeCall(c);
-      };
-      v.push_back(std::move(w));
-    }
     {
       PluginCalls st;
       st.id = "stutter";
@@ -280,102 +214,6 @@ const std::vector<PluginCalls>& pluginCalls() {
       };
       v.push_back(std::move(vs));
     }
-    {
-      PluginCalls fc;
-      fc.id = "fcore";
-      fc.quietWithoutSection = true;
-      fc.describe = [] {
-        CoreFunction f = pluginFunction("fcore", "fcore");
-        f.description = "effects by intent (build-up, intro, impact...): puts F-Core on a track or changes the one there; \"args\": its knobs, "
-                        "text \"intent\", \"style\", \"mode\" (note: moves with each sampler note; region: over \"section\"); "
-                        "\"preset\": one of the intent's presets (which steps are on)";
-        f.tags = {"fcore", "f-core", "buildup", "build-up", "intro", "impact", "downlifter", "atmosphere", "riser", "subida"};
-        f.args = {{"amount", "Amount", "subtle .. extreme", "", 0, 1, 0.6}, {"length", "Length", "how long the movement lasts", "beats", 1, 256, 32},
-                  {"tone", "Tone", "dark .. bright", "", 0, 1, 0.5}, {"space", "Space", "dry .. huge", "", 0, 1, 0.5}};
-        for (const auto& i : doc::fcoreIntents()) {
-          f.options["intent"].push_back(i.id);
-          for (const auto& pr : doc::fcorePresetsOf(i.id)) {
-            f.extra["presetsByIntent"][i.id].push_back(pr.id);
-            if (std::find(f.presets.begin(), f.presets.end(), pr.id) == f.presets.end()) f.presets.push_back(pr.id);
-          }
-        }
-        for (const auto& s : doc::fcoreStyles()) f.options["style"].push_back(s.id);
-        f.options["mode"] = {"note", "region"};
-        f.rises = true;  // "section": a region over it (on a track that is not a sampler)
-        return std::optional<CoreFunction>(std::move(f));
-      };
-      fc.check = [](const CoreFunction& f, const doc::Track* track, Call& call, std::vector<std::string>& problems) {
-        // The intent: the one given, else the one already on the track, else a build-up.
-        const auto there = track ? doc::fcoreOf(*track) : std::nullopt;
-        const std::string intent = call.texts.count("intent") ? call.texts["intent"] : there ? there->intent : std::string("buildup");
-        if (!call.preset.empty()) {
-          const auto& list = doc::fcorePresetsOf(intent);
-          if (std::none_of(list.begin(), list.end(), [&](const doc::FCorePreset& x) { return x.id == call.preset; })) {
-            problems.push_back(f.name + ": the " + intent + " intent has no preset \"" + call.preset + "\": left out");
-            return false;
-          }
-        }
-        if (there) call.warnings.push_back(f.name + " on " + track->name + " is changed (it is there already)");
-        if (there && call.texts.count("mode") && call.texts["mode"] != there->mode)
-          call.warnings.push_back(f.name + " keeps its mode (" + there->mode + ") on " + track->name + ": remove it to change the mode");
-        return true;
-      };
-      fc.apply = [](doc::Document& song, const Call& c, const std::string& where) {
-        const auto there = doc::fcoreOf(doc::trackById(song, where));
-        auto knobsFrom = [&](doc::FCoreKnobs k) {
-          if (c.args.count("amount")) k.amount = c.args.at("amount");
-          if (c.args.count("length")) k.lengthBeats = c.args.at("length");
-          if (c.args.count("tone")) k.tone = c.args.at("tone");
-          if (c.args.count("space")) k.space = c.args.at("space");
-          return k;
-        };
-        if (there) {
-          if (c.texts.count("intent") && c.texts.at("intent") != there->intent) doc::setFCoreIntent(song, where, c.texts.at("intent"));
-          if (c.texts.count("style") && c.texts.at("style") != there->style) doc::setFCoreStyle(song, where, c.texts.at("style"));
-          if (!c.args.empty()) doc::setFCoreKnobs(song, where, knobsFrom(doc::fcoreOf(doc::trackById(song, where))->knobs));
-          if (c.endTick > c.startTick && there->mode == "region") doc::addFCoreRegion(song, where, c.startTick, c.endTick);
-        } else {
-          const std::string intent = c.texts.count("intent") ? c.texts.at("intent") : std::string("buildup");
-          std::string style = c.texts.count("style") ? c.texts.at("style") : std::string();
-          if (style.empty()) {
-            const std::string k = songStyleKey(song);  // the song's style, as F-Core names it
-            style = k == "psytrance" ? std::string("fullon") : doc::findFCoreStyle(k) ? k : std::string("darkpsycore");
-          }
-          doc::FCoreKnobs k;
-          if (const doc::FCoreIntent* in = doc::findFCoreIntent(intent)) k.lengthBeats = in->defaultBeats;
-          std::vector<doc::FCoreRegion> regions;
-          if (c.endTick > c.startTick) regions.push_back({c.startTick, c.endTick});
-          doc::applyFCoreToTracks(song, {where}, intent, style, knobsFrom(k), c.texts.count("mode") ? c.texts.at("mode") : std::string("note"), regions);
-        }
-        if (!c.preset.empty()) doc::setFCorePreset(song, where, c.preset);
-        return describeCall(c);
-      };
-      v.push_back(std::move(fc));
-    }
-    for (int d = 0; d < 2; ++d) {
-      PluginCalls g;
-      g.id = d ? "dcore" : "rcore";
-      g.presetNeeded = "the place";
-      g.describe = [d] {
-        CoreFunction f = pluginFunction(d ? "dcore" : "rcore", "gesture");
-        f.description = d ? "the track sends to one shared echo on a bus (\"preset\": the echo, required), which follows the sections"
-                          : "the track sends to one shared reverb on a bus (\"preset\": the place, required), which follows the sections";
-        f.tags = d ? std::vector<std::string>{"delay", "echo", "eco", "d-core", "send", "bus"} : std::vector<std::string>{"reverb", "space", "espaco", "r-core", "send", "bus"};
-        for (const auto& pr : d ? doc::dcorePresets() : doc::rcorePresets()) {
-          f.presets.push_back(pr.name);
-          f.extra["presetInfo"][pr.name] = {{"style", pr.style}, {"what", pr.tip}};
-        }
-        return std::optional<CoreFunction>(std::move(f));
-      };
-      g.apply = [d](doc::Document& song, const Call& c, const std::string& where) {
-        const doc::RCorePreset* pr = nullptr;
-        for (const auto& x : d ? doc::dcorePresets() : doc::rcorePresets()) if (c.preset == x.name) pr = &x;
-        if (!pr) throw doc::DocumentError("calls", c.fn->name + " has no preset " + c.preset);
-        doc::applyRCore(song, {where}, *pr);
-        return describeCall(c);
-      };
-      v.push_back(std::move(g));
-    }
     return v;
   }();
   return list;
@@ -395,62 +233,11 @@ const FunctionArg* CoreFunction::findArg(const std::string& id) const {
   return nullptr;
 }
 
-std::vector<CoreFunction> buildFunctions(const std::vector<doc::RackEntry>& racks) {
+// What AICORE can call since Core's own sound left (2026-11-16): STUTTER, VOICE STUTTER, the mixer and opening windows.
+std::vector<CoreFunction> buildFunctions() {
   std::vector<CoreFunction> out;
-  for (const auto& fx : doc::builtinEffects()) {
-    CoreFunction f;
-    f.id = std::string("fx:") + fx.name;
-    f.family = "effect";
-    f.name = fx.label;
-    f.version = fx.version;
-    f.description = std::string("Core's built-in ") + fx.label + ", at the end of the chain (a fixed setting: the whole track)";
-    f.tags = split(builtinTags(fx.name));
-    for (const auto& p : fx.params) f.args.push_back({p.name, p.label, "", p.unit, p.min, p.max, p.def});
-    for (const auto& pr : doc::effectPresets())
-      if (pr.effect == std::string(fx.name)) f.presets.push_back(pr.name);
-    if (!f.presets.empty()) f.description += "; \"preset\": one of its presets, then \"args\" change knobs on top";
-    out.push_back(std::move(f));
-  }
-  for (const auto& e : racks) {
-    const doc::RackDef& r = e.def;
-    CoreFunction f;
-    f.id = "rack:" + r.id;
-    f.family = "rack";
-    f.name = r.name;
-    f.role = r.role;
-    f.description = r.description;
-    f.version = r.version;
-    f.styles = r.styles;
-    f.tags = r.tags;
-    f.instrument = r.kind == "instrument";
-    // Core's own devices with their presets (no macros); an F-Core build-up finds the song's build-ups itself, so
-    // no section is asked for.
-    f.native = true;
-    if (!doc::nativeRackReady(r)) {
-      f.available = false;
-      f.unavailable = "needs a Core plugin not in this Core yet";
-    }
-    f.rack = r;
-    out.push_back(std::move(f));
-  }
-  CoreFunction s;
-  s.id = "sample";
-  s.family = "sample";
-  s.name = "Sample";
-  s.description = "puts a library sample on a track (Core Sampler; its notes, mix and effects stay); give \"sample\": its s: id";
-  s.tags = {"sample", "samples", "amostra", "kick", "bombo", "bass", "baixo", "hat", "clap", "snare", "perc", "impact", "riser", "one-shot", "loop"};
-  out.push_back(std::move(s));
-  // Core's own plugins (2026-11-06): one entry each in pluginCalls(), named and placed by doc::corePlugins().
   for (const auto& pc : pluginCalls())
     if (auto f = pc.describe()) out.push_back(std::move(*f));
-  CoreFunction set;
-  set.id = "set";
-  set.family = "setting";
-  set.name = "Set an effect";
-  set.description = "changes an effect already on a track or the master (mastering): \"effect\": its id (\"fx2\") or its name "
-                    "(\"space\", the first one); \"preset\": one of that effect's presets; \"args\": its knobs (the ranges of fx:<name>)";
-  set.tags = {"settings", "preset", "knob", "master", "mastering", "definições", "masterização"};
-  out.push_back(std::move(set));
   CoreFunction mix;
   mix.id = "mix";
   mix.family = "mix";
@@ -463,8 +250,7 @@ std::vector<CoreFunction> buildFunctions(const std::vector<doc::RackEntry>& rack
   open.id = "open";
   open.family = "open";
   open.name = "Open";
-  open.description = "after Apply, opens a window: \"what\": \"effects\" (the track's or master's chain, F-Core, R-Core and D-Core: the default), "
-                     "\"instrument\" (W-Core on a synth track, \"wcore\" too, or a plugin's own window), \"patterns\" (P-Core on the track, \"pcore\" too), "
+  open.description = "after Apply, opens a window: \"what\": \"instrument\" (the track's plugin window), \"patterns\" (P-Core on the track, \"pcore\" too), "
                      "\"mixer\", \"score\" (Stage Core, the song's parts), or an effect's id or name (a plugin effect's window). Changes nothing";
   open.tags = {"open", "window", "plugin", "abrir"};
   out.push_back(std::move(open));
@@ -590,7 +376,6 @@ json chainJson(const json& effects) {
     }
     json e = {{"id", fx.value("id", std::string())}, {"fn", std::string("fx:") + info->name}, {"args", args}, {"ranges", ranges}};
     if (doc::effectBypassed(fx)) e["on"] = false;
-    if (fx.contains(doc::kWaveMoodKey)) e["part"] = "wcore mood";
     out.push_back(std::move(e));
   }
   return out;
@@ -611,41 +396,12 @@ json songJson(const doc::Document& song, const doc::SampleIndex* samples) {
     json devices = json::array();
     for (const auto& fx : t.effects)
       if (fx.value("type", std::string()) == "builtin") devices.push_back("fx:" + doc::effectName(fx));
-    const auto fcore = doc::fcoreOf(t);
-    const bool wcore = t.instrument.kind == "builtin" && t.instrument.name == doc::kWaveInstrument;
-    if (wcore) devices.push_back("wcore");
-    if (fcore) devices.push_back("fcore");
+    if (t.instrument.kind == "plugin") devices.push_back("plugin:" + t.instrument.plugin.value("name", std::string()));
     json tj = {{"id", t.id}, {"name", t.name}, {"type", trackType(t)}, {"sound", sound}, {"plays", doc::playsPatterns(t)}, {"devices", devices},
                {"mix", {{"gainDb", t.mix.gainDb}, {"pan", t.mix.pan}}}};
     const json chain = chainJson(t.effects);
     if (!chain.empty()) tj["chain"] = chain;
     if (!t.audioClips.empty()) tj["audioClips"] = (int)t.audioClips.size();  // recorded words VOICE STUTTER can cut
-    if (wcore) {
-      json args = json::object();
-      // Waves 2..4 only when added, and a card's light only when it is off: the state stays small.
-      if (const doc::InstrumentInfo* info = doc::findInstrumentInfo(doc::kWaveInstrument))
-        for (const auto& prm : info->params) {
-          const std::string name = prm.name;
-          if (doc::isWaveLayerParam(name) && !doc::waveLayerExists(t, name[1] - '1')) continue;
-          const auto it = t.instrument.params.find(prm.name);
-          const double v = it == t.instrument.params.end() ? prm.def : it->second;
-          if (name.find("sec_") != std::string::npos && v >= 0.5) continue;
-          args[prm.name] = v;
-        }
-      tj["wcore"] = {{"args", args}};
-      // Its movements (ENV 2/3, LFO 1..4, Velocity, Note, Macros -> knobs, pitch, volume, pan, detune), per wave.
-      tj["wcore"]["synth"] = doc::waveSynth(t);
-      const std::string mood = doc::waveMoodOf(t);
-      if (!mood.empty()) tj["wcore"]["mood"] = mood;
-    }
-    if (fcore) {
-      json regions = json::array();
-      for (const auto& r : fcore->regions) regions.push_back({(double)r.startTick / (4.0 * doc::kPpq), (double)r.endTick / (4.0 * doc::kPpq)});
-      tj["fcore"] = {{"intent", fcore->intent}, {"style", fcore->style}, {"mode", fcore->mode}, {"on", !fcore->bypass},
-                     {"args", {{"amount", fcore->knobs.amount}, {"length", fcore->knobs.lengthBeats}, {"tone", fcore->knobs.tone}, {"space", fcore->knobs.space}}},
-                     {"stepsOff", fcore->off}};
-      if (!regions.empty()) tj["fcore"]["regionBars"] = regions;
-    }
     tracks.push_back(std::move(tj));
   }
   json master = json::array();
@@ -803,7 +559,8 @@ Proposal validateProposal(const json& raw, const std::vector<CoreFunction>& func
       call.open = str(c, "what").empty() ? std::string("effects") : str(c, "what");
       // A Core plugin by any of its names opens the window that shows it (doc::corePlugins: "wcore" -> "instrument",
       // "stage" -> "score", "stutter" -> "patterns": Edit > STUTTER is in the piano roll).
-      if (const doc::CorePluginInfo* plugin = doc::findCorePlugin(call.open); plugin && !plugin->opens.empty()) call.open = plugin->opens;
+      if (call.open == "pcore" || call.open == "stutter") call.open = "patterns";
+      if (call.open == "stage") call.open = "score";
       if (call.open == "score" && call.trackId.empty()) { call.trackId = "master"; call.trackName = "the song"; }  // no track needed
       if (call.open != "effects" && call.open != "instrument" && call.open != "patterns" && call.open != "mixer" && call.open != "score") {
         const json* chain = call.trackId == "master" ? &song.masterEffects : track ? &track->effects : nullptr;
@@ -1036,12 +793,6 @@ std::vector<std::string> applyProposal(doc::Document& song, const Proposal& p, c
       lines.push_back(plugin->apply(song, c, where));
     } else if (c.fn->family == "open") {
       lines.push_back(describeCall(c));  // nothing changes: the window opens it after Apply (opensOf)
-    } else if (c.fn->family == "rack") {
-      if (master) throw doc::DocumentError("racks", c.fn->name + " goes on a track, not the master");
-      const std::vector<std::string> later = doc::applyNativeRack(song, {where}, *c.fn->rack);
-      std::string line = c.fn->name + " on " + name + " (Core's own)";
-      for (size_t i = 0; i < later.size(); ++i) line += (i ? ", " : "; not in this Core yet: ") + later[i];
-      lines.push_back(line);
     } else if (c.fn->family == "sample") {
       if (master) throw doc::DocumentError("samples", "a sample goes on a track, not the master");
       if (!env.samples) throw doc::DocumentError("samples", "the sample library is not loaded");

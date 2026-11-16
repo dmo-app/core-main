@@ -1761,6 +1761,8 @@ void registerNativeInstruments(NativeRegistry& reg) {
   reg.add({"plugin", NativeKind::Instrument, 1, true, none, missing, nullptr});
   reg.add({"audio", NativeKind::Instrument, 1, true, none, missing, nullptr});
   reg.add({"bus", NativeKind::Instrument, 1, true, none, missing, nullptr});
+  // A track with notes and no instrument yet (2026-11-16: the sound comes from plugins): silent until one is chosen.
+  reg.add({"none", NativeKind::Instrument, 1, true, none, missing, nullptr});
 }
 
 std::unique_ptr<Instrument> makeInstrument(const std::string& name, double sampleRate) {

@@ -1,11 +1,16 @@
 #include "stutter.hpp"
-#include "core_plugins.hpp"
 #include <algorithm>
 #include <cmath>
 #include <set>
 #include "edit.hpp"
 
 namespace core::doc {
+
+namespace {
+// What a tool leaves on the notes and clips it made (the Core plugin catalogue that stamped a version went with Core's
+// own sound, 2026-11-16): the state as it is.
+json corePluginState(const std::string&, json state) { return state; }
+}  // namespace
 
 const std::vector<StutterPreset>& stutterPresets() {
   // Starting points from the plan's walkthroughs (hi-tech accelerating roll 1/8 -> 1/64, "three repeats, then the

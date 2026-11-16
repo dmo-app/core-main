@@ -1,7 +1,6 @@
 #include "MainComponent.h"
 #include "ChoiceDialog.h"
 #include "core/project.hpp"
-#include "attach.hpp"
 #include "follow.hpp"
 #include "stutter.hpp"
 #include "Language.h"
@@ -16,9 +15,6 @@
 #include "Stretch.h"
 #include "Theme.h"
 #include "TrackColour.h"
-#include "wcore.hpp"
-#include "glitch.hpp"
-#include "core_plugins.hpp"
 #include "randomize.hpp"
 #include "sample_analysis.hpp"
 #include "sampling.hpp"
@@ -2087,7 +2083,6 @@ void MainComponent::edit(const std::function<void(doc::Document&)>& change, cons
   try {
     change(next);
     doc::refreshFollows(next);   // FOLLOW on: the kick plays the STUTTER, the bass follows the kick (same undo step)
-    doc::refreshAttaches(next);  // attachments follow their notes and clips (one undo step with the change)
     // Refuse an invalid edit before putting it into History or sending it: otherwise every
     // later edit is built on a document the engine cannot play (report parts 12–14).
     (void)core::fromJson(doc::toProjection(next));
@@ -3242,7 +3237,7 @@ void MainComponent::setAiControl(bool on) {
 }
 
 std::vector<control::CoreFunction> MainComponent::callableFunctions() const {
-  return control::buildFunctions({});
+  return control::buildFunctions();
 }
 
 // Every second: the state AICORE reads (written when it changed), and the proposals waiting.
@@ -6016,7 +6011,30 @@ void MainComponent::runSelfTest(juce::File picture, std::function<void(bool, juc
   test_ = std::make_unique<SelfTest>();
   test_->picture = std::move(picture);
   test_->done = std::move(done);
+  // Core's sound comes from plugins (2026-11-16): the self-test plays its own test synth (app/selftest-plugins).
+#ifdef CORE_TEST_SYNTH_VST3
+  juce::String problem;
+  const nlohmann::json found = PluginCatalog::scanFile(juce::File::getSpecialLocation(juce::File::currentExecutableFile).getSiblingFile("core-engine.exe"),
+                                                       juce::File(CORE_TEST_SYNTH_VST3), &problem);
+  if (found.is_array() && !found.empty()) test_->synth = found[0];
+  else logLine("Self-test: the test synth was not read: " + problem);
+#endif
+  selfTestSynth();
   test_->started = test_->stepStarted = juce::Time::getMillisecondCounterHiRes();
+}
+
+// Every track that plays notes with no plugin yet gets the self-test's synth (no undo step: the song as it was opened).
+void MainComponent::selfTestSynth() {
+  if (!test_ || test_->synth.is_null()) return;
+  doc::Document d = history_.current();
+  bool changed = false;
+  for (const auto& t : history_.current().tracks)
+    if (doc::playsPatterns(t) && t.instrument.kind != "plugin") { doc::replaceInstrumentWithPlugin(d, t.id, test_->synth); changed = true; }
+  if (!changed) return;
+  const bool wasModified = history_.modified();
+  history_.amend(d);
+  if (!wasModified) history_.markSaved();  // the song as it was opened, only played by the test synth
+  session_->setDocument(engineDocument());
 }
 
 // The path a user takes in M1b: play, drag the BPM, undo, seek, loop, mute and a volume drag, save,
@@ -6158,6 +6176,7 @@ void MainComponent::selfTestStep() {
       break;
     case 14:
       if (snap_.status == EngineStatus::Ready && applied && history_.current().tracks.size() == 3 && !history_.modified()) {
+        selfTestSynth();  // the template's tracks have no plugin yet: the test synth plays them
         edit([](doc::Document& d) { doc::addTrack(d, "bass"); }, "Add");
         edit([](doc::Document& d) { doc::duplicateTrack(d, "kick"); }, "Duplicate");
         edit([](doc::Document& d) { doc::renameTrack(d, "kick-2", "Kick layer"); }, "Rename");

@@ -320,14 +320,32 @@ void PatternEditor::setPattern(const std::string& patternId) {
   documentChanged();
 }
 
+namespace {
+// What kind of drum track it is: "kick", "hats", "snare", "drums", or "" (not a drum track). The old Core instrument's
+// name when the song has one; else the track's id or name (Core's sound comes from plugins since 2026-11-16, so a
+// plugin kick is a kick by its name: "kick", "kick-2", "Kick layer").
+std::string drumRole(const doc::Track& t) {
+  for (const char* r : {"kick", "hats", "snare", "drums"})
+    if (t.instrument.name == r) return r;
+  std::string words = t.id + " " + t.name;
+  for (auto& c : words) c = (char)std::tolower((unsigned char)c);
+  if (words.find("kick") != std::string::npos) return "kick";
+  if (words.find("hat") != std::string::npos) return "hats";
+  if (words.find("snare") != std::string::npos || words.find("clap") != std::string::npos) return "snare";
+  if (words.find("drum") != std::string::npos) return "drums";
+  return {};
+}
+}  // namespace
+
 bool PatternEditor::drums() const {
   const doc::Track* t = currentTrack();
-  return t && (t->instrument.name == "kick" || t->instrument.name == "hats" || t->instrument.name == "snare" || t->instrument.name == "drums");
+  return t && !drumRole(*t).empty();
 }
 
 bool PatternEditor::hatSounds() const {
   const doc::Track* t = currentTrack();
-  return t && (t->instrument.name == "hats" || t->instrument.name == "drums" || t->instrument.name == "kick");
+  const std::string r = t ? drumRole(*t) : std::string();
+  return r == "hats" || r == "drums" || r == "kick";
 }
 
 // The sounds a drum track offers as rows, top to bottom: the hats' or the kick's.
@@ -335,7 +353,8 @@ const std::vector<int>& PatternEditor::soundOrder() const {
   static const std::vector<int> none;
   const doc::Track* t = currentTrack();
   if (!t) return none;
-  return t->instrument.name == "kick" ? kKickOrder : t->instrument.name == "hats" || t->instrument.name == "drums" ? kHatOrder : none;
+  const std::string r = drumRole(*t);
+  return r == "kick" ? kKickOrder : r == "hats" || r == "drums" ? kHatOrder : none;
 }
 
 juce::String PatternEditor::soundName(int pitch) const {

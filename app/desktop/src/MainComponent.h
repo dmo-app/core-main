@@ -502,8 +502,10 @@ private:
     std::string audioTrack, partTrack;
     double duration = 0;
     juce::String log;
+    nlohmann::json synth;  // the self-test's own test synth (app/selftest-plugins), as the scan found it
   };
   std::unique_ptr<SelfTest> test_;
+  void selfTestSynth();  // the self-test's synth on every note track without a plugin
   std::vector<control::InboxItem> inbox_;           // the AI's proposals waiting (bridge inbox)
   std::string samplesAddedSeen_ = "?";               // AICORE's samples-added.json as last seen ("?" = not looked yet)
   std::string inboxSeen_, stateWritten_;            // the inbox as last read, the state as last written

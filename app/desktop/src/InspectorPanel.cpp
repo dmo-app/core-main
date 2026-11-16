@@ -4,7 +4,6 @@
 #include <cmath>
 #include <cstring>
 #include "Theme.h"
-#include "attach.hpp"
 #include "edit.hpp"
 
 namespace core::app {
@@ -295,9 +294,6 @@ void InspectorPanel::update(const std::string& selectedTrack, const std::string&
     for (const auto& c : t->clips)
       if (c.id == selectedClip) {
         sig << "|" << (int)c.startTick << ":" << (int)c.lengthTicks << ":" << u8(c.patternId);
-        for (int place = 0; place < 3; ++place) sig << ":" << u8(doc::clipAttach(c, place));
-        if (const doc::Pattern* p = t->findPattern(c.patternId))
-          for (const auto& n : p->notes) for (int place = 0; place < 3; ++place) sig << u8(doc::noteAttach(n, place));
       }
   }
   if (sig.toStdString() == seen_) return;
@@ -342,24 +338,7 @@ void InspectorPanel::update(const std::string& selectedTrack, const std::string&
         fact(facts_, "Pattern", (p ? u8(p->name) : juce::String("?")));
         fact(facts_, "Start", "bar " + barBeat(c.startTick));
         fact(facts_, "Length", juce::String(c.lengthTicks / (4.0 * doc::kPpq), 2).trimCharactersAtEnd("0").trimCharactersAtEnd(".") + " bars");
-        // Everything that plays on it: the track's filters and effects, then the attachments on the clip and its notes.
-        describeEffects(facts_, *t);
-        static const char* places[] = {"Start", "Middle", "End"};
-        juce::StringArray attached;
-        for (int place = 0; place < 3; ++place) {
-          const std::string a = doc::clipAttach(c, place);
-          if (!a.empty()) attached.add(juce::String(places[place]) + ": " + u8(a));
-        }
-        if (!attached.isEmpty()) addList(facts_, "Attached", attached);
-        if (p) {
-          juce::StringArray onNotes;
-          for (const auto& n : p->notes)
-            for (int place = 0; place < 3; ++place) {
-              const std::string a = doc::noteAttach(n, place);
-              if (!a.empty()) onNotes.addIfNotAlreadyThere(u8(a));
-            }
-          if (!onNotes.isEmpty()) addList(facts_, "On notes", onNotes);
-        }
+        describeEffects(facts_, *t);  // everything that plays on it: the track's plugin effects
       }
     for (const auto& c : t->audioClips)
       if (c.id == selectedClip) {

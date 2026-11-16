@@ -30,7 +30,6 @@
 #include <string>
 #include <vector>
 #include "document.hpp"
-#include "fx_racks.hpp"
 #include "samples.hpp"
 
 namespace core::control {
@@ -61,7 +60,6 @@ struct CoreFunction {
   bool native = false;      // a Style FX: Core's own devices with their presets (no macros)
   bool available = true;
   std::string unavailable;  // why not
-  std::optional<doc::RackDef> rack;
   std::vector<std::string> presets;  // an effect's presets by name ("preset" in a call); "set" takes any effect's
   std::map<std::string, std::vector<std::string>> options;  // text choices ("intent", "style", "mode", "mood"): the allowed values
   json extra = json::object();       // written as is into the function's state (preset details, F-Core's presets by intent)
@@ -72,7 +70,7 @@ struct CoreFunction {
 // The functions this Core can call now: the built-in effects, every Style FX (Core's own devices and presets,
 // doc::applyNativeRack, no macros), Core's own plugins and "sample". Built every time: a new Style FX file changes
 // it at once.
-std::vector<CoreFunction> buildFunctions(const std::vector<doc::RackEntry>& racks);
+std::vector<CoreFunction> buildFunctions();
 // By id, or by the part after the family ("buildup/roll", "reverb") when only one function has it.
 const CoreFunction* findFunction(const std::vector<CoreFunction>& functions, const std::string& id);
 
