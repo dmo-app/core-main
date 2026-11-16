@@ -2,6 +2,7 @@
 #include "models.hpp"
 #include "samples.hpp"
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <filesystem>
 #include <thread>
@@ -19,6 +20,7 @@ juce::String u8(const std::string& s) { return juce::String::fromUTF8(s.c_str())
 juce::String u8(const char* s) { return juce::String::fromUTF8(s); }
 
 constexpr const char* kEfforts[] = {"low", "medium", "high"};
+constexpr double kLimits[] = {0.05, 0.10, 0.25, 0.50, 1.00};
 // The permission modes as the combo shows them (catalog.hpp: ask, readonly, trusted).
 constexpr const char* kModes[] = {"Ask before changing", "Read only", "Trusted (applies by itself)"};
 
@@ -33,7 +35,153 @@ juce::String dollars(double usd) { return "$" + juce::String(usd, usd < 0.1 ? 4 
 
 }  // namespace
 
+// The edge that is dragged: the left edge at the side, the top edge at the bottom.
+class AiPanel::Grip final : public juce::Component {
+public:
+  explicit Grip(AiPanel& owner) : owner_(owner) {}
+  void update() { setMouseCursor(owner_.dock() == Dock::Side ? juce::MouseCursor::LeftRightResizeCursor : juce::MouseCursor::UpDownResizeCursor); }
+  void paint(juce::Graphics& g) override {
+    g.setColour(isMouseOverOrDragging() ? kPrimaryLight : kOutline);
+    if (owner_.dock() == Dock::Side) g.fillRect(getLocalBounds().removeFromLeft(2));
+    else g.fillRect(getLocalBounds().removeFromTop(2));
+  }
+  void mouseEnter(const juce::MouseEvent&) override { repaint(); }
+  void mouseExit(const juce::MouseEvent&) override { repaint(); }
+  void mouseDown(const juce::MouseEvent&) override { start_ = owner_.startSize(); }
+  void mouseDrag(const juce::MouseEvent& e) override {
+    const auto d = e.getOffsetFromDragStart();
+    owner_.resizeBy(start_, owner_.dock() == Dock::Side ? -d.x : -d.y);
+  }
+
+private:
+  AiPanel& owner_;
+  int start_ = 0;
+};
+
+// The chat's settings (Settings in the header), in a call-out: each change is kept at once (ai-panel.json).
+class AiPanel::Settings final : public juce::Component {
+public:
+  explicit Settings(AiPanel& owner) : owner_(owner) {
+    auto label = [this](juce::Label& l, const char* text) {
+      l.setText(u8(text), juce::dontSendNotification);
+      l.setColour(juce::Label::textColourId, kMuted);
+      addAndMakeVisible(l);
+    };
+    label(modelLabel_, "MODEL");
+    for (int i = 0; i < (int)owner_.models_.size(); ++i) model_.addItem(u8(owner_.models_[(size_t)i].name), i + 1);
+    model_.setSelectedId(owner_.modelIndex() + 1, juce::dontSendNotification);
+    model_.setTooltip(u8("Claude Haiku by default (about 1/10 of the price); Sonnet for big requests; more (other APIs, local models) in ai-settings.json"));
+    model_.onChange = [this] { owner_.prefs_.model = model_.getText(); changed(); };
+    addAndMakeVisible(model_);
+    label(effortLabel_, "EFFORT");
+    for (int i = 0; i < (int)std::size(kEfforts); ++i) effort_.addItem(u8(kEfforts[i]), i + 1);
+    effort_.setSelectedId(owner_.prefs_.effort + 1, juce::dontSendNotification);
+    effort_.setTooltip(u8("How much the model thinks: low is quicker and cheaper"));
+    effort_.onChange = [this] { owner_.prefs_.effort = effort_.getSelectedId() - 1; changed(); };
+    addAndMakeVisible(effort_);
+    label(modeLabel_, "WHAT THE AI MAY DO");
+    for (int i = 0; i < (int)std::size(kModes); ++i) mode_.addItem(u8(kModes[i]), i + 1);
+    {
+      const auto& modes = ai::permissionModes();
+      const auto at = std::find(modes.begin(), modes.end(), owner_.configNow().permissions.mode);
+      mode_.setSelectedId(at == modes.end() ? 1 : (int)(at - modes.begin()) + 1, juce::dontSendNotification);
+    }
+    mode_.setTooltip(u8("Ask before changing the song (Apply), only read and explain, or apply by itself (still one Undo step). "
+                        "Per action in ai-settings.json: \"permissions\": {\"allow\": [...], \"deny\": [...], \"ask\": [...]}"));
+    mode_.onChange = [this] { owner_.prefs_.mode = u8(ai::permissionModes()[(size_t)(mode_.getSelectedId() - 1)]); changed(); };
+    addAndMakeVisible(mode_);
+    label(limitLabel_, "COST LIMIT PER MESSAGE");
+    for (int i = 0; i < (int)std::size(kLimits); ++i) limit_.addItem("$" + juce::String(kLimits[i], 2), i + 1);
+    limit_.setSelectedId(1, juce::dontSendNotification);
+    for (int i = 0; i < (int)std::size(kLimits); ++i)
+      if (std::abs(kLimits[i] - owner_.prefs_.maxUsd) < 1e-6) limit_.setSelectedId(i + 1, juce::dontSendNotification);
+    limit_.setTooltip(u8("A message stops asking the model when it has cost this much (a Haiku message costs about $0.002)"));
+    limit_.onChange = [this] { owner_.prefs_.maxUsd = kLimits[limit_.getSelectedId() - 1]; changed(); };
+    addAndMakeVisible(limit_);
+    label(memoryLabel_, "MEMORY");
+    useMemory_.setButtonText(u8("Share the memory with this chat (recipes of earlier chats go with the requests)"));
+    useMemory_.setToggleState(owner_.prefs_.useMemory, juce::dontSendNotification);
+    useMemory_.onClick = [this] { owner_.prefs_.useMemory = useMemory_.getToggleState(); changed(); };
+    addAndMakeVisible(useMemory_);
+    keepMemory_.setButtonText(u8("Keep what is applied as recipes (Gostei / Não gostei)"));
+    keepMemory_.setToggleState(owner_.prefs_.keepMemory, juce::dontSendNotification);
+    keepMemory_.onClick = [this] { owner_.prefs_.keepMemory = keepMemory_.getToggleState(); changed(); };
+    addAndMakeVisible(keepMemory_);
+    for (auto* b : {&exportMemory_, &importMemory_, &trainMemory_, &folder_}) addAndMakeVisible(*b);
+    exportMemory_.onClick = [this] { owner_.memoryAction(1); };
+    importMemory_.onClick = [this] { owner_.memoryAction(2); };
+    trainMemory_.onClick = [this] { owner_.memoryAction(3); };
+    trainMemory_.setTooltip(u8("One line per recipe, with its whole conversation: for training a model (AICORE)"));
+    folder_.onClick = [this] { owner_.host_.keyFolder.createDirectory(); owner_.host_.keyFolder.startAsProcess(); };
+    label(placeLabel_, "PLACE");
+    place_.addItem(u8("At the right side"), 1);
+    place_.addItem(u8("At the bottom"), 2);
+    place_.setSelectedId(owner_.prefs_.dock == Dock::Side ? 1 : 2, juce::dontSendNotification);
+    place_.onChange = [this] { owner_.setDock(place_.getSelectedId() == 1 ? Dock::Side : Dock::Bottom); };
+    addAndMakeVisible(place_);
+    const int n = owner_.memory_ ? owner_.memory_->size() : 0;
+    count_.setText(juce::String(n) + (n == 1 ? u8(" recipe in the memory") : u8(" recipes in the memory")), juce::dontSendNotification);
+    count_.setColour(juce::Label::textColourId, kMuted);
+    addAndMakeVisible(count_);
+    setSize(420, 440);
+  }
+
+  void paint(juce::Graphics& g) override { g.fillAll(kPanel); }
+
+  void resized() override {
+    auto r = getLocalBounds().reduced(kSpacePad);
+    auto row = [&](juce::Component& c, int h) { c.setBounds(r.removeFromTop(h)); r.removeFromTop(4); };
+    row(modelLabel_, 18);
+    row(model_, 26);
+    auto two = r.removeFromTop(18);
+    effortLabel_.setBounds(two.removeFromLeft(110));
+    modeLabel_.setBounds(two);
+    r.removeFromTop(4);
+    two = r.removeFromTop(26);
+    effort_.setBounds(two.removeFromLeft(100));
+    two.removeFromLeft(10);
+    mode_.setBounds(two);
+    r.removeFromTop(6);
+    auto lim = r.removeFromTop(26);
+    limitLabel_.setBounds(lim.removeFromLeft(200));
+    limit_.setBounds(lim.removeFromLeft(100));
+    r.removeFromTop(10);
+    row(memoryLabel_, 18);
+    row(useMemory_, 24);
+    row(keepMemory_, 24);
+    row(count_, 18);
+    auto buttons = r.removeFromTop(kSpaceButton);
+    const int w = (buttons.getWidth() - 12) / 3;
+    exportMemory_.setBounds(buttons.removeFromLeft(w));
+    buttons.removeFromLeft(6);
+    importMemory_.setBounds(buttons.removeFromLeft(w));
+    buttons.removeFromLeft(6);
+    trainMemory_.setBounds(buttons);
+    r.removeFromTop(10);
+    row(placeLabel_, 18);
+    auto last = r.removeFromTop(26);
+    place_.setBounds(last.removeFromLeft(200));
+    last.removeFromLeft(10);
+    folder_.setBounds(last);
+  }
+
+private:
+  void changed() { owner_.savePrefs(); }
+
+  AiPanel& owner_;
+  juce::Label modelLabel_, effortLabel_, modeLabel_, limitLabel_, memoryLabel_, placeLabel_, count_;
+  juce::ComboBox model_, effort_, mode_, place_, limit_;
+  juce::ToggleButton useMemory_, keepMemory_;
+  juce::TextButton exportMemory_{"Export…"}, importMemory_{"Import…"}, trainMemory_{"For training…"}, folder_{"Open the AI folder"};
+};
+
 AiPanel::AiPanel(Host host) : host_(std::move(host)) {
+  title_.setText(u8("AI"), juce::dontSendNotification);
+  title_.setFont(juce::FontOptions(kFontTitle, juce::Font::bold));
+  title_.setColour(juce::Label::textColourId, kTitle);
+  addAndMakeVisible(title_);
+  grip_ = std::make_unique<Grip>(*this);
+  addAndMakeVisible(*grip_);
   transcript_.setMultiLine(true, true);
   transcript_.setReadOnly(true);
   transcript_.setScrollbarsShown(true);
@@ -41,18 +189,24 @@ AiPanel::AiPanel(Host host) : host_(std::move(host)) {
   addAndMakeVisible(transcript_);
   input_.setMultiLine(true, true);
   input_.setReturnKeyStartsNewLine(false);
-  input_.setTextToShowWhenEmpty(u8("Ask for a beat, a song structure or a change to a part…"), kText.withAlpha(0.4f));
+  input_.setTextToShowWhenEmpty(u8("Ask for a beat, a song structure or a change to a part (a box on the tracks limits it to there)…"), kText.withAlpha(0.4f));
   input_.onReturnKey = [this] { send(); };
   addAndMakeVisible(input_);
   send_.onClick = [this] { send(); };
   addAndMakeVisible(send_);
-  newChat_.onClick = [this] {
-    if (busy_) return;
-    if (chat_) chat_->reset();
-    transcript_.clear();
-    status_.setText({}, juce::dontSendNotification);
-  };
-  addAndMakeVisible(newChat_);
+  new_.setTooltip(u8("A new chat (this one stays in Chats)"));
+  new_.onClick = [this] { newChat(); };
+  chats_.setTooltip(u8("The chats kept on this computer: open one again"));
+  chats_.onClick = [this] { showChats(); };
+  copy_.setTooltip(u8("Copy the last answer or the whole conversation (text can also be selected and copied)"));
+  copy_.onClick = [this] { showCopy(); };
+  delete_.setTooltip(u8("Delete this chat (from the screen and from Chats)"));
+  delete_.onClick = [this] { deleteChat(); };
+  settings_.setTooltip(u8("Model, effort, what the AI may do, the memory, where this panel goes"));
+  settings_.onClick = [this] { showSettings(); };
+  close_.setTooltip(u8("Close (the chat stays: the AI button opens it again)"));
+  close_.onClick = [this] { if (onClose) onClose(); };
+  for (auto* b : {&new_, &chats_, &copy_, &delete_, &settings_, &close_}) addAndMakeVisible(*b);
   apply_.onClick = [this] { applyProposal(); };
   apply_.setTooltip(u8("Makes the proposal on the song as one step of Undo"));
   discard_.onClick = [this] { dropProposal(); };
@@ -65,9 +219,6 @@ AiPanel::AiPanel(Host host) : host_(std::move(host)) {
   dislike_.onClick = [this] { remember(false); };
   addChildComponent(like_);
   addChildComponent(dislike_);
-  memoryButton_.setTooltip(u8("The AI's memory: export or import its recipes (JSON)"));
-  memoryButton_.onClick = [this] { showMemoryMenu(); };
-  addAndMakeVisible(memoryButton_);
   {
     std::string why;
     memory_ = ai::Memory::open(pathOfFile(host_.keyFolder.getChildFile("core-ai-memory.sqlite")), &why);
@@ -81,40 +232,79 @@ AiPanel::AiPanel(Host host) : host_(std::move(host)) {
     permissions_ = ai::permissionsFrom(j.is_discarded() ? json() : j, &problems);
     for (const auto& p : problems) say(u8("Core"), u8("ai-settings.json: ") + u8(p));
   }
-  for (int i = 0; i < (int)models_.size(); ++i) model_.addItem(u8(models_[(size_t)i].name), i + 1);
-  model_.setSelectedId(1, juce::dontSendNotification);
-  model_.setTooltip(u8("The model: Claude Haiku by default (about 1/10 of the price), Sonnet for big requests; more (other APIs, local models) in ai-settings.json"));
-  addAndMakeVisible(model_);
-  for (int i = 0; i < (int)std::size(kEfforts); ++i) effort_.addItem(u8(kEfforts[i]), i + 1);
-  effort_.setSelectedId(2, juce::dontSendNotification);
-  effort_.setTooltip(u8("How much the model thinks: low is quicker and cheaper"));
-  addAndMakeVisible(effort_);
-  for (int i = 0; i < (int)std::size(kModes); ++i) mode_.addItem(u8(kModes[i]), i + 1);
-  {
-    const auto& modes = ai::permissionModes();
-    const auto at = std::find(modes.begin(), modes.end(), permissions_.mode);
-    mode_.setSelectedId(at == modes.end() ? 1 : (int)(at - modes.begin()) + 1, juce::dontSendNotification);
-  }
-  mode_.setTooltip(u8("What the AI may do: ask before changing the song (Apply), only read and explain, or apply by itself (still one Undo step). "
-                      "Per action in ai-settings.json: \"permissions\": {\"allow\": [...], \"deny\": [...], \"ask\": [...]}"));
-  addAndMakeVisible(mode_);
+  loadPrefs();
   status_.setColour(juce::Label::textColourId, kText.withAlpha(0.7f));
   addAndMakeVisible(status_);
   cost_.setJustificationType(juce::Justification::centredRight);
   cost_.setColour(juce::Label::textColourId, kText.withAlpha(0.7f));
   addAndMakeVisible(cost_);
-  if (apiKey().isEmpty())
-    say(u8("Core"), u8("No Anthropic key yet. Set ANTHROPIC_API_KEY, or put the key alone in ") +
+  if (apiKey().isEmpty() && needsKey())
+    say(u8("Core"), u8("No key for ") + u8(entry().name) + u8(" yet. Set ANTHROPIC_API_KEY, or put the key alone in ") +
                         host_.keyFolder.getChildFile("anthropic-key.txt").getFullPathName() + u8("."));
   if (host_.knowledge == nullptr) say(u8("Core"), u8("The style knowledge base (ai/core-ai-knowledge.sqlite) is not installed: the AI works without it."));
-  setSize(600, 640);
+  said_.clear();  // the notices above are not part of a chat
+  grip_->update();
+  setSize(prefs_.width, 600);
 }
 
-AiPanel::~AiPanel() { alive_->store(false); }
-
-const ai::ModelEntry& AiPanel::entry() const {
-  return models_[(size_t)juce::jlimit(0, (int)models_.size() - 1, model_.getSelectedId() - 1)];
+AiPanel::~AiPanel() {
+  alive_->store(false);
+  saveChat();
 }
+
+void AiPanel::setLimits(int maxWidth, int maxHeight) {
+  maxWidth_ = std::max(320, maxWidth);
+  maxHeight_ = std::max(220, maxHeight);
+}
+
+void AiPanel::focusInput() {
+  if (isShowing()) input_.grabKeyboardFocus();
+}
+
+void AiPanel::resizeBy(int start, int delta) {
+  if (prefs_.dock == Dock::Side) prefs_.width = juce::jlimit(320, maxWidth_, start + delta);
+  else prefs_.height = juce::jlimit(220, maxHeight_, start + delta);
+  if (onLayoutChange) onLayoutChange();
+  savePrefs();
+}
+
+void AiPanel::setDock(Dock d) {
+  prefs_.dock = d;
+  grip_->update();
+  savePrefs();
+  if (onLayoutChange) onLayoutChange();
+}
+
+void AiPanel::loadPrefs() {
+  const juce::File f = host_.keyFolder.getChildFile("ai-panel.json");
+  const json j = f.existsAsFile() ? json::parse(f.loadFileAsString().toStdString(), nullptr, false) : json();
+  if (!j.is_object()) return;
+  prefs_.model = u8(j.value("model", std::string()));
+  prefs_.effort = juce::jlimit(0, 2, j.value("effort", 1));
+  prefs_.mode = u8(j.value("mode", std::string()));
+  prefs_.useMemory = j.value("useMemory", true);
+  prefs_.keepMemory = j.value("keepMemory", true);
+  prefs_.maxUsd = juce::jlimit(0.01, 5.0, j.value("maxUsd", 0.25));
+  prefs_.dock = j.value("dock", std::string("side")) == "bottom" ? Dock::Bottom : Dock::Side;
+  prefs_.width = juce::jlimit(320, 2000, j.value("width", 420));
+  prefs_.height = juce::jlimit(220, 2000, j.value("height", 320));
+}
+
+void AiPanel::savePrefs() {
+  const json j = {{"model", prefs_.model.toStdString()}, {"effort", prefs_.effort}, {"mode", prefs_.mode.toStdString()},
+                  {"useMemory", prefs_.useMemory}, {"keepMemory", prefs_.keepMemory}, {"maxUsd", prefs_.maxUsd},
+                  {"dock", prefs_.dock == Dock::Side ? "side" : "bottom"}, {"width", prefs_.width}, {"height", prefs_.height}};
+  host_.keyFolder.createDirectory();
+  host_.keyFolder.getChildFile("ai-panel.json").replaceWithText(u8(j.dump(1)));
+}
+
+int AiPanel::modelIndex() const {
+  for (int i = 0; i < (int)models_.size(); ++i)
+    if (u8(models_[(size_t)i].name) == prefs_.model) return i;
+  return 0;
+}
+
+const ai::ModelEntry& AiPanel::entry() const { return models_[(size_t)modelIndex()]; }
 
 juce::String AiPanel::apiKey() const {
   const ai::ModelEntry& e = entry();
@@ -130,13 +320,16 @@ bool AiPanel::needsKey() const { return !entry().keyEnv.empty() || !entry().keyF
 ai::Config AiPanel::configNow() const {
   ai::Config c = entry().config;
   c.provider.apiKey = apiKey().toStdString();
-  c.effort = kEfforts[juce::jlimit(0, (int)std::size(kEfforts) - 1, effort_.getSelectedId() - 1)];
+  c.effort = kEfforts[juce::jlimit(0, (int)std::size(kEfforts) - 1, prefs_.effort)];
+  c.maxUsdPerMessage = prefs_.maxUsd;
   c.permissions = permissions_;
-  c.permissions.mode = ai::permissionModes()[(size_t)juce::jlimit(0, (int)ai::permissionModes().size() - 1, mode_.getSelectedId() - 1)];
+  for (const auto& m : ai::permissionModes())
+    if (u8(m) == prefs_.mode) c.permissions.mode = m;
   return c;
 }
 
 void AiPanel::say(const juce::String& who, const juce::String& text) {
+  said_.push_back({who, text});
   transcript_.moveCaretToEnd();
   transcript_.insertTextAtCaret((transcript_.isEmpty() ? juce::String() : juce::String("\n\n")) + who + ": " + text);
 }
@@ -151,9 +344,16 @@ void AiPanel::send() {
   }
   const ai::Config cfg = configNow();
   dropProposal();  // a new message: the old proposal goes
+  ai::Memory* shared = prefs_.useMemory ? memory_.get() : nullptr;
   if (!chat_ || chat_->config().model != cfg.model || chat_->config().effort != cfg.effort || chat_->config().provider.url() != cfg.provider.url() ||
-      chat_->config().permissions.mode != cfg.permissions.mode)
-    chat_ = std::make_unique<ai::Chat>(cfg, host_.functions(), host_.pcore, host_.knowledge, memory_.get());  // a new model or mode starts a new chat
+      chat_->config().permissions.mode != cfg.permissions.mode || chat_->config().provider.apiKey != cfg.provider.apiKey || chatMemory_ != shared) {
+    // Another model, effort, mode or memory setting: the same conversation goes on with it.
+    const json kept = chat_ ? chat_->messages() : json::array();
+    chat_ = std::make_unique<ai::Chat>(cfg, host_.functions(), host_.pcore, host_.knowledge, shared);
+    chat_->restore(kept);
+    chatMemory_ = shared;
+  }
+  if (chatTitle_.isEmpty()) chatTitle_ = text.substring(0, 60);
   input_.clear();
   showFeedback(false);
   lastRequest_ = text.toStdString();
@@ -233,6 +433,7 @@ void AiPanel::finished() {
     if (proposal.value("auto", false) && apply_.isVisible()) applyProposal();  // trusted: every call allowed
   }
   showCost();
+  saveChat();  // after every answer: closing Core or New never loses it
 }
 
 // The proposal as Core checks it against the song now: what it calls, warnings, what is left out.
@@ -255,7 +456,7 @@ void AiPanel::applyProposal() {
     juce::String text = u8("Applied (Edit > Undo takes it back):");
     for (const auto& l : lines) text += "\n  \u2022 " + u8(l);
     say(u8("Core"), text);
-    if (memory_ && chat_) {  // a candidate recipe; Gostei confirms it
+    if (memory_ && chat_ && prefs_.keepMemory) {  // a candidate recipe; Gostei confirms it
       recipeId_ = memory_->applied(lastRequest_, doc::songStyle(host_.song()), pending_, chat_->config().model, chat_->shown(), nowMs(),
                                    chat_->episode());
       showFeedback(!recipeId_.empty());
@@ -281,35 +482,148 @@ void AiPanel::remember(bool liked) {
   showFeedback(false);
 }
 
-void AiPanel::showMemoryMenu() {
-  juce::PopupMenu m;
-  m.addSectionHeader(u8("AI memory: ") + juce::String(memory_ ? memory_->size() : 0) + u8(" recipe(s)"));
-  m.addItem(1, u8("Export…"), memory_ != nullptr);
-  m.addItem(2, u8("Import…"), memory_ != nullptr);
-  m.addItem(3, u8("Export for training (JSONL)…"), memory_ != nullptr);
-  m.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&memoryButton_), [this, alive = alive_](int choice) {
-    if (!alive->load() || !memory_ || choice == 0) return;
-    const bool exporting = choice != 2, lines = choice == 3;
-    const char* name = lines ? "core-ai-memory.jsonl" : "core-ai-memory.json";
-    chooser_ = std::make_unique<juce::FileChooser>(exporting ? u8("Export the AI's memory") : u8("Import an AI memory"),
-                                                   juce::File::getSpecialLocation(juce::File::userDocumentsDirectory).getChildFile(name),
-                                                   lines ? "*.jsonl" : "*.json");
-    const int flags = exporting ? juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::warnAboutOverwriting : juce::FileBrowserComponent::openMode;
-    chooser_->launchAsync(flags | juce::FileBrowserComponent::canSelectFiles, [this, alive, exporting, lines](const juce::FileChooser& fc) {
-      if (!alive->load() || !memory_ || fc.getResult() == juce::File()) return;
-      const juce::File f = fc.getResult();
-      if (exporting) {
-        const std::string text = lines ? memory_->exportJsonl() : memory_->exportJson().dump(1, ' ', false, json::error_handler_t::replace);
-        const bool ok = f.replaceWithText(u8(text));
-        say(u8("Core"), ok ? u8("Memory exported to ") + f.getFullPathName() : u8("Could not write ") + f.getFullPathName());
-        return;
-      }
-      const json j = json::parse(f.loadFileAsString().toStdString(), nullptr, false);
-      std::string why;
-      const int n = j.is_discarded() ? -1 : memory_->importJson(j, &why);
-      say(u8("Core"), n < 0 ? u8("Not imported: ") + u8(why.empty() ? std::string("not JSON") : why) : u8("Imported ") + juce::String(n) + u8(" new recipe(s)."));
-    });
+void AiPanel::memoryAction(int choice) {
+  if (!memory_ || choice < 1 || choice > 3) return;
+  const bool exporting = choice != 2, lines = choice == 3;
+  const char* name = lines ? "core-ai-memory.jsonl" : "core-ai-memory.json";
+  chooser_ = std::make_unique<juce::FileChooser>(exporting ? u8("Export the AI's memory") : u8("Import an AI memory"),
+                                                 juce::File::getSpecialLocation(juce::File::userDocumentsDirectory).getChildFile(name),
+                                                 lines ? "*.jsonl" : "*.json");
+  const int flags = exporting ? juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::warnAboutOverwriting : juce::FileBrowserComponent::openMode;
+  chooser_->launchAsync(flags | juce::FileBrowserComponent::canSelectFiles, [this, alive = alive_, exporting, lines](const juce::FileChooser& fc) {
+    if (!alive->load() || !memory_ || fc.getResult() == juce::File()) return;
+    const juce::File f = fc.getResult();
+    if (exporting) {
+      const std::string text = lines ? memory_->exportJsonl() : memory_->exportJson().dump(1, ' ', false, json::error_handler_t::replace);
+      const bool ok = f.replaceWithText(u8(text));
+      say(u8("Core"), ok ? u8("Memory exported to ") + f.getFullPathName() : u8("Could not write ") + f.getFullPathName());
+      return;
+    }
+    const json j = json::parse(f.loadFileAsString().toStdString(), nullptr, false);
+    std::string why;
+    const int n = j.is_discarded() ? -1 : memory_->importJson(j, &why);
+    say(u8("Core"), n < 0 ? u8("Not imported: ") + u8(why.empty() ? std::string("not JSON") : why) : u8("Imported ") + juce::String(n) + u8(" new recipe(s)."));
   });
+}
+
+// ---- chats: kept in %APPDATA%\Core\AI\chats, one file each, after every answer
+
+juce::File AiPanel::chatsFolder() const { return host_.keyFolder.getChildFile("chats"); }
+
+void AiPanel::saveChat() {
+  if (said_.empty() || !chat_ || chat_->messages().empty()) return;
+  if (chatFile_ == juce::File()) {
+    chatsFolder().createDirectory();
+    chatFile_ = chatsFolder().getNonexistentChildFile("chat-" + juce::Time::getCurrentTime().formatted("%Y-%m-%d-%H%M%S"), ".json", false);
+  }
+  json transcript = json::array();
+  for (const auto& [who, text] : said_) transcript.push_back({{"who", who.toStdString()}, {"text", text.toStdString()}});
+  const json j = {{"format", "core-ai-chat"}, {"version", 1}, {"title", chatTitle_.toStdString()}, {"updatedMs", nowMs()},
+                  {"model", chat_->config().model}, {"costUsd", chat_->cost(chat_->total())}, {"transcript", transcript},
+                  {"messages", chat_->messages()}};
+  chatFile_.replaceWithText(u8(j.dump(-1, ' ', false, json::error_handler_t::replace)));
+}
+
+void AiPanel::newChat() {
+  if (busy_) return;
+  saveChat();
+  chat_.reset();
+  chatMemory_ = nullptr;
+  chatFile_ = juce::File();
+  chatTitle_.clear();
+  said_.clear();
+  transcript_.clear();
+  dropProposal();
+  showFeedback(false);
+  status_.setText({}, juce::dontSendNotification);
+  cost_.setText({}, juce::dontSendNotification);
+  focusInput();
+}
+
+void AiPanel::openChat(const juce::File& file) {
+  if (busy_) return;
+  const json j = json::parse(file.loadFileAsString().toStdString(), nullptr, false);
+  if (!j.is_object() || j.value("format", std::string()) != "core-ai-chat") {
+    say(u8("Core"), u8("Not a chat of Core's AI: ") + file.getFullPathName());
+    return;
+  }
+  newChat();
+  ai::Memory* shared = prefs_.useMemory ? memory_.get() : nullptr;
+  chat_ = std::make_unique<ai::Chat>(configNow(), host_.functions(), host_.pcore, host_.knowledge, shared);
+  chat_->restore(j.value("messages", json::array()));
+  chatMemory_ = shared;
+  chatFile_ = file;
+  chatTitle_ = u8(j.value("title", std::string()));
+  for (const auto& t : j.value("transcript", json::array()))
+    if (t.is_object()) say(u8(t.value("who", std::string())), u8(t.value("text", std::string())));
+  focusInput();
+}
+
+void AiPanel::deleteChat() {
+  if (busy_ || (said_.empty() && chatFile_ == juce::File())) return;
+  juce::Component::SafePointer<AiPanel> safe(this);
+  juce::AlertWindow::showAsync(juce::MessageBoxOptions().withIconType(juce::MessageBoxIconType::QuestionIcon)
+                                   .withTitle(u8("Delete this chat"))
+                                   .withMessage(u8("The conversation leaves the screen and Chats. The AI's memory keeps its recipes."))
+                                   .withButton(u8("Delete"), 1).withButton(u8("Cancel"), 0),
+                               [safe](int result) {
+                                 if (result != 1 || safe == nullptr) return;
+                                 const juce::File f = safe->chatFile_;
+                                 safe->said_.clear();  // nothing left to keep
+                                 safe->chatFile_ = juce::File();
+                                 if (f.existsAsFile()) f.deleteFile();
+                                 safe->newChat();
+                               });
+}
+
+void AiPanel::showChats() {
+  juce::Array<juce::File> files = chatsFolder().findChildFiles(juce::File::findFiles, false, "chat-*.json");
+  std::sort(files.begin(), files.end(), [](const juce::File& a, const juce::File& b) { return a.getLastModificationTime() > b.getLastModificationTime(); });
+  juce::PopupMenu menu;
+  menu.addSectionHeader(u8("EARLIER CHATS"));
+  const int shown = std::min(files.size(), 30);
+  for (int i = 0; i < shown; ++i) {
+    const json j = json::parse(files[i].loadFileAsString().toStdString(), nullptr, false);
+    juce::String title = j.is_object() ? u8(j.value("title", std::string())) : juce::String();
+    if (title.isEmpty()) title = files[i].getFileNameWithoutExtension();
+    menu.addItem(juce::PopupMenu::Item(files[i].getLastModificationTime().formatted("%d/%m %H:%M") + "  " + title)
+                     .setID(i + 1).setTicked(files[i] == chatFile_));
+  }
+  if (shown == 0) menu.addItem(juce::PopupMenu::Item(u8("No chats yet")).setEnabled(false));
+  menu.addSeparator();
+  menu.addItem(juce::PopupMenu::Item(u8("Open the chats folder")).setID(1000));
+  menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&chats_), [this, alive = alive_, files](int id) {
+    if (!alive->load() || id == 0) return;
+    if (id == 1000) {
+      chatsFolder().createDirectory();
+      chatsFolder().startAsProcess();
+      return;
+    }
+    if (id - 1 < files.size()) openChat(files[id - 1]);
+  });
+}
+
+void AiPanel::showCopy() {
+  juce::String answer, all;
+  for (const auto& [who, text] : said_) {
+    if (who == "AI") answer = text;
+    all += (all.isEmpty() ? juce::String() : juce::String("\n\n")) + who + ": " + text;
+  }
+  juce::PopupMenu menu;
+  menu.addItem(1, u8("Copy the last answer"), answer.isNotEmpty());
+  menu.addItem(2, u8("Copy the conversation"), all.isNotEmpty());
+  menu.addItem(3, u8("Copy the selected text"), transcript_.getHighlightedText().isNotEmpty());
+  menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&copy_), [this, alive = alive_, answer, all](int id) {
+    if (!alive->load()) return;
+    if (id == 1) juce::SystemClipboard::copyTextToClipboard(answer);
+    if (id == 2) juce::SystemClipboard::copyTextToClipboard(all);
+    if (id == 3) juce::SystemClipboard::copyTextToClipboard(transcript_.getHighlightedText());
+    if (id > 0) status_.setText(u8("Copied"), juce::dontSendNotification);
+  });
+}
+
+void AiPanel::showSettings() {
+  juce::CallOutBox::launchAsynchronously(std::make_unique<Settings>(*this), settings_.getScreenBounds(), nullptr);
 }
 
 void AiPanel::dropProposal() {
@@ -327,19 +641,24 @@ void AiPanel::showCost() {
                 juce::dontSendNotification);
 }
 
-void AiPanel::paint(juce::Graphics& g) { g.fillAll(kBackground); }
+void AiPanel::paint(juce::Graphics& g) {
+  g.fillAll(kPanel);
+  g.setColour(kOutline);
+  g.drawHorizontalLine(kSpaceHeader, 0.0f, (float)getWidth());
+}
 
 void AiPanel::resized() {
-  auto r = getLocalBounds().reduced(10);
-  auto top = r.removeFromTop(26);
-  model_.setBounds(top.removeFromLeft(160));
-  top.removeFromLeft(6);
-  effort_.setBounds(top.removeFromLeft(80));
-  top.removeFromLeft(6);
-  mode_.setBounds(top.removeFromLeft(150));
-  newChat_.setBounds(top.removeFromRight(90));
-  top.removeFromRight(6);
-  memoryButton_.setBounds(top.removeFromRight(80));
+  auto r = getLocalBounds();
+  grip_->setBounds(prefs_.dock == Dock::Side ? r.removeFromLeft(6) : r.removeFromTop(6));
+  r = r.reduced(8, 0);
+  auto header = r.removeFromTop(kSpaceHeader - (prefs_.dock == Dock::Side ? 0 : 6));
+  close_.setBounds(header.removeFromRight(28).reduced(0, 3));  // the X always at the right
+  header.removeFromRight(4);
+  title_.setBounds(header.removeFromLeft(36));
+  for (auto* b : {&new_, &chats_, &copy_, &delete_, &settings_}) {
+    const int w = juce::GlyphArrangement::getStringWidthInt(juce::FontOptions(kFontBody), b->getButtonText()) + 18;
+    b->setBounds(header.removeFromLeft(w).reduced(2, 3));
+  }
   r.removeFromTop(8);
   auto bottom = r.removeFromBottom(22);
   status_.setBounds(bottom.removeFromLeft(bottom.getWidth() / 2));
@@ -347,33 +666,21 @@ void AiPanel::resized() {
   r.removeFromBottom(6);
   if (apply_.isVisible() || discard_.isVisible() || like_.isVisible()) {
     auto buttons = r.removeFromBottom(30);
-    apply_.setBounds(buttons.removeFromLeft(110));
+    const int w = std::min(110, (buttons.getWidth() - 18) / 4);
+    apply_.setBounds(buttons.removeFromLeft(w));
     buttons.removeFromLeft(6);
-    discard_.setBounds(buttons.removeFromLeft(110));
-    dislike_.setBounds(buttons.removeFromRight(110));
+    discard_.setBounds(buttons.removeFromLeft(w));
+    dislike_.setBounds(buttons.removeFromRight(w));
     buttons.removeFromRight(6);
-    like_.setBounds(buttons.removeFromRight(110));
+    like_.setBounds(buttons.removeFromRight(w));
     r.removeFromBottom(6);
   }
   auto entry = r.removeFromBottom(64);
-  send_.setBounds(entry.removeFromRight(80).withSizeKeepingCentre(80, 30));
+  send_.setBounds(entry.removeFromRight(70).withSizeKeepingCentre(70, 30));
   entry.removeFromRight(6);
   input_.setBounds(entry);
   r.removeFromBottom(8);
   transcript_.setBounds(r);
-}
-
-AiWindow::AiWindow(AiPanel::Host host) : juce::DocumentWindow(u8("Core · AI"), kBackground, juce::DocumentWindow::allButtons) {
-  setUsingNativeTitleBar(true);
-  setContentOwned(new AiPanel(std::move(host)), true);
-  setResizable(true, true);
-  setResizeLimits(560, 420, 2000, 2000);
-  centreWithSize(600, 640);
-}
-
-void AiWindow::show() {
-  setVisible(true);
-  toFront(true);
 }
 
 }  // namespace core::app

@@ -942,6 +942,69 @@ void inTheChat(const doc::PCoreCatalog& cat) {
 
 }  // namespace zone_t
 
+// The review of 2026-11-16 (C1, C2) and the chat panel's sessions.
+namespace review_t {
+
+using ai_chat_t::answer;
+using ai_chat_t::toolUse;
+
+// C2: a message stops asking the model once it has cost its limit.
+void costLimit(const doc::PCoreCatalog& cat) {
+  const auto fns = control::buildFunctions(&cat);
+  doc::Document song = doc::newEmptyDocument();
+  ai::Config c;
+  c.maxUsdPerMessage = 0.01;
+  ai::Chat chat(c, fns, &cat);
+  chat.ask("faz uma batida", song);
+  // Haiku: 0.10 $/M input. 200k tokens = $0.02, over the limit: no next request.
+  json next = chat.onResponse(answer(json::array({toolUse("r", "ler_musica", json::object())}), "tool_use", 200000, 100), song);
+  CHECK(next.is_null());
+  CHECK(chat.error().find("cost limit") != std::string::npos);
+  // Under it, the work goes on.
+  ai::Chat cheap(ai::Config{}, fns, &cat);
+  cheap.ask("faz uma batida", song);
+  next = cheap.onResponse(answer(json::array({toolUse("r", "ler_musica", json::object())}), "tool_use", 2000, 100), song);
+  CHECK(!next.is_null() && cheap.error().empty());
+}
+
+// C1: Apply after the song changed: a call that no longer fits stops the whole proposal.
+void changedSince(const doc::PCoreCatalog& cat) {
+  const auto fns = control::buildFunctions(&cat);
+  doc::Document song = zone_t::beat(cat, fns);
+  const json proposal = {{"calls", json::array({{{"fn", "pcore"}, {"on", "Kick"}, {"style", "darkpsycore"}},
+                                                {{"fn", "pcore"}, {"on", "Hats"}, {"style", "darkpsycore"}}})}};
+  CHECK(ai::changedSince(proposal, control::validateProposal(proposal, fns, song, nullptr)).empty());
+  doc::Document after = song;
+  after.tracks.erase(std::remove_if(after.tracks.begin(), after.tracks.end(), [](const doc::Track& t) { return t.name == "Hats"; }), after.tracks.end());
+  const std::string why = ai::changedSince(proposal, control::validateProposal(proposal, fns, after, nullptr));
+  CHECK(why.find("changed since") != std::string::npos && why.find("nothing was applied") != std::string::npos);
+}
+
+// A chat kept on disk is taken up again, with any model; a turn left half way is taken out.
+void restore(const doc::PCoreCatalog& cat) {
+  const auto fns = control::buildFunctions(&cat);
+  doc::Document song = doc::newEmptyDocument();
+  ai::Chat chat(ai::Config{}, fns, &cat);
+  chat.ask("olá", song);
+  chat.onResponse(answer(json::array({{{"type", "text"}, {"text", "Olá!"}}}), "end_turn"), song);
+  const json kept = chat.messages();
+  CHECK_EQ(kept.size(), (size_t)2);
+  ai::Config o;
+  o.provider.kind = "openai";
+  ai::Chat again(o, fns, &cat);
+  again.restore(kept);
+  json req = again.ask("e agora?", song);
+  CHECK_EQ(req["messages"].size(), (size_t)3);
+  // Half way: a tool call never answered, then a request with no answer: both go.
+  json half = kept;
+  half.push_back({{"role", "user"}, {"content", "mais"}});
+  half.push_back({{"role", "assistant"}, {"content", json::array({toolUse("x", "ler_musica", json::object())})}});
+  again.restore(half);
+  CHECK(again.messages() == kept);
+}
+
+}  // namespace review_t
+
 // Found by the real-API bench (2026-11-16): models write a style's id as "align"; it aligns as that style does.
 namespace bench_t {
 void alignByStyle(const doc::PCoreCatalog& cat) {
@@ -1033,6 +1096,9 @@ TEST("memory: in the chat, with any model") { memory_t::inTheChat(catalog()); }
 TEST("zone: the selection limits the proposal") { zone_t::rules(catalog()); }
 TEST("zone: its own clip and pattern") { zone_t::zonePattern(); }
 TEST("zone: in the chat") { zone_t::inTheChat(catalog()); }
+TEST("chat: a cost limit per message") { review_t::costLimit(catalog()); }
+TEST("chat: Apply after the song changed") { review_t::changedSince(catalog()); }
+TEST("chat: a kept chat taken up again") { review_t::restore(catalog()); }
 TEST("memory: episodes and the JSONL export") { memory_t::episodesForTraining(catalog()); }
 TEST("song: a style's id as align") { bench_t::alignByStyle(catalog()); }
 TEST("catalog: the gateway view (ajuda / fazer)") { gateway_t::gatewayMode(catalog()); }

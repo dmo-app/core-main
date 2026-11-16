@@ -1,4 +1,5 @@
 #include "ai_chat.hpp"
+#include <cstdio>
 #include <algorithm>
 #include <cctype>
 #include <chrono>
@@ -142,6 +143,22 @@ Chat::Chat(Config config, std::vector<control::CoreFunction> functions, const do
 double Chat::cost(const Usage& u) const {
   if (config_.pricesSet) return u.costUsd(config_.prices);
   return config_.provider.kind == "anthropic" ? u.costUsd(config_.model) : 0.0;
+}
+
+void Chat::restore(const json& messages) {
+  reset();
+  if (!messages.is_array()) return;
+  messages_ = messages;
+  // Valid only when it ends with the model's answer that asks for nothing more.
+  while (!messages_.empty()) {
+    const json& last = messages_.back();
+    bool calls = false;
+    if (last.value("role", std::string()) == "assistant" && last.contains("content") && last["content"].is_array())
+      for (const auto& b : last["content"]) calls |= b.value("type", std::string()) == "tool_use";
+    if (last.value("role", std::string()) == "assistant" && !calls) break;
+    messages_.erase(messages_.size() - 1);
+  }
+  askStart_ = messages_.size();
 }
 
 void Chat::reset() {
@@ -305,6 +322,21 @@ json Chat::runTool(const std::string& name, const json& input, const doc::Docume
   return {{"result", "left out"}, {"problems", fresh}};
 }
 
+std::string changedSince(const json& proposal, const control::Proposal& now) {
+  const size_t asked = proposal.is_object() && proposal.contains("calls") && proposal["calls"].is_array() ? proposal["calls"].size() : 0;
+  if (now.calls.size() >= asked) return "";
+  return "the song changed since the proposal: " + std::to_string(asked - now.calls.size()) + " of its calls no longer fit (" +
+         (now.problems.empty() ? std::string("ask again") : now.problems.front()) + "); nothing was applied";
+}
+
+bool Chat::overBudget() {
+  if (config_.maxUsdPerMessage <= 0 || cost(usage_) < config_.maxUsdPerMessage) return false;
+  char b[64];
+  std::snprintf(b, sizeof b, "%.2f", config_.maxUsdPerMessage);
+  error_ = std::string("stopped: this message reached its cost limit ($") + b + ", Settings)";
+  return true;
+}
+
 json Chat::onResponse(const json& raw, const doc::Document& song) {
   const Turn turn = readResponse(config_.provider, raw);
   if (!turn.error.empty()) {
@@ -341,12 +373,13 @@ json Chat::onResponse(const json& raw, const doc::Document& song) {
       // The tool results stay in the conversation: answer them on the next message.
       return nullptr;
     }
+    if (overBudget()) return nullptr;
     ++steps_;
     return request(song);
   }
   if (stop == "pause_turn") {
     ++steps_;
-    return steps_ > config_.maxSteps ? json(nullptr) : request(song);
+    return steps_ > config_.maxSteps || overBudget() ? json(nullptr) : request(song);
   }
   if (!reply_.empty()) summary_ = reply_.substr(0, 200);
   return nullptr;

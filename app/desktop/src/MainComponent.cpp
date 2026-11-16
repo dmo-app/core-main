@@ -2041,6 +2041,10 @@ MainComponent::MainComponent(EngineSession::Options options, doc::Document docum
   aiBadge_ = std::make_unique<AiBadge>();
   aiBadge_->onPress = [this](bool popup) { aiBadgePressed(popup); };
   addAndMakeVisible(*aiBadge_);
+  aiChatButton_.setTooltip(u8("Core's AI: opens or closes the chat (beats, structure, changes to parts)"));
+  aiChatButton_.setWantsKeyboardFocus(false);
+  aiChatButton_.onClick = [this] { toggleAiChat(); };
+  addAndMakeVisible(aiChatButton_);
   setWantsKeyboardFocus(true);
   if (realOutput_) {  // the user's MIDI keyboard, if it is plugged in
     editorHeight_ = settings_.getUserSettings()->getIntValue("editorHeight", 0);
@@ -2065,7 +2069,7 @@ MainComponent::MainComponent(EngineSession::Options options, doc::Document docum
 MainComponent::~MainComponent() {
   globalKeys_.reset();  // no more keys into a component being destroyed
   patternsWindow_.reset();  // its buttons call this window
-  aiWindow_.reset();        // its Apply calls this window
+  aiPanel_.reset();         // its Apply calls this window (it keeps its chat on disk as it goes)
   if (settingsWindow_ != nullptr) delete settingsWindow_.getComponent();  // it shows this window's settings and jobs
   if (sampleScan_) sampleScan_->stop = true;  // its thread owns what it uses and ends at the next file
   if (analysisJob_) analysisJob_->stop = true;  // the same
@@ -3258,7 +3262,7 @@ std::vector<control::CoreFunction> MainComponent::callableFunctions() const {
 
 // Core's own AI (2026-11-16): the chat window. Its proposals are checked here and applied as one "AI: ..." step.
 void MainComponent::openAiChat() {
-  if (!aiWindow_) {
+  if (!aiPanel_) {
     AiPanel::Host h;
     h.song = [this]() -> const doc::Document& { return history_.current(); };
     h.functions = [this] { return callableFunctions(); };
@@ -3273,9 +3277,34 @@ void MainComponent::openAiChat() {
     h.keyFolder = bridgeFolder();
     h.apply = [this](const json& proposal) { return applyAiProposal(proposal); };
     h.zone = [this] { return aiZoneNow(); };
-    aiWindow_ = std::make_unique<AiWindow>(std::move(h));
+    aiPanel_ = std::make_unique<AiPanel>(std::move(h));
+    aiPanel_->onLayoutChange = [this] { resized(); repaint(); };
+    aiPanel_->onClose = [this] { toggleAiChat(); };
+    addChildComponent(*aiPanel_);
   }
-  aiWindow_->show();
+  aiPanel_->setVisible(true);
+  aiPanel_->toFront(false);
+  resized();
+  repaint();
+  aiPanel_->focusInput();
+}
+
+void MainComponent::toggleAiChat() {
+  if (aiPanelShown()) {
+    aiPanel_->setVisible(false);  // the chat stays (and on disk)
+    resized();
+    repaint();
+    return;
+  }
+  openAiChat();
+}
+
+// The chat's place: the right side of the work area (full height under the top bar), or its bottom.
+juce::Rectangle<int> MainComponent::aiPanelArea() const {
+  auto r = workArea().withTrimmedTop(kTopBar + 4).reduced(16, 0).withTrimmedBottom(16);
+  if (!aiPanel_) return {};
+  if (aiPanel_->dock() == AiPanel::Dock::Side) return r.removeFromRight(std::min(aiPanel_->sideWidth(), r.getWidth() / 2));
+  return r.removeFromBottom(std::min(aiPanel_->bottomHeight(), r.getHeight() / 2));
 }
 
 // The selection the AI works in: the box's tracks that are still there, over its bars; inactive without a box.
@@ -3290,6 +3319,9 @@ std::vector<std::string> MainComponent::applyAiProposal(const json& proposal) {
   const doc::SampleIndex* samples = hasSampleIndex_ ? &sampleIndex_ : nullptr;
   const control::Proposal p = control::validateProposal(proposal, callableFunctions(), history_.current(), samples);
   if (p.calls.empty()) throw doc::DocumentError("calls", "nothing in the proposal can be applied");
+  // Checked again against the song as it is now: if it changed since and a call no longer fits, nothing is applied
+  // (never a part of what was shown). Ask the AI again.
+  if (const std::string why = ai::changedSince(proposal, p); !why.empty()) throw doc::DocumentError("calls", why);
   const std::string target = selectedTrack_.empty() ? editor_.track() : selectedTrack_;  // calls without a track
   if (p.needsTrack() && !history_.current().findTrack(target)) throw doc::DocumentError("calls", "select a track first: some calls name none");
   control::ApplyEnv env{samples, pcoreCatalog_ ? &*pcoreCatalog_ : nullptr};
@@ -5061,7 +5093,15 @@ void MainComponent::toggleSidePanel(bool library) {
 
 
 juce::Rectangle<int> MainComponent::topBar() const { return workArea().removeFromTop(kTopBar); }
-juce::Rectangle<int> MainComponent::content() const { return workArea().withTrimmedTop(kTopBar + 4).reduced(16, 0).withTrimmedBottom(16); }
+juce::Rectangle<int> MainComponent::content() const {
+  auto r = workArea().withTrimmedTop(kTopBar + 4).reduced(16, 0).withTrimmedBottom(16);
+  if (aiPanelShown()) {  // the AI chat takes its side (or the bottom); the song keeps the rest
+    const auto chat = aiPanelArea();
+    if (aiPanel_->dock() == AiPanel::Dock::Side) r.removeFromRight(chat.getWidth() + 8);
+    else r.removeFromBottom(chat.getHeight() + 8);
+  }
+  return r;
+}
 // Under the top bar, right of the page rail: where the panels and pages go.
 juce::Rectangle<int> MainComponent::body() const { return content().withTrimmedLeft(kRail + 8); }
 juce::Rectangle<int> MainComponent::centre() const {
@@ -5117,6 +5157,13 @@ juce::Rectangle<int> MainComponent::dividerArea() const {
 void MainComponent::resized() {
   auto footer = getLocalBounds().removeFromBottom(kFooter);
   if (aiBadge_) aiBadge_->setBounds(footer.removeFromRight(96).reduced(4, 0));
+  aiChatButton_.setBounds(footer.removeFromRight(56).reduced(4, 3));
+  aiChatButton_.setToggleState(aiPanelShown(), juce::dontSendNotification);
+  if (aiPanelShown()) {
+    const auto whole = workArea().withTrimmedTop(kTopBar + 4).reduced(16, 0).withTrimmedBottom(16);
+    aiPanel_->setLimits(whole.getWidth() / 2, whole.getHeight() / 2);
+    aiPanel_->setBounds(aiPanelArea());
+  }
   // Top bar: the logo, the menus, the song's name; the transport (icons), tempo and position in the middle;
   // the engine's state on the right.
   auto top = topBar().withTrimmedLeft(16);

@@ -40,6 +40,7 @@ struct Config {
   std::string effort = "medium";  // low | medium | high
   int maxTokens = 8000;
   int maxSteps = 8;               // requests per message at most
+  double maxUsdPerMessage = 0.25; // a message stops asking the model when it has cost this much (0 = no limit)
   Permissions permissions;        // what the model may do (catalog.hpp): ask, readonly, trusted
   bool gateway = false;           // "ajuda" + "fazer" in place of every edit tool (catalog.hpp: smaller requests)
 };
@@ -52,6 +53,10 @@ std::string zoneBlock(const doc::Document& song, const control::Zone& zone);
 // The system prompt (PT-PT) and the style card (the song's P-Core style, its parts, shapes and the song shapes).
 // With the permission mode: readonly and trusted add a sentence that says so.
 json systemFor(const doc::Document& song, const doc::PCoreCatalog* pcore, const std::string& mode = "ask", bool gateway = false);
+
+// Apply checks a proposal again against the song as it is then (it may have changed since the AI made it). Every call
+// must still fit: "" when they do, else why nothing should be applied (never only a part of what was shown).
+std::string changedSince(const json& proposal, const control::Proposal& now);
 
 class Chat {
 public:
@@ -97,11 +102,17 @@ public:
   void abandon();
   // Forget the conversation (the totals stay).
   void reset();
+  // The conversation (content blocks), to keep a chat on disk and take it up again later (with any model).
+  const json& messages() const { return messages_; }
+  // Takes a kept conversation up again: what follows is a new message. A last turn left half way (tool calls never
+  // answered, or a request with no answer) is taken out, so the next request is valid.
+  void restore(const json& messages);
 
 private:
   json request(const doc::Document& song) const;
   json runTool(const std::string& name, const json& input, const doc::Document& song);
   json withZone(json proposal) const;  // the proposal with this message's zone
+  bool overBudget();                   // this message cost maxUsdPerMessage: stop (error_ says so)
 
   Config config_;
   std::vector<control::CoreFunction> functions_;
