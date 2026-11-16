@@ -323,8 +323,19 @@ bool validate(const json& c, const CoreFunction& f, const doc::Document& song, c
       problems.push_back("P-Core: " + track->name + " plays no notes (an audio track or a bus): left out");
       return false;
     }
+    // A style's id as "align" (models write "darkpsycore"): align as that style does.
+    json pc = c;
+    if (const auto st = f.options.find("style"); pc.contains("align") && pc["align"].is_string() && st != f.options.end()) {
+      const std::string a = pc["align"].get<std::string>();
+      const auto al = f.options.find("align");
+      const bool isAlign = al != f.options.end() && std::find(al->second.begin(), al->second.end(), a) != al->second.end();
+      if (!isAlign && std::find(st->second.begin(), st->second.end(), a) != st->second.end()) {
+        if (!pc.contains("style")) pc["style"] = a;
+        if (pc["style"] == a) pc["align"] = "style";
+      }
+    }
     for (const char* k : {"part", "shape", "style", "scale", "root", "grid", "mode", "align"})
-      if (!takeText(c, f, k, false, call, problems)) return false;
+      if (!takeText(pc, f, k, false, call, problems)) return false;
     if (!call.texts.count("part")) {
       std::string part = track ? doc::pcoreGuessPart(*track) : std::string();
       if (part.empty() && newTrack)

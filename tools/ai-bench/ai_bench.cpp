@@ -27,6 +27,7 @@
 #include "edit.hpp"
 #include "knowledge.hpp"
 #include "pcore.hpp"
+#include "score.hpp"
 
 using namespace core;
 using json = nlohmann::json;
@@ -44,7 +45,7 @@ const char* kCurl = "curl";
 
 struct Scenario {
   std::string id, prompt;
-  bool fromTemplate;  // start from a template song (else an empty one)
+  bool fromTemplate;  // start from a template song shaped darkpsycore-64 and arranged (else an empty song)
 };
 
 const std::vector<Scenario>& scenarios() {
@@ -189,6 +190,12 @@ int main(int argc, char** argv) {
           break;
         }
         doc::Document song = sc.fromTemplate ? doc::newTemplateDocument() : doc::newEmptyDocument();
+        if (sc.fromTemplate) {  // a song with its sections, so "the drop" exists
+          doc::setScoreShape(song, "darkpsycore-64");
+          std::vector<std::string> ids;
+          for (const auto& tr : song.tracks) ids.push_back(tr.id);
+          doc::scoreArrange(song, ids);
+        }
         song.name = "Bench " + sc.id;
         ai::Chat chat(cfg, functions, &cat, knowledge.get());
         json body = chat.ask(sc.prompt, song);

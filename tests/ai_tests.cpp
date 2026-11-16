@@ -735,6 +735,26 @@ void inTheChat(const doc::PCoreCatalog& cat) {
 
 }  // namespace memory_t
 
+// Found by the real-API bench (2026-11-16): models write a style's id as "align"; it aligns as that style does.
+namespace bench_t {
+void alignByStyle(const doc::PCoreCatalog& cat) {
+  const auto fns = control::buildFunctions(&cat);
+  doc::Document song = doc::newEmptyDocument();
+  const json calls = json::array({{{"fn", "track"}, {"part", "kick"}, {"name", "Kick"}},
+                                  {{"fn", "pcore"}, {"on", "Kick"}, {"style", "darkpsycore"}, {"align", "darkpsycore"}},
+                                  {{"fn", "pcore"}, {"on", "Kick"}, {"align", "darkpsycore"}},
+                                  {{"fn", "pcore"}, {"on", "Kick"}, {"style", "hitech"}, {"align", "darkpsycore"}},
+                                  {{"fn", "pcore"}, {"on", "Kick"}, {"align", "nonsense"}}});
+  const control::Proposal p = control::validateProposal({{"calls", calls}}, fns, song, nullptr);
+  CHECK_EQ(p.calls.size(), (size_t)3);  // the track and the two that name darkpsycore alone
+  CHECK_EQ(p.problems.size(), (size_t)2);  // another style's id, and a word that is neither
+  if (p.calls.size() == 3) {
+    CHECK_EQ(p.calls[1].texts.at("align"), std::string("style"));
+    CHECK_EQ(p.calls[2].texts.at("style"), std::string("darkpsycore"));
+  }
+}
+}  // namespace bench_t
+
 TEST("song: a beat from nothing") { song_calls_t::beatFromNothing(catalog()); }
 TEST("song: changing a part") { song_calls_t::changeAPart(catalog()); }
 TEST("song: what is left out") { song_calls_t::leftOut(catalog()); }
@@ -750,6 +770,7 @@ TEST("chat: a failed message leaves the conversation") { lessons_t::failedMessag
 TEST("memory: recipes, Gostei, export") { memory_t::recipes(); }
 TEST("memory: what is not confirmed fades") { memory_t::fading(); }
 TEST("memory: in the chat, with any model") { memory_t::inTheChat(catalog()); }
+TEST("song: a style's id as align") { bench_t::alignByStyle(catalog()); }
 TEST("ai: models") { ai_knowledge_t::models(); }
 TEST("ai: knowledge base") { ai_knowledge_t::knowledgeBase(knowledgeDb()); }
 TEST("ai: the consult tool") { ai_knowledge_t::consultTool(knowledgeDb()); }
