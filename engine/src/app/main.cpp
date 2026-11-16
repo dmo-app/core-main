@@ -171,6 +171,118 @@ static int serve(PluginHost* plugins) {
   return 0;
 }
 
+// knobcheck: a knob moved and put back must sound the same as never touching it (Diogo 2026-11-16: "mexer num
+// knob e voltá-lo ao mesmo sítio não devolve o mesmo som"). Offline, exactly as the app does it: the song plays,
+// at --edit-at s the knob goes to another value (one project.load, as EngineSession sends every edit), at
+// --back-at s it goes back (another project.load with the original project), and the output from
+// --back-at + --settle s to the end is compared with the same song never touched. One JSON line per knob:
+// the largest sample difference and the difference's level against the song's level (dB). Exit 1 = a knob
+// that does not come back (worse than --limit-db, default -90 dB).
+static int64_t g_knobStart = 0;  // knobcheck --start: where in the song it plays from (samples)
+static std::vector<float> knobRun(const json& original, const json* edited, double sr, int64_t total, int64_t at, int64_t back) {
+  Server s(nullptr, sr, nullptr);
+  auto load = [&](const json& p) {
+    json r = s.handle({{"cmd", "project.load"}, {"args", {{"project", p}}}});
+    if (!r.value("ok", false)) throw std::runtime_error("project.load: " + r.value("error", std::string("failed")));
+  };
+  load(original);
+  s.engine().setListenDb(0);
+  s.engine().setEarGuard(false);
+  if (g_knobStart > 0) s.engine().seek(g_knobStart);
+  s.engine().play();
+  std::vector<float> out;
+  out.reserve((size_t)total * 2);
+  float bl[256], br[256];
+  for (int64_t done = 0; done < total; done += 256) {
+    if (edited && done == at) load(*edited);
+    if (edited && done == back) load(original);
+    s.engine().process(bl, br, 256);
+    for (int i = 0; i < 256; ++i) { out.push_back(bl[i]); out.push_back(br[i]); }
+  }
+  return out;
+}
+
+static int knobcheck(const std::vector<std::string>& args) {
+  json project;
+  if (args[1] == "demo") project = demoProject(190);
+  else {
+    std::ifstream in(args[1]);
+    if (!in) throw std::runtime_error("Cannot read " + args[1]);
+    project = json::parse(in);
+  }
+  project = toJson(fromJson(project));  // normalized: every track as the engine keeps it
+  const double sr = 48000;
+  auto blocks = [&](double seconds) { return (int64_t)std::llround(seconds * sr / 256) * 256; };
+  const int64_t at = blocks(std::stod(option(args, "--edit-at", "2"))), back = blocks(std::stod(option(args, "--back-at", "3")));
+  const int64_t from = back + blocks(std::stod(option(args, "--settle", "2")));
+  const int64_t total = std::max(from + blocks(2), blocks(std::stod(option(args, "--seconds", "10"))));
+  const double limitDb = std::stod(option(args, "--limit-db", "-90"));
+  const std::string only = option(args, "--only", "");
+  g_knobStart = blocks(std::stod(option(args, "--start", "0")));
+  const std::vector<float> ref = knobRun(project, nullptr, sr, total, at, back);
+  double refEnergy = 0;
+  for (size_t i = (size_t)from * 2; i < ref.size(); ++i) refEnergy += (double)ref[i] * ref[i];
+  const double refRms = std::sqrt(refEnergy / std::max<double>(1, (double)(ref.size() - (size_t)from * 2)));
+  {  // the same run twice must be identical, or nothing below means anything
+    const std::vector<float> again = knobRun(project, nullptr, sr, total, at, back);
+    double worst = 0;
+    for (size_t i = 0; i < ref.size(); ++i) worst = std::max(worst, (double)std::fabs(ref[i] - again[i]));
+    std::cout << json({{"check", "repeatable"}, {"maxDifference", worst}, {"songRmsDb", 20 * std::log10(std::max(1e-12, refRms))}}).dump() << std::endl;
+    if (worst > 0) return 2;
+  }
+  int bad = 0, tried = 0;
+  auto tryKnob = [&](const std::string& track, const std::string& what, const std::string& param, double was, double to, const json& edited) {
+    const std::vector<float> got = knobRun(project, &edited, sr, total, at, back);
+    double worst = 0, energy = 0;
+    for (size_t i = (size_t)from * 2; i < ref.size(); ++i) {
+      const double d = (double)got[i] - ref[i];
+      worst = std::max(worst, std::fabs(d));
+      energy += d * d;
+    }
+    const double rms = std::sqrt(energy / std::max<double>(1, (double)(ref.size() - (size_t)from * 2)));
+    const double db = rms > 0 ? 20 * std::log10(rms / std::max(1e-12, refRms)) : -999;
+    double heard = 0;  // the move itself must be heard while it is there, or the knob was not tested
+    for (size_t i = (size_t)at * 2; i < (size_t)back * 2; ++i) heard = std::max(heard, (double)std::fabs(got[i] - ref[i]));
+    const bool same = db <= limitDb;
+    ++tried;
+    if (!same) ++bad;
+    std::cout << json({{"track", track}, {"unit", what}, {"param", param}, {"value", was}, {"movedTo", to},
+                       {"heardWhileMoved", heard}, {"maxDifference", worst}, {"differenceDb", db}, {"comesBack", same}}).dump() << std::endl;
+  };
+  auto other = [](const ParamSpec& p, double was) {  // far from where it is, inside its range
+    return std::fabs(p.max - was) > std::fabs(was - p.min) ? p.max : p.min;
+  };
+  for (size_t ti = 0; ti < project["tracks"].size(); ++ti) {
+    const json& t = project["tracks"][ti];
+    const std::string id = t.value("id", std::string());
+    if (!only.empty() && id != only) continue;
+    const std::string instrument = t.value("instrument", std::string());
+    for (const ParamSpec& p : instrumentParams(instrument)) {
+      const double was = t.contains("params") && t["params"].contains(p.name) ? t["params"][p.name].get<double>() : p.def;
+      const double to = other(p, was);
+      if (to == was) continue;
+      json edited = project;
+      edited["tracks"][ti]["params"][p.name] = to;
+      tryKnob(id, instrument, p.name, was, to, edited);
+    }
+    if (t.contains("effects"))
+      for (size_t ei = 0; ei < t["effects"].size(); ++ei) {
+        const json& fx = t["effects"][ei];
+        const std::string name = fx.value("name", std::string());
+        for (const ParamSpec& p : effectParams(name)) {
+          const double was = fx.contains("params") && fx["params"].contains(p.name) ? fx["params"][p.name].get<double>() : p.def;
+          const double to = other(p, was);
+          if (to == was) continue;
+          json edited = project;
+          edited["tracks"][ti]["effects"][ei]["params"][p.name] = to;
+          tryKnob(id, name + "#" + std::to_string(ei), p.name, was, to, edited);
+        }
+      }
+  }
+  std::cout << json({{"knobs", tried}, {"notComingBack", bad}}).dump() << std::endl;
+  return bad ? 1 : 0;
+}
+
 // loopcheck: does the song sound the same on every pass of the loop, through the real device? (Diogo
 // 2026-11-06: "after 8 bars, when it starts again, it sounds different".) The song loops through the device
 // (as the app plays it) and the output is recorded; then the same loop is rendered offline. For each pass:
@@ -481,6 +593,7 @@ int main(int argc, char** argv) {
     if (mode == "loopcheck" && args.size() >= 2) return loopcheck(nullptr, args);
     if (mode == "scan" || mode == "qualify" || mode == "matrix") { emit("[]"); return 0; }  // no plugin support in this build
 #endif
+    if (mode == "knobcheck" && args.size() >= 2) return knobcheck(args);
     if (mode == "demo") { std::cout << demoProject(args.size() > 1 ? std::stod(args[1]) : 145).dump(2) << '\n'; return 0; }
     if (mode == "devices") { std::cout << makeMiniaudioOutput()->devices(json::object()).dump(2) << '\n'; return 0; }
     if (mode == "render" && args.size() >= 3) {
