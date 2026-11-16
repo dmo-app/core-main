@@ -2133,6 +2133,7 @@ MainComponent::MainComponent(EngineSession::Options options, doc::Document docum
                      : u8("Tools: AI, the tools play the AI's plugins (only the tools they can play are shown).");
     repaint();
   };
+  pluginCards_.onGrey = [this](const juce::String& missing) { notice_ = u8("Settings > Roles: choose the plugin of ") + missing; repaint(); };
   mixerButton_.setButtonText("MIX");
   mixerButton_.setTooltip(u8("The mixer in the bottom panel (Ctrl+M)"));
   mixerButton_.setClickingTogglesState(false);
@@ -2433,13 +2434,15 @@ juce::PopupMenu MainComponent::coreToolMenu(const std::string& toolId, const std
     return notes;
   };
   const juce::String on = t ? u8(" on ") + u8(t->name) : juce::String();
+  std::string rolesProblem;
+  const doc::RoleMap roleMap = PluginCatalog::roles(&rolesProblem);
   if (toolId == "pcore") {
     m.addItem(juce::PopupMenu::Item(u8("Open the Patterns window…")).setAction([safe] { if (safe) safe->openPatterns(); }));
   } else if (toolId == "wcore") {
     for (const char* role : {"kick", "bass", "lead", "pad", "pluck", "drums"}) {
       const juce::String label = u8(doc::findRole(role) ? doc::findRole(role)->label : role);
       if (notes)
-        m.addItem(juce::PopupMenu::Item(label + on).setAction([safe, trackId, role = std::string(role), label] {
+        m.addItem(juce::PopupMenu::Item(label + on).setEnabled(roleMap.find(role) != nullptr).setAction([safe, trackId, role = std::string(role), label] {
           if (!safe) return;
           safe->runTool(u8("Instrument: ") + label, [&](doc::Document& d, const doc::RoleMap& r) {
             doc::setTrackRole(d, trackId, role, r);
@@ -2451,7 +2454,8 @@ juce::PopupMenu MainComponent::coreToolMenu(const std::string& toolId, const std
     juce::PopupMenu fresh;
     for (const char* role : {"kick", "bass", "lead", "pad", "pluck", "drums"}) {
       const juce::String label = u8(doc::findRole(role) ? doc::findRole(role)->label : role);
-      fresh.addItem(juce::PopupMenu::Item(label).setAction([safe, role = std::string(role), label] {
+      // A role with no plugin is a grey item, not an error dialog after the click (round 3, R3-B / C3).
+      fresh.addItem(juce::PopupMenu::Item(label).setEnabled(roleMap.find(role) != nullptr).setAction([safe, role = std::string(role), label] {
         if (!safe) return;
         safe->runTool(u8("New track: ") + label, [&](doc::Document& d, const doc::RoleMap& r) {
           doc::addRoleTrack(d, role, r);
@@ -2540,8 +2544,8 @@ void MainComponent::giveSilentTracksPlugins() {
   std::string problem;
   const doc::RoleMap roles = PluginCatalog::roles(&problem);
   if (roles.roles.empty()) {
-    showError(u8("No plugins for the roles yet"),
-              u8("Settings > Roles says which plugin plays each part (Drums: sfizz, Bass / Lead / Pad: Vital...). Choose them there, then try again.") +
+    showError(lang::tr("No plugins for the roles yet"),
+              lang::tr("Settings > Roles says which plugin plays each part (Drums: sfizz, Bass / Lead / Pad: Vital...). Choose them there, then try again.") +
                   (problem.empty() ? juce::String() : u8("\n\n") + u8(problem)));
     return;
   }
@@ -2553,11 +2557,12 @@ void MainComponent::giveSilentTracksPlugins() {
     showError(u8("Plugins for the silent tracks"), u8(e.what()));
     return;
   }
-  juce::String text = juce::String(changed) + u8(" tracks play their role's plugin now (Ctrl+Z puts them back).");
+  // Each piece goes through tr on its own: the whole text is two sentences and no single entry matches it (R3-C).
+  juce::String text = lang::tr(juce::String(changed) + u8(" tracks play their role's plugin now (Ctrl+Z puts them back)."));
   if (!left.empty()) {
     juce::String names;
     for (const auto& n : left) names += (names.isEmpty() ? juce::String() : juce::String(", ")) + u8(n);
-    text += u8(" Still silent (no role guessed, or no plugin for it in Settings > Roles): ") + names + ".";
+    text += " " + lang::tr(u8("Still silent (no role guessed, or no plugin for it in Settings > Roles): ") + names + ".");
   }
   notice_ = text;
   repaint();
