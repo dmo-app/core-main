@@ -6,6 +6,8 @@
 #include <thread>
 #include "support/check.hpp"
 #include "support/signals.hpp"
+#include <limits>
+#include <tuple>
 #include "assets.hpp"
 #include "bounce.hpp"
 #include "edit.hpp"
@@ -15,6 +17,10 @@
 #include "core/render_job.hpp"
 #include "core/server.hpp"
 #include "io/audio_file.hpp"
+#include "engine_protocol.hpp"
+#include "pattern_sound.hpp"
+#include "sampling.hpp"
+#include <fstream>
 #include "io/wav.hpp"
 
 namespace fs = std::filesystem;
@@ -224,6 +230,72 @@ TEST("caca P06: apagar a pista mostrada nao mete na selecao uma pista que ningue
   // Nenhuma pista: nada mostrado.
   now = core::doc::newEmptyDocument();
   CHECK_EQ(core::doc::shownAfterRemoval(now, before, a, also), std::string());
+}
+
+TEST("caca 2, P05: converter 44,1 kHz para 48 kHz da o numero certo de frames") {
+  for (const auto& [from, to, frames, want] : std::vector<std::tuple<double, double, int64_t, int64_t>>{
+           {44100, 48000, 44100, 48000}, {48000, 44100, 48000, 44100}, {44100, 96000, 44100, 96000}, {22050, 48000, 22050, 48000},
+           {44100, 48000, 44101, 48002}}) {  // o ultimo nao e exacto: arredonda para cima
+    core::AudioData in;
+    in.sampleRate = from;
+    in.L = coretest::sine(440, from, (int)frames, 0.5f);
+    in.R = in.L;
+    CHECK_EQ(core::resample(in, to).frames(), want);
+  }
+}
+
+TEST("caca 2, IPC: uma resposta com um campo event continua a ser a resposta") {
+  using core::client::EngineLine;
+  using core::client::readEngineLine;
+  EngineLine r = readEngineLine(R"({"id":5,"ok":true,"result":{"a":1},"event":{"x":1}})");
+  CHECK(r.kind == EngineLine::Kind::Reply);
+  CHECK_EQ(r.id, (int64_t)5);
+  CHECK(r.ok);
+  r = readEngineLine(R"({"id":6,"ok":false,"error":"no","event":"job"})");
+  CHECK(r.kind == EngineLine::Kind::Reply);
+  CHECK_EQ(r.error, std::string("no"));
+  // Os eventos de verdade nao mudam.
+  CHECK(readEngineLine(R"({"event":"ready","protocol":1})").kind == EngineLine::Kind::Ready);
+  CHECK(readEngineLine(R"({"event":"job","jobId":3})").kind == EngineLine::Kind::Event);
+  CHECK(readEngineLine(R"({"event":{"a":1}})").kind == EngineLine::Kind::Event);  // sem id: um evento, como antes
+}
+
+TEST("caca 2, U-5: a duracao de um preview com sampleRate 0 e 0, nao infinito") {
+  core::preview::Sound s;
+  s.peaks.assign(10, 0.5f);
+  s.sampleRate = 0;
+  CHECK_EQ(s.seconds(), 0.0);
+  s.sampleRate = 48000;
+  CHECK(std::abs(s.seconds() - 10.0 * 128 / 48000) < 1e-12);
+}
+
+TEST("caca 2, U-8: os tres textos que faltavam tem traducao") {
+  std::ifstream f(CORE_LANG_DIR "/pt-PT.json", std::ios::binary);
+  const json lang = json::parse(f);
+  for (const char* key : {"Rename pattern", "Save as template", "This pattern, all its rows, goes into Templates > Mine."})
+    CHECK(lang["strings"].contains(key));
+}
+
+TEST("caca 2, P08: um clip so de NaN e um ficheiro estragado, nao silencio") {
+  const float nan = std::numeric_limits<float>::quiet_NaN();
+  core::sampling::Channels broken = {std::vector<float>(4800, nan), std::vector<float>(4800, nan)};
+  CHECK(core::sampling::hasBrokenSamples(broken));
+  CHECK_EQ(core::sampling::normalizePeak(broken), 0.0);  // nada muda
+  core::sampling::Channels one = {coretest::sine(440, 48000, 4800, 0.5f)};
+  CHECK(!core::sampling::hasBrokenSamples(one));
+  one[0][100] = std::numeric_limits<float>::infinity();
+  CHECK(core::sampling::hasBrokenSamples(one));
+  core::sampling::Channels silent = {std::vector<float>(4800, 0.0f)};
+  CHECK(!core::sampling::hasBrokenSamples(silent));  // o silencio continua silencio
+}
+
+TEST("caca 2, seccao 4: um ppq que nao e 960 tem uma mensagem que se entende") {
+  json j = core::doc::toJson(core::doc::newEmptyDocument());
+  j["transport"]["ppq"] = 480;
+  std::string message;
+  try { (void)core::doc::parseDocument(j); } catch (const core::doc::DocumentError& e) { message = e.what(); }
+  CHECK(message.find("must be 960") != std::string::npos);
+  CHECK(message.find("between") == std::string::npos);
 }
 
 CORE_TEST_MAIN

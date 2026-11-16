@@ -143,7 +143,10 @@ AudioData resample(const AudioData& in, double targetRate) {
   AudioData out;
   out.sampleRate = targetRate;
   out.channels = in.channels;
-  const int64_t frames = (int64_t)std::ceil(in.frames() * ratio);
+  // frames * target / source, rounded up, without the rounding error of the ratio: 44100 frames at 44.1 kHz are
+  // 48000 at 48 kHz, not 48001 (deep hunt P05).
+  const double exact = (double)in.frames() * targetRate / in.sampleRate;
+  const int64_t frames = (int64_t)std::ceil(exact - exact * 1e-12);
   const int chans = in.channels;
   std::vector<float>* dst[2] = {&out.L, &out.R};
   const std::vector<float>* src[2] = {&in.L, &in.R};

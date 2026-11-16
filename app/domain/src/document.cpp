@@ -561,7 +561,8 @@ Document parseDocument(const json& input, int* migratedFrom) {
   d.name = r.string("name", "", 200);
   Reader tr(r.object("transport"), "transport");
   d.bpm = tr.number("bpm", 145, kMinBpm, kMaxBpm);
-  if (tr.integer("ppq", kPpq, kPpq, kPpq) != kPpq) throw DocumentError("transport.ppq", "must be 960");
+  if (tr.integer("ppq", kPpq, 1, 1000000) != kPpq)  // one message, not "between 960 and 960" (deep hunt §4)
+    throw DocumentError("transport.ppq", "must be " + std::to_string(kPpq) + ": Core songs use " + std::to_string(kPpq) + " ticks per beat");
   json meter = tr.take("timeSignature");
   if (!meter.is_null() && meter != json::array({4, 4})) throw DocumentError("transport.timeSignature", "only 4/4 is supported");
   json loop = tr.take("loop");

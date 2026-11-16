@@ -32,11 +32,12 @@ LONG WINAPI writeDump(EXCEPTION_POINTERS* info) {
 }
 #endif
 
-// The newest kKeep of each kind stay (the file names sort by date).
+// The newest kKeep - 1 of each kind stay (the file names sort by date): with the one this session writes, kKeep
+// (deep hunt: the folder held kKeep + 1).
 void prune(const juce::File& folder, const juce::String& pattern) {
   juce::Array<juce::File> files = folder.findChildFiles(juce::File::findFiles, false, pattern);
   files.sort();
-  for (int i = 0; i + kKeep < files.size(); ++i) files[i].deleteFile();
+  for (int i = 0; i + (kKeep - 1) < files.size(); ++i) files[i].deleteFile();
 }
 
 }  // namespace
