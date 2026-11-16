@@ -4,6 +4,9 @@
 #include <cmath>
 #include "edit.hpp"
 #include "follow.hpp"
+#include "pattern_tools.hpp"
+#include <cctype>
+#include <set>
 
 namespace core::doc {
 
@@ -213,6 +216,280 @@ RoleToolResult toolGate(Document& doc, const std::string& trackId, const RoleMap
                aifx::rateNames()[(size_t)std::clamp(gate.rate, 0, 3)] + (gate.duck > 0 ? ", duck " + percent(gate.duck) : std::string()) +
                ") over " + bars(end - start);
   return r;
+}
+
+// ================================================================================================================
+// The song tools for the AI (role_tools.hpp, second part).
+
+namespace {
+std::string lowerText(std::string s) {
+  for (auto& c : s) c = (char)std::tolower((unsigned char)c);
+  return s;
+}
+// The kind of a section by its name: drop | open (intro, break, build-up, outro) | "" (other).
+std::string sectionMood(const std::string& name) {
+  const std::string n = lowerText(name);
+  if (n.find("drop") != std::string::npos) return "drop";
+  for (const char* w : {"break", "intro", "build", "rise", "outro"})
+    if (n.find(w) != std::string::npos) return "open";
+  return "";
+}
+constexpr const char* kPlaceKey = "corePlace";  // the bus's tag: {"kind": "reverb" | "delay", "place": "<preset>"}
+bool isPlaceBus(const Track& t, const std::string& kind) {
+  return t.instrument.kind == "bus" && t.extra.contains(kPlaceKey) && t.extra[kPlaceKey].is_object() &&
+         t.extra[kPlaceKey].value("kind", std::string()) == kind;
+}
+std::string busNameFor(const SpacePreset& p) {
+  std::string place = p.id;
+  if (!place.empty()) place[0] = (char)std::toupper((unsigned char)place[0]);
+  return std::string(p.kind == "reverb" ? "R-Core" : "D-Core") + " \xC2\xB7 " + place;
+}
+}  // namespace
+
+SongSpan sectionSpan(const Document& doc, const std::string& section) {
+  if (section.empty()) return {0, doc.lengthTicks, "the whole song"};
+  const std::string want = lowerText(section);
+  for (const auto& s : doc.sections)
+    if (lowerText(s.name) == want) return {s.startTick, std::min(doc.lengthTicks, s.startTick + s.lengthTicks), s.name};
+  for (const auto& s : doc.sections)
+    if (lowerText(s.name).find(want) != std::string::npos) return {s.startTick, std::min(doc.lengthTicks, s.startTick + s.lengthTicks), s.name};
+  throw DocumentError("section", "no section called '" + section + "'");
+}
+
+// Send levels and section moves from the old R-Core / D-Core presets (a reverb at 15-35 % mix on the track is about
+// -16 to -9 dB of tail; drops drier, breaks open). Size / feedback are the plugin's macro, 0..1.
+const std::vector<SpacePreset>& spacePresets() {
+  static const std::vector<SpacePreset> presets = {
+      {"reverb", "room", "A short dark room that glues the parts; drier in the drops", -12, -4, 0, 0.3},
+      {"reverb", "hall", "A soft hall behind leads and pads; it opens up in the breaks", -12, -5, 0, 0.6},
+      {"reverb", "plate", "A bright plate for claps, snares and vocals; drier in the drops", -12, -4, 0, 0.45},
+      {"reverb", "huge", "Endless space for pads and slow hits, the same all song long", -9, 0, 0, 0.95},
+      {"reverb", "tight", "Hi-tech dry: a tiny room only to glue, almost gone in the drops", -16, -6, 0, 0.15},
+      {"delay", "throw", "Quarter-note throws at the ends of phrases, loud in the breaks", -10, -4, 0, 0.3},
+      {"delay", "dotted", "Dotted-eighth echoes behind the leads, held down in the drops", -12, -3, 0, 0.4},
+      {"delay", "eighths", "Soft eighths behind pads and leads", -14, -3, 0, 0.35},
+      {"delay", "sixteenths", "Fast sixteenths for leads and FX, held down in the drops", -14, -6, 0, 0.25},
+      {"delay", "slow", "Long far-away echoes, the same all song long", -10, 0, 0, 0.7}};
+  return presets;
+}
+
+const SpacePreset* findSpacePreset(const std::string& kind, const std::string& id) {
+  const std::string want = lowerText(id.empty() ? (kind == "delay" ? "dotted" : "room") : id);
+  for (const auto& p : spacePresets())
+    if (p.kind == kind && p.id == want) return &p;
+  return nullptr;
+}
+
+SharedBusResult toolSharedBus(Document& doc, const std::vector<std::string>& trackIds, const RoleMap& map, const std::string& kind,
+                              const std::string& preset) {
+  if (kind != "reverb" && kind != "delay") throw DocumentError("bus", "kind is reverb or delay");
+  const SpacePreset* p = findSpacePreset(kind, preset);
+  if (!p) throw DocumentError("bus", "no " + kind + " preset '" + preset + "'");
+  checkMacro(map, kind, "mix");  // the bus plays fully wet: its mix must be reachable
+  std::vector<std::string> tracks;
+  for (const auto& id : trackIds) {
+    const Track& t = trackById(doc, id);  // throws for a missing track, before any change
+    if (t.instrument.kind == "bus" || isPlaceBus(t, kind)) continue;
+    tracks.push_back(id);
+  }
+  if (tracks.empty()) throw DocumentError("bus", "choose the tracks that share the " + kind);
+  if (doc.lengthTicks < kPpq) throw DocumentError("bus", "the song is empty");
+  SharedBusResult r;
+  for (const auto& t : doc.tracks)
+    if (isPlaceBus(t, kind) && t.extra[kPlaceKey].value("place", std::string()) == p->id) r.busId = t.id;
+  if (r.busId.empty()) {
+    r.busId = addBusTrack(doc, busNameFor(*p));
+    r.newBus = true;
+  }
+  trackById(doc, r.busId).extra[kPlaceKey] = {{"kind", kind}, {"place", p->id}};
+  // The plugin fully wet on the bus (only the tail: the dry sound stays on each track), its size / feedback set.
+  writeRoleSweep(doc, r.busId, map, kind, "mix", 0, doc.lengthTicks, 1.0, 1.0);
+  const char* sizeMacro = kind == "reverb" ? "size" : "feedback";
+  if (hasMacro(map, kind, sizeMacro)) writeRoleSweep(doc, r.busId, map, kind, sizeMacro, 0, doc.lengthTicks, p->size, p->size);
+  // One place of a kind per track: a send to another R-Core (D-Core) bus moves here; a bus nobody feeds goes.
+  std::set<std::string> left;
+  for (const auto& id : tracks) {
+    std::vector<std::string> drop;
+    for (const auto& snd : trackById(doc, id).mix.sends) {
+      const Track* to = doc.findTrack(snd.to);
+      if (snd.to != r.busId && to && isPlaceBus(*to, kind)) { drop.push_back(snd.id); left.insert(snd.to); }
+    }
+    for (const auto& sid : drop) removeSend(doc, id, sid);
+  }
+  for (const auto& bus : left) {
+    bool used = false;
+    for (const auto& t : doc.tracks) {
+      if (t.mix.output == bus) used = true;
+      for (const auto& snd : t.mix.sends) used = used || snd.to == bus;
+    }
+    if (!used && doc.findTrack(bus)) removeTrack(doc, bus);
+  }
+  for (const auto& id : tracks) {
+    try {
+      std::string sendId;
+      for (const auto& snd : trackById(doc, id).mix.sends) if (snd.to == r.busId) sendId = snd.id;
+      if (sendId.empty()) addSend(doc, id, r.busId, p->sendDb, false);
+      else setSend(doc, id, sendId, p->sendDb, false);
+      ++r.sends;
+    } catch (const DocumentError&) {
+      // A track that cannot feed this bus (routed through it, no free send): left as it was.
+    }
+  }
+  if (p->dropDb != 0 || p->openDb != 0)
+    for (const auto& s : doc.sections) {
+      const std::string mood = sectionMood(s.name);
+      const double db = mood == "drop" ? p->dropDb : mood == "open" ? p->openDb : 0;
+      const int64_t end = std::min(doc.lengthTicks, s.startTick + std::max<int64_t>(1, s.lengthTicks)) - 1;
+      if (end <= s.startTick) continue;
+      setAutomationPoint(doc, r.busId, "gainDb", s.startTick, db);
+      setAutomationPoint(doc, r.busId, "gainDb", end, db);
+      ++r.sections;
+    }
+  r.sentence = std::string(kind == "reverb" ? "R-Core" : "D-Core") + " " + p->id + ": " + std::to_string(r.sends) +
+               " tracks share one " + kind + " on " + trackById(doc, r.busId).name +
+               (r.sections > 0 ? ", quieter in the drops" : "");
+  return r;
+}
+
+const std::vector<std::string>& fxIntents() {
+  static const std::vector<std::string> list = {"buildup", "suck", "intro", "outro", "impact", "break"};
+  return list;
+}
+
+RoleToolResult toolIntentFx(Document& doc, const std::string& trackId, const RoleMap& map, const std::string& intent,
+                            int64_t start, int64_t end, double amount) {
+  const std::string what = lowerText(intent);
+  const double a = std::clamp(amount, 0.0, 1.0);
+  if (what == "buildup") {
+    BuildupFx fx;
+    fx.amount = a;
+    fx.delay = hasMacro(map, "delay", "mix");
+    return toolBuildupFx(doc, trackId, map, start, end, fx);
+  }
+  if (what == "suck") return toolSuck(doc, trackId, map, end, end - start, a);
+  checkSpan(doc, start, end);
+  trackById(doc, trackId);
+  struct Move { const char *role, *macro; double from, to, curve; bool fromRest, toRest; };
+  std::vector<Move> moves;
+  std::string sentence;
+  if (what == "intro") {  // dark and wet to bright and dry
+    moves = {{"filter", "cutoff", 1.0 - 0.8 * a, 0, 1.5, false, true}, {"reverb", "mix", 0.45 * a, 0, 1.0, false, true}};
+    sentence = "Intro: the sound comes out of the dark, from wet to dry";
+  } else if (what == "outro") {  // bright to dark, the reverb grows
+    moves = {{"filter", "cutoff", 0, 1.0 - 0.7 * a, 1.0, true, false}, {"reverb", "mix", 0, 0.55 * a, 1.5, true, false}};
+    sentence = "Outro: the sound darkens and goes far away";
+  } else if (what == "impact") {  // a burst that dies away fast
+    moves = {{"reverb", "mix", 0.3 + 0.6 * a, 0, 0.35, false, true}, {"drive", "amount", 0.8 * a, 0, 0.35, false, true}};
+    sentence = "Impact: a burst of space and grit that dies away";
+  } else if (what == "break") {  // steady: darker and wider
+    moves = {{"filter", "cutoff", 1.0 - 0.4 * a, 1.0 - 0.4 * a, 1.0, false, false}, {"reverb", "mix", 0.4 * a, 0.4 * a, 1.0, false, false}};
+    sentence = "Break: darker and wider while it lasts";
+  } else {
+    throw DocumentError("fx", "no intent '" + intent + "' (buildup, suck, intro, outro, impact, break)");
+  }
+  RoleToolResult r;
+  std::vector<const Move*> todo;
+  for (const auto& m : moves) {
+    if (hasMacro(map, m.role, m.macro)) todo.push_back(&m);
+    else r.skipped.push_back(whyNot(map, m.role, m.macro));
+  }
+  if (todo.empty()) throw DocumentError("fx", r.skipped.front());
+  for (const Move* m : todo) {
+    const double rest = roleRest(*map.find(m->role), m->role, m->macro);
+    r.keys.push_back(writeRoleSweep(doc, trackId, map, m->role, m->macro, start, end, m->fromRest ? rest : m->from,
+                                    m->toRest ? rest : m->to, m->curve));
+    r.roles.push_back(m->role);
+  }
+  r.sentence = sentence + " (" + bars(end - start) + ")";
+  return r;
+}
+
+RollResult toolRoll(Document& doc, const std::string& trackId, int64_t start, int64_t dropTick, const std::string& style, int pitch,
+                    int rise, int gapBeats) {
+  checkSpan(doc, start, dropTick);
+  if (dropTick - start < kPpq) throw DocumentError("roll", "a roll is at least one beat long");
+  if (style != "steps" && style != "gradual") throw DocumentError("roll", "style is steps or gradual");
+  if (rise < 0 || rise > 12) throw DocumentError("roll", "rise is 0-12 semitones");
+  if (gapBeats < 0 || gapBeats > 4) throw DocumentError("roll", "gap is 0-4 beats");
+  Track& t = trackById(doc, trackId);
+  if (!playsPatterns(t)) throw DocumentError("roll", "'" + t.name + "' plays no notes (audio or a bus)");
+  if (pitch < 0) {
+    const int key = trackRoot(t, t.patterns.empty() ? nullptr : &t.patterns.front());
+    pitch = key >= 0 ? key : 38;
+  }
+  if (pitch > 127) throw DocumentError("roll", "pitch must be 0-127");
+  const int64_t length = dropTick - start;
+  // The clips over the span step aside: cut at the edges, the inside goes.
+  std::vector<std::string> ids;
+  for (const auto& c : t.clips) ids.push_back(c.id);
+  for (const auto& id : ids) {
+    const Clip* c = nullptr;
+    for (const auto& x : t.clips) if (x.id == id) c = &x;
+    if (!c) continue;
+    const int64_t cs = c->startTick, ce = c->startTick + c->lengthTicks;
+    if (ce <= start || cs >= dropTick) continue;
+    std::string inner = id;
+    if (cs < start) inner = splitClip(t, id, start);
+    int64_t innerEnd = 0;
+    for (const auto& x : t.clips) if (x.id == inner) innerEnd = x.startTick + x.lengthTicks;
+    if (innerEnd > dropTick) splitClip(t, inner, dropTick);
+    removeClip(t, inner);
+  }
+  RollResult r;
+  r.patternId = addPattern(t, length);
+  BuildupOptions o;
+  o.start = 0;
+  o.length = length;
+  o.pitch = pitch;
+  o.roll = true;
+  o.shape = style;
+  o.gapTicks = gapBeats * kPpq;
+  o.riseTo = rise;
+  Pattern& pat = patternById(t, r.patternId);
+  pat.name = "Roll";
+  r.notes = makeBuildup(pat, o);
+  addClip(t, r.patternId, start, length);
+  r.sentence = "ROLL on " + t.name + ": " + std::to_string(r.notes) + " notes speeding up over " + bars(length) +
+               (rise > 0 ? ", climbing " + std::to_string(rise) + " semitones" : "") + " into the drop";
+  return r;
+}
+
+const std::vector<SongToolInfo>& songToolCatalog() {
+  using P = SongToolParam;
+  static const std::vector<SongToolInfo> list = {
+      {"space", "Tracks share one reverb or one delay on a bus that follows the sections (R-Core / D-Core)",
+       {"reverb", "delay"},
+       {P{"tracks", "tracks", "", "the tracks that share it"}, P{"kind", "choice", "reverb|delay", "reverb (R-Core) or delay (D-Core)"},
+        P{"preset", "choice", "room|hall|plate|huge|tight|throw|dotted|eighths|sixteenths|slow", "the place; reverb: room..tight, delay: throw..slow"}}},
+      {"fx", "Effects by intent over a section, on one track (F-Core)",
+       {"filter", "reverb", "delay", "drive"},
+       {P{"track", "track", "", "the track"}, P{"intent", "choice", "buildup|suck|intro|outro|impact|break", "what the moment is for"},
+        P{"section", "section", "", "the section by name (\"Build-up 1\"); empty: the whole song"},
+        P{"amount", "number", "0..1", "how much (0.7 by default)"}}},
+      {"roll", "A roll that speeds up into the drop, in a new pattern on the track", {},
+       {P{"track", "track", "", "the track (a snare or the kick)"}, P{"section", "section", "", "the build-up it fills; the drop is its end"},
+        P{"style", "choice", "steps|gradual", "steps: 1/4, 1/8, 1/16, 1/32; gradual: speeding up all the way"},
+        P{"rise", "number", "0..12", "semitones it climbs by the drop"}, P{"gap", "number", "0..4", "beats of silence before the drop"}}},
+      {"suck", "The sound is sucked into the drop: the reverb opens, the filter closes, back on the drop", {"reverb", "filter"},
+       {P{"track", "track", "", "the track"}, P{"section", "section", "", "the section before the drop"}, P{"amount", "number", "0..1", "how much"}}},
+      {"pump", "PUM: the volume dips at every kick (sidechain)", {"sidechain"},
+       {P{"track", "track", "", "the track that pumps"}, P{"from", "track", "", "the track whose notes it follows (the kick)"},
+        P{"section", "section", "", "where; empty: the whole song"}, P{"depth", "number", "0..1", "how far it dips"}}},
+      {"buildup", "Build-up effects up to the drop: filter opens, reverb and delay grow, drive pushes",
+       {"filter", "reverb", "delay", "drive"},
+       {P{"track", "track", "", "the track"}, P{"section", "section", "", "the build-up"}, P{"amount", "number", "0..1", "how much"}}},
+  };
+  return list;
+}
+
+json songToolCatalogJson() {
+  json out = json::array();
+  for (const auto& t : songToolCatalog()) {
+    json params = json::array();
+    for (const auto& p : t.params) params.push_back({{"name", p.name}, {"kind", p.kind}, {"values", p.values}, {"what", p.what}});
+    out.push_back({{"id", t.id}, {"what", t.what}, {"roles", t.roles}, {"params", params}});
+  }
+  return out;
 }
 
 }  // namespace core::doc

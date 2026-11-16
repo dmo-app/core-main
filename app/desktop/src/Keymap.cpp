@@ -89,6 +89,7 @@ const std::vector<KeyAction>& Keymap::actions() {
       {"view.wholeSong", "View the whole song", "View", {k("Ctrl+0")}},
       {"view.panHold", "Hold to drag the view sideways (with the left mouse button)", "View", {k("Alt")}, true},
       {"view.mixer", "Mixer", "View", {k("Ctrl+M")}},
+      {"view.patterns", "Patterns window (channel rack, templates)", "View", {k("Ctrl+P")}},
       {"view.effects", "Effects of the selected track", "View", {k("Ctrl+F")}},
       {"file.new", "New empty song", "File", {k("Ctrl+N")}},
       {"file.newTemplate", "Templates (in the Library)", "File", {k("Ctrl+Shift+N")}},
