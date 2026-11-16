@@ -22,7 +22,11 @@ fs::path fromUtf8(const std::string& s) { return fs::path(std::u8string(s.begin(
 // A safe file name: letters, digits, '-', '_' and '.' from the original name.
 std::string safeName(const std::string& name) {
   std::string out;
-  for (unsigned char c : name) out += (std::isalnum(c) || c == '-' || c == '_' || c == '.') ? (char)c : '_';
+  for (unsigned char c : name) {
+    const bool ok = std::isalnum(c) || c == '-' || c == '_' || c == '.';
+    // Two dots in a row become "._" so the name is never read as a step out of the folder.
+    out += !ok ? '_' : (c == '.' && !out.empty() && out.back() == '.') ? '_' : (char)c;
+  }
   return out.substr(0, 60);
 }
 }  // namespace
@@ -218,7 +222,7 @@ std::string importAudio(Document& doc, const fs::path& file, const fs::path& pro
   place(file, projectDir / fromUtf8(rel), hash);
   Asset a;
   long highest = 0;
-  for (const auto& x : doc.assets) if (x.id.rfind("a", 0) == 0) highest = std::max(highest, std::strtol(x.id.c_str() + 1, nullptr, 10));
+  for (const auto& x : doc.assets) if (x.id.rfind("a", 0) == 0) highest = std::max(highest, idNumber(x.id.c_str() + 1));
   a.id = "a" + std::to_string(highest + 1);
   a.name = cutUtf8(name, 200);
   a.path = rel;

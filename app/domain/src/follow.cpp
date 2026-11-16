@@ -121,12 +121,15 @@ struct Score {
     const auto now = in(from, to);
     if (now == v) return 0;
     const int written = (int)(now.size() + v.size());
-    // The clip that crosses `from` is cut there: its notes stop at the cut.
-    for (auto& n : notes) if (n.at < from && n.at + n.length > from) n.length = from - n.at;
+    // The clip that crosses `from` is cut there: its notes stop at the cut. The range written back starts at the
+    // earliest of them, so the cut reaches the song too (sweep: it stayed in this score only).
+    int64_t first = from;
+    for (auto& n : notes)
+      if (n.at < from && n.at + n.length > from) { n.length = from - n.at; first = std::min(first, n.at); }
     notes.erase(std::remove_if(notes.begin(), notes.end(), [&](const SongNote& n) { return n.at >= from && n.at < to; }), notes.end());
     notes.insert(notes.end(), v.begin(), v.end());
     std::stable_sort(notes.begin(), notes.end());
-    changed.push_back({from, to});
+    changed.push_back({first, to});
     return written;
   }
 

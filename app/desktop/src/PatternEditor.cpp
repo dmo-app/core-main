@@ -11,6 +11,8 @@
 #include "groove.hpp"
 #include "pattern_tools.hpp"
 #include "pcore.hpp"
+#include "Plugins.h"
+#include "role_tools.hpp"
 #include "Theme.h"
 
 namespace core::app {
@@ -1479,7 +1481,8 @@ void PatternEditor::showTools() {
          kBuild = 500, kBuildSec = 520, kBuildTrack = 560, kBuildRoll = 590, kBuildGap, kVary = 600, kSave = 700, kCustom = 710,
          kPCore = 900, kBuildupWindow = 901, kQuantize = 800, kHumanize = 801, kSwing = 1000, kTranspose = 1100, kChord = 1200,
          kLength = 1300, kLouder = 1400, kSofter, kShuffle = 1500, kRandomPitch, kHumanizeMore, kStutter = 1600, kAttach = 1700, kAttachPlan = 1701,
-         kStrength = 1800, kPreview = 1950, kFollowZone = 2000, kFollowKick, kFollowBass, kFollowOn, kFollowOffset = 2100, kFollowLoose = 2200, kFollowKickPick = 2300, kFollowBassPick = 2500 };
+         kStrength = 1800, kPreview = 1950, kFollowZone = 2000, kFollowKick, kFollowBass, kFollowOn, kFollowOffset = 2100, kFollowLoose = 2200, kFollowKickPick = 2300, kFollowBassPick = 2500,
+         kSuck = 3000, kPumShown = 3100, kPumSong = 3400, kBuildFx = 3700 };
   m.addItem(juce::PopupMenu::Item(u8("Play the selected notes")).setID(kPreview).setEnabled(!selected_.empty()));
   m.addSeparator();
 
@@ -1644,6 +1647,30 @@ void PatternEditor::showTools() {
   build.addItem(kBuildupWindow, u8("Build-up → roll → drop…"));
   m.addSubMenu("Build-up", build);
 
+  // The tools that play through the role map (Settings > Roles): the role's plugin goes on this track, its macros move.
+  juce::PopupMenu fx;
+  fx.addSectionHeader(u8("Plugins of the roles (Settings > Roles)"));
+  juce::PopupMenu suck;
+  for (int b : {1, 2, 4}) suck.addItem(juce::PopupMenu::Item(juce::String(b) + (b == 1 ? " bar" : " bars")).setID(kSuck + b).setEnabled((int64_t)b * bar <= to - from));
+  fx.addSubMenu(u8("SUCK into the drop (ends where the shown bars end)"), suck);
+  juce::PopupMenu pumShown, pumSong;
+  {
+    const auto& tracks = host_.currentDocument().tracks;
+    for (size_t i = 0; i < tracks.size() && i < 200; ++i) {
+      if (tracks[i].id == trackId_ || tracks[i].instrument.kind == "audio" || tracks[i].instrument.kind == "bus") continue;
+      pumShown.addItem(kPumShown + (int)i + 1, u8(tracks[i].name));
+      pumSong.addItem(kPumSong + (int)i + 1, u8(tracks[i].name));
+    }
+  }
+  fx.addSubMenu(u8("PUM over the bars shown, from"), pumShown);
+  fx.addSubMenu(u8("PUM over the whole song, from"), pumSong);
+  juce::PopupMenu buildFx;
+  buildFx.addItem(kBuildFx + 1, u8("Filter opens + reverb grows"));
+  buildFx.addItem(kBuildFx + 2, u8("Filter + reverb + delay"));
+  buildFx.addItem(kBuildFx + 3, u8("Filter + reverb + delay + drive"));
+  fx.addSubMenu(u8("Build-up effects up to the drop (the bars shown)"), buildFx);
+  m.addSubMenu(u8("Plugin tools"), fx);
+
   m.addSeparator();
   m.addItem(kPCore, u8("Patterns window…"));
   m.addItem(juce::PopupMenu::Item(u8("Save the bars shown as a pattern…")).setID(kSave).setEnabled(onSavePattern != nullptr && to > from));
@@ -1652,6 +1679,10 @@ void PatternEditor::showTools() {
     auto& self = *safe;
     if (r == kPCore) { if (self.onOpenPatterns) self.onOpenPatterns(); return; }
     if (r == kBuildupWindow) { self.showBuildup(); return; }
+    if (r > kSuck && r <= kSuck + 4) { self.roleTool("suck", r - kSuck, -1, from, to); return; }
+    if (r > kPumShown && r <= kPumShown + 200) { self.roleTool("pump", 0, r - kPumShown - 1, from, to); return; }
+    if (r > kPumSong && r <= kPumSong + 200) { self.roleTool("pumpSong", 0, r - kPumSong - 1, from, to); return; }
+    if (r > kBuildFx && r <= kBuildFx + 3) { self.roleTool("buildupFx", r - kBuildFx, -1, from, to); return; }
     if (r == kQuantize) { self.quantize(); return; }
     if (r >= kStrength && r <= kStrength + 100) {
       self.quantizeStrength = (r - kStrength) / 100.0;
@@ -1777,7 +1808,9 @@ void PatternEditor::noteTool(const std::string& kind, int value) {
     // Shuffling swaps pitches (drums: loudness) between notes: it needs two notes that differ.
     std::set<int> kinds;
     const std::set<std::string> ids = editIds();
-    for (const auto& n : pattern()->notes) if (ids.count(n.id)) kinds.insert(drum ? (int)std::lround(n.velocity * 100) : n.pitch);
+    const doc::Pattern* shown = pattern();
+    if (!shown) return;  // the track or the pattern went (sweep: null dereference)
+    for (const auto& n : shown->notes) if (ids.count(n.id)) kinds.insert(drum ? (int)std::lround(n.velocity * 100) : n.pitch);
     if (!ids.empty() && kinds.size() < 2) {
       say(juce::String(drum ? u8("Shuffle the loudness") : u8("Shuffle the pitches")) + u8(": needs 2 or more notes with different ") +
           (drum ? u8("loudness") : u8("pitches")) + u8(" in the bars shown (") + juce::String((int)ids.size()) +
@@ -1834,6 +1867,54 @@ bool sameTempo(const std::vector<doc::TempoPoint>& a, const std::vector<doc::Tem
 
 
 
+namespace {
+// Where pattern ticks [from, to) play in the song: through the pattern's first clip. {-1, -1} when it is not in the song.
+std::pair<int64_t, int64_t> songSpanOf(const doc::Track& t, const std::string& patternId, int64_t from, int64_t to) {
+  for (const auto& c : t.clips)
+    if (c.patternId == patternId) return {c.startTick + from - c.offsetTicks, c.startTick + to - c.offsetTicks};
+  return {-1, -1};
+}
+juce::String sentenceOf(const doc::RoleToolResult& r) {
+  juce::String said = u8(r.sentence) + ".";
+  for (const auto& s : r.skipped) said << u8(" Left out: ") << u8(s) << ".";
+  return said;
+}
+}  // namespace
+
+void PatternEditor::roleTool(const std::string& tool, int amount, int sourceIndex, int64_t from, int64_t to) {
+  const doc::Track* t = currentTrack();
+  if (!t) return;
+  std::string problem;
+  const doc::RoleMap roles = PluginCatalog::roles(&problem);
+  if (!problem.empty()) { say(u8("The role map could not be read (") + u8(problem) + u8("): Settings > Roles.")); return; }
+  const doc::Document& now = host_.currentDocument();
+  const std::string trackId = trackId_;
+  auto span = songSpanOf(*t, patternId_, from, to);
+  if (tool == "pumpSong") span = {0, now.lengthTicks};
+  if (span.first < 0) { say(u8("This pattern is not in the song yet: put a clip of it in the song first.")); return; }
+  span.second = std::min(span.second, now.lengthTicks);
+  span.first = std::max<int64_t>(0, span.first);
+  std::string source;
+  if (sourceIndex >= 0 && sourceIndex < (int)now.tracks.size()) source = now.tracks[(size_t)sourceIndex].id;
+  doc::RoleToolResult result;
+  bool ok = false;
+  const juce::String label = tool == "suck" ? u8("SUCK") : tool == "buildupFx" ? u8("Build-up effects") : u8("PUM");
+  host_.applyEdit([&](doc::Document& d) {
+    if (tool == "suck") result = doc::toolSuck(d, trackId, roles, span.second, (int64_t)amount * 4 * doc::kPpq);
+    else if (tool == "buildupFx") {
+      doc::BuildupFx fx;
+      fx.delay = amount >= 2;
+      fx.drive = amount >= 3;
+      result = doc::toolBuildupFx(d, trackId, roles, span.first, span.second, fx);
+    } else result = doc::toolPump(d, trackId, source, roles, span.first, span.second);
+    ok = true;
+  }, label);
+  // Not written (the edit said why: a role with no plugin, no notes...).
+  if (!ok || result.keys.empty() || !doc::findAutomation(host_.currentDocument(), trackId, result.keys.front())) return;
+  documentChanged();
+  say(sentenceOf(result));
+}
+
 void PatternEditor::showBuildup() {
   const doc::Track* t = currentTrack();
   if (!t) { say(u8("Select a note track first: the build-up is written into its pattern.")); return; }
@@ -1854,14 +1935,15 @@ void PatternEditor::showBuildup() {
   if (patternLibrary) start.library = patternLibrary();
   if (start.library.empty()) { say(u8("Build-up: the pattern library is empty (patterns/ beside Core.exe).")); return; }
   auto panel = std::make_unique<BuildupPanel>(start);
-  panel->onWrite = [safe = juce::Component::SafePointer<PatternEditor>(this)](const doc::PCoreSettings& s, int64_t from, int64_t to, double tempoTo, bool again) {
-    return safe ? safe->buildupTake(s, from, to, tempoTo, again) : juce::String(u8("The piano roll closed."));
+  panel->onWrite = [safe = juce::Component::SafePointer<PatternEditor>(this)](const doc::PCoreSettings& s, int64_t from, int64_t to, double tempoTo,
+                                                                               int effects, bool again) {
+    return safe ? safe->buildupTake(s, from, to, tempoTo, again, effects) : juce::String(u8("The piano roll closed."));
   };
   lastTake_.reset();
   dockTool(std::move(panel), u8("BUILD-UP"), [this] { showBuildup(); });
 }
 
-juce::String PatternEditor::buildupTake(const doc::PCoreSettings& settings, int64_t from, int64_t to, double tempoTo, bool again) {
+juce::String PatternEditor::buildupTake(const doc::PCoreSettings& settings, int64_t from, int64_t to, double tempoTo, bool again, int effects) {
   const doc::Track* t = currentTrack();
   if (!t) return u8("Select a note track first.");
   const std::vector<doc::PatternPreset> lib = patternLibrary ? patternLibrary() : std::vector<doc::PatternPreset>{};
@@ -1879,7 +1961,7 @@ juce::String PatternEditor::buildupTake(const doc::PCoreSettings& settings, int6
   const int64_t bar = 4 * doc::kPpq;
   // The song ticks of the transition (for the tempo): the first clip of this pattern.
   int64_t songFrom = -1, songTo = -1;
-  if (tempoTo > 0)
+  if (tempoTo > 0 || effects > 0)
     for (const auto& c : t->clips)
       if (c.patternId == patternId) {
         const int64_t transition = s.buildupStart >= 0 ? s.buildupStart : s.rollStart >= 0 ? s.rollStart : from;
@@ -1888,6 +1970,9 @@ juce::String PatternEditor::buildupTake(const doc::PCoreSettings& settings, int6
         break;
       }
   int written = 0;
+  doc::RoleToolResult fxResult;
+  std::string fxProblem;
+  const doc::RoleMap roles = effects > 0 ? PluginCatalog::roles(&fxProblem) : doc::RoleMap{};
   PCoreTake take;
   take.trackId = trackId;
   take.patternId = patternId;
@@ -1901,6 +1986,17 @@ juce::String PatternEditor::buildupTake(const doc::PCoreSettings& settings, int6
     if (need > p.lengthTicks) doc::extendPatternRepeating(p, std::min<int64_t>(need, 64LL * bar));
     written = doc::pcoreApply(p, scope, s, lib, key);
     if (tempoTo > 0 && songFrom >= 0 && songTo > songFrom) doc::tempoRampTo(d, songFrom, songTo, tempoTo);
+    // The roles' effects up to the drop, in the same undo step. A role with no plugin leaves the notes written and says so.
+    if (effects > 0 && songFrom >= 0 && songTo > songFrom) {
+      try {
+        doc::BuildupFx fx;
+        fx.delay = effects >= 2;
+        fx.drive = effects >= 3;
+        fxResult = doc::toolBuildupFx(d, trackId, roles, std::max<int64_t>(0, songFrom), std::min(songTo, d.lengthTicks), fx);
+      } catch (const std::exception& e) {
+        fxProblem = e.what();
+      }
+    }
     take.after = p;
     take.tempoAfter = d.tempoMap;
     ok = true;
@@ -1910,6 +2006,11 @@ juce::String PatternEditor::buildupTake(const doc::PCoreSettings& settings, int6
   documentChanged();
   juce::String said = juce::String(written) + u8(" notes in bars ") + juce::String(from / bar + 1) + u8("–") + juce::String(to / bar);
   if (s.roll != "off") said << u8(", drop at bar ") << juce::String(to / bar + 1);
+  if (effects > 0) {
+    if (songFrom < 0) said << u8(" (no effects: the pattern is not in the song)");
+    else if (!fxProblem.empty()) said << u8(" (no effects: ") << u8(fxProblem) << ")";
+    else said << ". " << u8(fxResult.sentence);
+  }
   if (tempoTo > 0) said << (songFrom >= 0 ? u8(", tempo up to ") + juce::String(tempoTo, 0) + " BPM" : u8(" (tempo unchanged: the pattern is not in the song)"));
   said << (undoLast ? u8(". Another take.") : u8("."));
   say(u8("Build-up: ") + said);

@@ -23,9 +23,10 @@ public:
     bool tempoPossible = true;        // the pattern is placed in the song (a clip): the tempo can glide
     std::vector<doc::PatternPreset> library;
   };
-  // Writes a take: the settings, the bars [from, to) in pattern ticks, the final BPM (0: the tempo stays), and
-  // whether the last take goes first. Returns what happened, for the line under the buttons.
-  std::function<juce::String(const doc::PCoreSettings&, int64_t from, int64_t to, double tempoTo, bool again)> onWrite;
+  // Writes a take: the settings, the bars [from, to) in pattern ticks, the final BPM (0: the tempo stays), the
+  // effects of the roles up to the drop (0 none, 1 filter + reverb, 2 + delay, 3 + drive) and whether the last take
+  // goes first. Returns what happened, for the line under the buttons.
+  std::function<juce::String(const doc::PCoreSettings&, int64_t from, int64_t to, double tempoTo, int effects, bool again)> onWrite;
 
   explicit BuildupPanel(const Start& start);
   void resized() override;
@@ -45,7 +46,7 @@ private:
   std::string templateId_ = "bass/kbbb-anchor", dropId_;  // "": keep the notes there / nothing after the drop
   juce::Label status_;
   juce::OwnedArray<juce::Label> labels_;
-  juce::ComboBox speed_, low_, high_, roll_, gap_, dropBars_, accentShape_, rise_;
+  juce::ComboBox speed_, low_, high_, roll_, gap_, dropBars_, accentShape_, rise_, effects_;
   juce::Slider from_, to_, density_, chaos_, accent_, gate_, buildAt_, rollAt_, tempo_;
   juce::ToggleButton tempoOn_;
   juce::Label dash_, between_, rollWord_;

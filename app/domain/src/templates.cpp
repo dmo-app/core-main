@@ -26,7 +26,7 @@ std::string text(json& value, const char* key, size_t maxLength, bool required) 
   }
   if (!v.is_string()) throw DocumentError(key, "must be text");
   std::string s = v.get<std::string>();
-  if (s.size() > maxLength) throw DocumentError(key, "is longer than " + std::to_string(maxLength) + " characters");
+  if (s.size() > maxLength) throw DocumentError(key, "is longer than " + std::to_string(maxLength) + " bytes (an accented letter counts as 2)");
   return s;
 }
 
@@ -39,8 +39,10 @@ SongTemplate parseTemplate(const json& value) {
   const json version = rest.value("schemaVersion", json());
   rest.erase("schemaVersion");
   if (!version.is_number_integer()) throw DocumentError("schemaVersion", "must be a whole number");
-  if (version.get<int>() > kTemplateSchemaVersion) throw FutureVersionError(version.get<int>());
-  if (version.get<int>() < 1) throw DocumentError("schemaVersion", "must be 1");
+  // Read as 64 bits: 2^32 + 1 is not 1 (sweep).
+  const int64_t schema = version.get<int64_t>();
+  if (schema > kTemplateSchemaVersion) throw FutureVersionError((int)std::min<int64_t>(schema, 1 << 30));
+  if (schema < 1) throw DocumentError("schemaVersion", "must be 1");
 
   SongTemplate t;
   t.info.id = text(rest, "id", 40, true);

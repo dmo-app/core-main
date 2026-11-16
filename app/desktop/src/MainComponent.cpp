@@ -25,6 +25,8 @@
 #include "bridge.hpp"
 #include "calls.hpp"
 #include "storage.hpp"
+#include "midi.hpp"
+#include "bitwig.hpp"
 
 namespace core::app {
 
@@ -898,6 +900,10 @@ private:
       for (int ch = 0; ch < buf.getNumChannels(); ++ch) channels.emplace_back(buf.getReadPointer(ch), buf.getReadPointer(ch) + frames);
     } catch (const std::bad_alloc&) {
       owner_.showError(u8("Cut silence"), u8("Not enough memory for this clip."));
+      return;
+    }
+    if (core::sampling::hasBrokenSamples(channels)) {  // deep hunt P08: not "silent"
+      owner_.showError(u8("Cut silence"), u8("The clip has broken samples (NaN or Inf): the file is damaged."));
       return;
     }
     const auto r = core::sampling::audibleRange(channels, reader->sampleRate, -60, 1, 20);
@@ -2588,7 +2594,7 @@ bool MainComponent::copyClips() {
         CopiedClip x; x.trackId = trackId; x.audio = true; x.audioClip = c;
         copied.push_back(x);
         from = std::min(from, c.startTick);
-        to = std::max(to, c.startTick + (int64_t)std::llround(c.durationSeconds * d.bpm / 60.0 * kPpq));
+        to = std::max(to, audioEndTick(d, c));  // through the tempo map (sweep: the first BPM only)
       }
   }
   if (copied.empty()) {
@@ -2629,9 +2635,8 @@ void MainComponent::pasteClips(int64_t at) {
         ++skipped;  // its track or pattern is gone, or the track is full
       }
     }
-    int64_t end = 0;
-    for (const auto& t : d.tracks) for (const auto& c : t.clips) end = std::max(end, c.startTick + c.lengthTicks);
-    d.lengthTicks = std::max(d.lengthTicks, end);
+    // The song grows to hold what was pasted, audio clips too (sweep: only note clips counted).
+    for (const auto& [trackId, clipId] : pasted) fitSong(d, trackId, clipId);
   }, pasted.size() == 1 ? u8("Paste clip") : u8("Paste clips"));
   boxClips_ = pasted;
   if (pasted.size() == 1) selectClip(pasted.begin()->first, pasted.begin()->second);
@@ -3201,10 +3206,11 @@ void MainComponent::redo() { if (history_.redo()) documentChanged(false); }
 
 void MainComponent::buildRows() {
   if (!selectedTrack_.empty() && !history_.current().findTrack(selectedTrack_)) {
-    selectedTrack_ = history_.current().tracks.empty() ? std::string() : history_.current().tracks.front().id;
+    // Deep hunt P06: not tracks.front(), which Stage Core then acted on with the rest of the selection.
+    std::vector<std::string> before;
+    for (const auto& row : rows_) before.push_back(row->id());
+    selectedTrack_ = doc::shownAfterRemoval(history_.current(), before, selectedTrack_, alsoSelected_);
     selectedClip_.clear();
-    for (auto it = alsoSelected_.begin(); it != alsoSelected_.end();)
-      it = history_.current().findTrack(*it) ? std::next(it) : alsoSelected_.erase(it);
     editor_.setTrack(selectedTrack_);
     std::lock_guard<std::mutex> g(liveMutex_);
     liveTrack_ = selectedTrack_;
@@ -3634,7 +3640,7 @@ void MainComponent::scanPlugins() {
 bool MainComponent::fetchPluginStates() {
   if (!doc::hasPlugins(history_.current())) return true;
   const json states = session_->pluginStates(5000);
-  if (states.empty() && snap_.missingPlugins.empty()) return false;  // no answer from the engine
+  if (!states.is_object()) return false;  // no answer from the engine ({} is an answer: nothing to take)
   doc::Document withStates = history_.current();
   if (doc::applyPluginStates(withStates, states) > 0) {
     history_.amend(withStates);
@@ -3645,8 +3651,7 @@ bool MainComponent::fetchPluginStates() {
 
 MainComponent::SaveResult MainComponent::writeTo(const juce::File& target) {
   // The plugins' sound goes into the file first (the engine's copy is never the only one).
-  if (!fetchPluginStates())
-    showError(u8("Plugins"), u8("The engine did not give the plugins' settings in time: the file keeps the ones from the last save."));
+  const bool pluginsOk = fetchPluginStates();
   const std::filesystem::path before = projectDir();
   try {
     if (!before.empty() && !history_.current().assets.empty())
@@ -3659,11 +3664,18 @@ MainComponent::SaveResult MainComponent::writeTo(const juce::File& target) {
   file_ = target;
   imported_ = false;
   history_.markSaved();
-  pluginsDirty_ = false;
-  logLine("Saved " + target.getFullPathName());
+  // Without the plugins' answer the file has their settings from the last save: what they hold now is still
+  // unsaved, so the song stays modified and closing asks again (audit R01: it was marked saved and closed).
+  pluginsDirty_ = !pluginsOk;
+  logLine("Saved " + target.getFullPathName() + (pluginsOk ? "" : " (without the plugins' current settings)"));
   recovered_ = false;
   if (!unsaved()) removeOwnAutosave();  // saved: the autosave is not needed any more
   if (projectDir() != before) projectFolderChanged();
+  if (!pluginsOk) {
+    showError(u8("Plugins"), u8("The song was saved, but the engine did not give the plugins' current settings in time: "
+                                "the file keeps the ones from the last save. Save again before closing."));
+    return SaveResult::SavedWithoutPlugins;
+  }
   return SaveResult::Saved;
 }
 
@@ -4181,6 +4193,9 @@ void MainComponent::saveAsTemplate() {
     for (const auto& e : templates_.templates)  // same name as an existing one: replace that one (keeps its id)
       if (juce::String(u8(e.tmpl.info.name)).equalsIgnoreCase(u8(info.name))) info.id = e.tmpl.info.id;
     auto write = [this, info, part, wav] {
+      // The plugins as they sound now, not as last saved (audit R03); no answer: nothing is written.
+      if (!fetchPluginStates())
+        return showError("Template not saved", "The engine did not give the plugins' current settings in time. Try again.");
       try {
         const doc::Document& song = history_.current();
         const doc::SongTemplate made = part.end < 0 ? doc::templateFromDocument(song, info)
@@ -4191,7 +4206,10 @@ void MainComponent::saveAsTemplate() {
         const std::string base = savedFile.getFullPathName().toStdString();
         if (wav) {
           if (snap_.exportJob.active()) showError("WAV not exported", "Another export is running; the template is saved.");
-          else session_->exportFiles({{doc::templateCompanionPath(base, ".wav"), "", false, true}}, part.end < 0 ? 0 : part.start, part.end, 24);
+          else {
+            stopPatternSlot();  // the engine plays the song again, not the Patterns preview (audit R04)
+            session_->exportFiles({{doc::templateCompanionPath(base, ".wav"), "", false, true}}, part.end < 0 ? 0 : part.start, part.end, 24);
+          }
         }
         reloadTemplates();
         library_.templatesChanged();
@@ -4449,9 +4467,107 @@ void MainComponent::exportWav(int bits, bool mono) {
                           const juce::File f = fc.getResult();
                           if (f == juce::File()) return;
                           const std::string path = f.withFileExtension(".wav").getFullPathName().toStdString();
+                          // The export takes the engine's document: while Patterns plays a slot that is the slot's
+                          // preview, not the song (audit R04). Stopping it gives the engine the song back first.
+                          stopPatternSlot();
                           if (mono) session_->exportFiles({{path, "", false, true}}, 0, -1, bits);
                           else session_->exportWav(path, bits);
                         });
+}
+
+// MIDI out (midi.hpp): the song as it plays, rolls expanded, one MIDI track per note track, the tempo with its glides.
+// For the Bitwig or any other DAW (Diogo 2026-11-16: the Bitwig stays an option, by .mid).
+void MainComponent::exportMidi() {
+  const juce::String name = history_.current().name.empty() ? juce::String("Song") : u8(history_.current().name);
+  chooser_ = std::make_unique<juce::FileChooser>(u8("Export MIDI"), exportFolder().getChildFile(juce::File::createLegalFileName(name) + ".mid"), "*.mid");
+  chooser_->launchAsync(juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles |
+                            juce::FileBrowserComponent::warnAboutOverwriting,
+                        [this](const juce::FileChooser& fc) {
+                          const juce::File f = fc.getResult();
+                          if (f == juce::File()) return;
+                          try {
+                            const doc::MidiFile midi = doc::songToMidi(history_.current());
+                            size_t notes = 0;
+                            for (const auto& t : midi.tracks) notes += t.notes.size();
+                            doc::saveMidiFile(doc::writeMidi(midi), pathOf(f.withFileExtension(".mid")));
+                            notice_ = u8("Exported MIDI: ") + juce::String((int)midi.tracks.size()) + u8(" tracks, ") + juce::String((int)notes) +
+                                      u8(" notes (rolls expanded) to ") + f.withFileExtension(".mid").getFullPathName();
+                            repaint();
+                          } catch (const std::exception& e) {
+                            showError(u8("Could not export MIDI"), u8(e.what()));
+                          }
+                        });
+}
+
+// For the Bitwig (bitwig.hpp): a folder "<song> (Bitwig)" with the .mid, a .vstpreset per plugin with its sound as
+// it is now (the engine writes it from the live plugin), and a text file saying which preset goes on which track.
+void MainComponent::exportBitwig() {
+  const juce::String name = history_.current().name.empty() ? juce::String("Song") : u8(history_.current().name);
+  chooser_ = std::make_unique<juce::FileChooser>(u8("Export for Bitwig: choose a folder"), exportFolder());
+  chooser_->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectDirectories,
+                        [this, name](const juce::FileChooser& fc) {
+    const juce::File parent = fc.getResult();
+    if (parent == juce::File()) return;
+    stopPatternSlot();  // the engine plays the song's plugins, not a Patterns preview
+    // The plugins as they sound now go into the document first (the presets come from the same live plugins).
+    fetchPluginStates();
+    const juce::File folder = parent.getNonexistentChildFile(juce::File::createLegalFileName(name) + " (Bitwig)", "", true);
+    try {
+      if (!folder.createDirectory()) throw doc::DocumentError("folder", "cannot create " + folder.getFullPathName().toStdString());
+      const doc::Document& song = history_.current();
+      const doc::BitwigPlan plan = doc::bitwigPlan(song);
+      doc::saveMidiFile(doc::exportMidi(song), pathOf(folder.getChildFile(u8(plan.midiFile))));
+      std::vector<std::string> missing;
+      int written = 0;
+      auto writePreset = [&](const doc::BitwigPreset& p) {
+        const std::string preset = session_->pluginPreset(p.key, 10000);
+        juce::MemoryOutputStream bytes;
+        if (preset.empty() || !juce::Base64::convertFromBase64(bytes, juce::String(preset)) ||
+            !folder.getChildFile(u8(p.file)).replaceWithData(bytes.getData(), bytes.getDataSize())) {
+          missing.push_back(p.key);
+          return;
+        }
+        ++written;
+      };
+      for (const auto& t : plan.tracks) for (const auto& p : t.presets) writePreset(p);
+      for (const auto& p : plan.master) writePreset(p);
+      folder.getChildFile("Bitwig - read me.txt").replaceWithText(u8(doc::bitwigReadme(song, plan, missing)));
+      notice_ = u8("Exported for Bitwig: ") + u8(plan.midiFile) + u8(" and ") + juce::String(written) + u8(" plugin presets") +
+                (missing.empty() ? juce::String() : u8(" (") + juce::String((int)missing.size()) + u8(" without a preset: see the read me)")) +
+                u8(" in ") + folder.getFullPathName();
+      logLine("Bitwig export: " + folder.getFullPathName() + ", " + juce::String(written) + " presets, " + juce::String((int)missing.size()) + " missing");
+      folder.revealToUser();
+      repaint();
+    } catch (const std::exception& e) {
+      showError(u8("Could not export for Bitwig"), u8(e.what()));
+    }
+  });
+}
+
+// MIDI in: each track of the file becomes a track of the song (no instrument yet: choose a plugin), its notes in
+// 4-bar patterns from the bar where the song is; the same bars twice are one pattern. One undo step.
+void MainComponent::importMidi() {
+  chooser_ = std::make_unique<juce::FileChooser>(u8("Import MIDI"), juce::File::getSpecialLocation(juce::File::userMusicDirectory), "*.mid;*.midi");
+  chooser_->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles, [this](const juce::FileChooser& fc) {
+    const juce::File f = fc.getResult();
+    if (f == juce::File()) return;
+    doc::MidiFile midi;
+    try {
+      midi = doc::parseMidi(doc::readMidiFile(pathOf(f)));
+    } catch (const std::exception& e) {
+      showError(u8("Could not import"), f.getFileName() + ": " + u8(e.what()));
+      return;
+    }
+    doc::MidiImportOptions o;
+    o.atTick = (int64_t)snap_.positionTick / kBar * kBar;
+    o.useTempo = history_.current().tracks.empty();  // an empty song takes the file's tempo
+    doc::MidiImportResult result;
+    edit([&](doc::Document& d) { result = doc::importMidi(d, midi, o); }, u8("Import MIDI"));
+    if (result.trackIds.empty()) return;  // the edit said why
+    notice_ = u8("Imported ") + f.getFileName() + ": " + juce::String((int)result.trackIds.size()) + u8(" tracks, ") + juce::String(result.notes) +
+              u8(" notes in ") + juce::String(result.patterns) + u8(" patterns. Choose a plugin for each track.");
+    repaint();
+  });
 }
 
 void MainComponent::selectDevice(const std::string& name) {
@@ -4800,7 +4916,7 @@ bool MainComponent::previewLibrarySample(const doc::LibrarySample& sample, const
 namespace { enum MenuId { kMidiNone = 200, kMidiDevice = 201, kNewEmpty = 50, kOpen = 1, kSave, kSaveAs, kExport24, kExport32, kQuit, kUndo, kRedo, kImportAudio, kRelocate, kDevice = 100,
                        kMidiDevicesEnd = 400, kPluginCoreFirst = 420 /* + place in doc::corePlugins(), up to 20 */,
                        kPluginScan = 460, kPluginFolder, kPluginRetry, kMasterFx = 2400 /* + 60 */, kMasterFxAdd = 2500 /* + 400 */,
-                       kOpenLogs = 580, kAbout = 581, kExportMono = 590,
+                       kOpenLogs = 580, kAbout = 581, kExportMono = 590, kImportMidi = 595, kExportMidi = 596, kExportBitwig = 597,
                        kSampleFolder = 1600, kSampleRescan, kSampleApply, kSampleAuto, kSampleShuffle, kSampleCatalogUndo,
                                               kRandomize = 1700 /* + strength 1..3; + 4: tempo per section; + 5: sound */, kViewLibrary = 1800, kViewInspector, kViewMixer, kViewScale = 1810 /* + 0 auto, + 1..5: 100..200 % */,
                        kViewSectionShades = 1820,
@@ -4865,12 +4981,15 @@ juce::PopupMenu MainComponent::getMenuForIndex(int index, const juce::String&) {
     menu.addItem(juce::PopupMenu::Item(u8("Save as…")).setID(kSaveAs));
     menu.addSeparator();
     menu.addItem(juce::PopupMenu::Item(u8("Import audio (WAV)…")).setID(kImportAudio));
+    menu.addItem(juce::PopupMenu::Item(u8("Import MIDI (.mid)…")).setID(kImportMidi));
     menu.addItem(juce::PopupMenu::Item(u8("Locate missing files…")).setID(kRelocate).setEnabled(!missing_.empty()));
     menu.addSeparator();
     const bool exporting = snap_.exportJob.active();
     menu.addItem(juce::PopupMenu::Item(u8("Export WAV 24-bit…")).setID(kExport24).setEnabled(!exporting));
     menu.addItem(juce::PopupMenu::Item(u8("Export WAV 32-bit float…")).setID(kExport32).setEnabled(!exporting));
     menu.addItem(juce::PopupMenu::Item(u8("Export WAV mono…")).setID(kExportMono).setEnabled(!exporting));
+    menu.addItem(juce::PopupMenu::Item(u8("Export MIDI (.mid)…")).setID(kExportMidi));
+    menu.addItem(juce::PopupMenu::Item(u8("Export for Bitwig (MIDI + plugin presets)…")).setID(kExportBitwig));
     menu.addSeparator();
     menu.addItem(juce::PopupMenu::Item(u8("Settings…")).setID(kSettings));
     menu.addItem(juce::PopupMenu::Item(u8("Keyboard shortcuts…")).setID(kShortcuts));
@@ -5045,6 +5164,9 @@ void MainComponent::menuItemSelected(int id, int) {
     case kExport24: exportWav(24); break;
     case kExport32: exportWav(32); break;
     case kExportMono: exportWav(24, true); break;
+    case kImportMidi: importMidi(); break;
+    case kExportMidi: exportMidi(); break;
+    case kExportBitwig: exportBitwig(); break;
     case kImportAudio: importAudio(); break;
     case kRelocate: relocateMissing(); break;
     case kMidiNone: openMidiInput({}); break;
@@ -6033,12 +6155,33 @@ void MainComponent::autosaveTick() {
   if (test_ || now - lastAutosaveCheck_ < 60000 || autosave_.writing()) return;  // (the self-test leaves none)
   lastAutosaveCheck_ = now;
   if (!unsaved()) { removeOwnAutosave(); return; }
-  std::string text = doc::toJson(history_.current()).dump();
+  // Changes made in a plugin's own window are only in the engine: they are asked for first, so the copy has them
+  // (audit R02: it held the plugins as last saved). Asked without waiting; the copy is written when they come.
+  if (pluginsDirty_ && doc::hasPlugins(history_.current())) {
+    if (autosaveAsking_) return;
+    autosaveAsking_ = true;
+    juce::Component::SafePointer<MainComponent> self(this);
+    session_->pluginStatesAsync(5000, [self](json states) {
+      if (!self) return;
+      self->autosaveAsking_ = false;
+      doc::Document document = self->history_.current();
+      if (!states.is_object()) logLine("Autosave: the engine did not give the plugins' settings; the copy has the last ones");
+      else doc::applyPluginStates(document, states);
+      self->startAutosave(std::move(document));
+    });
+    return;
+  }
+  startAutosave(history_.current());
+}
+
+void MainComponent::startAutosave(doc::Document document) {
+  if (autosave_.writing()) return;
+  std::string text = doc::toJson(document).dump();
   if (!autosave_.due(text)) return;  // this song is already on disk (a failed write stays due)
   autosave_.started(std::move(text));
   // Written on a thread of its own (a song with plugin states can be a few MB); the copy is taken here.
   autosaveJob_ = std::make_shared<AutosaveJob>();
-  juce::Thread::launch([job = autosaveJob_, folder = autosaveFolder(), session = autosaveSession_, document = history_.current(),
+  juce::Thread::launch([job = autosaveJob_, folder = autosaveFolder(), session = autosaveSession_, document = std::move(document),
                         song = file_ != juce::File() ? file_.getFullPathName().toStdString() : std::string()] {
     try {
       doc::writeAutosave(pathOf(folder), session, currentProcessId(), document, song, juce::Time::currentTimeMillis());

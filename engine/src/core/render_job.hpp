@@ -5,6 +5,7 @@
 #pragma once
 #include <atomic>
 #include <cstdint>
+#include <filesystem>
 #include <functional>
 #include <map>
 #include <memory>
@@ -17,6 +18,10 @@
 #include "project.hpp"
 
 namespace core {
+
+// The tail after the song's end when a render does not say (tailMs): the same for "render" (the CLI) and
+// "render.start" (the app). They were 1500 and 2000 ms: the same song came out 0.5 s shorter from the CLI (deep hunt P02).
+constexpr double kDefaultTailMs = 2000;
 
 // One file of a job: the mix (track -1) or one track's stem (taken before the master chain, see
 // Graph::setSolo).
@@ -37,8 +42,23 @@ struct ExportLevel {
   float peak = 0;
   bool broken = false;  // a NaN or an Inf
   void add(const float* x, int n);
+  // What a mono file holds: (L + R) / 2, as WavWriter writes it (audit B04: a stereo peak is not a mono clip).
+  // A NaN or Inf on either side still counts.
+  void addMono(const float* L, const float* R, int n);
+  void addFrames(const float* L, const float* R, int n, bool mono) {
+    if (mono) addMono(L, R, n);
+    else { add(L, n); add(R, n); }
+  }
 };
 void checkExportLevel(const ExportLevel& level, const RenderOutput& output);
+
+// Audit 2 (2026-11-16), bug 3: before an export starts, is there room for every file it will write? Each file is
+// counted with its own channels (a mono file is half a stereo one) and on its own folder's volume; files on the
+// same volume add up (they are all written before any is published). Throws "Not enough disk space" naming the
+// folder. query: where the free space comes from (the tests give their own); false = unknown, not checked.
+using DiskSpaceQuery = std::function<bool(const std::filesystem::path& folder, std::filesystem::space_info& out)>;
+uint64_t exportFileBytes(int64_t frames, int bits, bool mono);
+void checkExportSpace(const std::vector<RenderOutput>& outputs, int64_t frames, int bits, const DiskSpaceQuery& query = {});
 void publishRenderOutputs(const std::vector<RenderOutput>& outputs, int& published,
                           const std::function<void()>& beforePlace = {});
 
@@ -47,7 +67,7 @@ struct RenderJobRequest {
   int64_t revision = -1;    // the project revision being exported (-1 = unidentified)
   double sampleRate = 48000;
   int bits = 24;            // 24 (PCM) or 32 (float)
-  double tailSeconds = 2;   // after the end of the song, for reverb/release tails
+  double tailSeconds = kDefaultTailMs / 1000;   // after the end of the song, for reverb/release tails
   std::string path;         // UTF-8; the mix's file when `outputs` is empty
   // Several files in one job (the mix and/or stems), rendered one after the other. They are put in place
   // only when all of them are written: a cancel or a failure leaves every existing file untouched.

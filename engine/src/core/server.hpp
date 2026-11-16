@@ -45,6 +45,8 @@ public:
   virtual void releaseAll() = 0;                                                 // another song: no instance carries over
   virtual json parameters(const std::string& key) { (void)key; return json::array(); }  // [{id, name, value, ...}]
   virtual void resetAll() {}                                                     // Stop: every plugin drops its tails
+  // The plugin's sound as a .vstpreset file, in base64 (VST3 only; empty if not loaded or not VST3): Bitwig export.
+  virtual std::string vstPreset(const std::string& key) { (void)key; return {}; }
 };
 
 class Server {

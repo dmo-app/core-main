@@ -17,6 +17,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstdio>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <mutex>
@@ -44,6 +45,8 @@
 #endif
 #include <windows.h>
 #include <psapi.h>
+#include <shellapi.h>
+#pragma comment(lib, "shell32.lib")
 // The process's memory in use (working set), MB: the soak watches it for growth.
 static double residentMb() {
   PROCESS_MEMORY_COUNTERS c{};
@@ -78,6 +81,7 @@ public:
   bool takeChanged() override { return host_.takeChanged(); }
   void releaseAll() override { host_.releaseAll(); }
   core::json parameters(const std::string& key) override { return host_.parameters(key); }
+  std::string vstPreset(const std::string& key) override { return host_.vstPreset(key); }
   void resetAll() override { host_.resetAll(); }
 private:
   core::plugins::JuceHost host_;
@@ -202,11 +206,14 @@ static std::vector<float> knobRun(const json& original, const json* edited, doub
   return out;
 }
 
+// A UTF-8 string as a path (std::ifstream of a std::string uses the local code page on Windows).
+static std::filesystem::path utf8Path(const std::string& s) { return std::filesystem::path(std::u8string(s.begin(), s.end())); }
+
 static int knobcheck(const std::vector<std::string>& args) {
   json project;
   if (args[1] == "demo") project = demoProject(190);
   else {
-    std::ifstream in(args[1]);
+    std::ifstream in(utf8Path(args[1]));
     if (!in) throw std::runtime_error("Cannot read " + args[1]);
     project = json::parse(in);
   }
@@ -310,7 +317,7 @@ static int knobcheck(const std::vector<std::string>& args) {
 // its loudness, its share of highs (above ~2 kHz: a muffled pass has less) and how far it is from pass 2 and
 // from the offline render of the same pass. --out writes the device recording as a WAV.
 static int loopcheck(PluginHost* plugins, const std::vector<std::string>& args) {
-  std::ifstream in(args[1]);
+  std::ifstream in(utf8Path(args[1]));
   if (!in) throw std::runtime_error("Cannot read " + args[1]);
   const json project = json::parse(in);
   const int passes = std::max(2, std::stoi(option(args, "--passes", "4")));
@@ -434,7 +441,7 @@ static int loopcheck(PluginHost* plugins, const std::vector<std::string>& args) 
 // M10 soak: the song looping on the device for minutes or hours, with an edit every 10 s (a fader, the tempo
 // and back, the whole song loaded again as an undo does), one JSON line per minute and a summary at the end.
 static int soak(PluginHost* plugins, const std::vector<std::string>& args) {
-  std::ifstream in(args[1]);
+  std::ifstream in(utf8Path(args[1]));
   if (!in) throw std::runtime_error("Cannot read " + args[1]);
   const json project = json::parse(in);
   Server server(makeMiniaudioOutput, 48000, plugins);
@@ -542,12 +549,32 @@ static void dumpsInto(const std::string& folderUtf8) {
 static void dumpsInto(const std::string&) {}
 #endif
 
+// Paths in the arguments are UTF-8 from here on (audit B05: Windows gave them in the local code page, so "música-漢字"
+// could not be read and "saída.wav" broke the UTF-8 the rest of the engine expects).
+static std::vector<std::string> utf8Args(int argc, char** argv) {
+#ifdef _WIN32
+  int n = 0;
+  if (LPWSTR* wide = CommandLineToArgvW(GetCommandLineW(), &n)) {
+    std::vector<std::string> out;
+    for (int i = 1; i < n; ++i) {
+      const int bytes = WideCharToMultiByte(CP_UTF8, 0, wide[i], -1, nullptr, 0, nullptr, nullptr);
+      std::string s(bytes > 0 ? (size_t)bytes - 1 : 0, '\0');
+      if (bytes > 1) WideCharToMultiByte(CP_UTF8, 0, wide[i], -1, s.data(), bytes, nullptr, nullptr);
+      out.push_back(std::move(s));
+    }
+    LocalFree(wide);
+    return out;
+  }
+#endif
+  return std::vector<std::string>(argv + 1, argv + argc);
+}
+
 int main(int argc, char** argv) {
-  std::vector<std::string> args(argv + 1, argv + argc);
+  std::vector<std::string> args = utf8Args(argc, argv);
   const std::string mode = args.empty() ? "help" : args[0];
   if (mode == "--version" || mode == "version") { std::cout << "core-engine " << CORE_BUILD_ID << '\n'; return 0; }
   if (mode == "serve") { dumpsInto(option(args, "--dumps", "")); g_pluginLog = option(args, "--plugin-log", ""); }
-  if (mode == "serve" || mode == "scan" || mode == "qualify" || mode == "matrix" || mode == "soak") keepStdoutForProtocol();
+  if (mode == "serve" || mode == "scan" || mode == "qualify" || mode == "params" || mode == "matrix" || mode == "soak") keepStdoutForProtocol();
   try {
 #ifdef CORE_ENGINE_PLUGINS
     // Plugins live on the JUCE message thread (this one): the protocol runs on its own thread and the
@@ -570,6 +597,35 @@ int main(int argc, char** argv) {
     if (mode == "scan" && args.size() >= 2) {
       core::plugins::Runtime juce;
       emit(core::plugins::scanFile(args[1]).dump());
+      return 0;
+    }
+    if (mode == "params" && args.size() >= 2) {  // the automatable parameters of each plugin of the file (Settings > Roles)
+      core::plugins::Runtime juce;
+      const std::string only = option(args, "--id", "");
+      json results = json::array();
+      core::plugins::runWithMessageLoop([&] {
+        core::plugins::JuceHost host;
+        for (const auto& p : core::plugins::scanFile(args[1])) {
+          if (!only.empty() && p.value("id", "") != only) continue;
+          std::string why;
+          const std::string key = "params:" + p.value("id", std::string());
+          json r = {{"id", p.value("id", "")}, {"name", p.value("name", "")}};
+          if (host.get(key, p, 48000, false, &why)) {
+            r["params"] = host.parameters(key);  // live: parameters() reads the live instances
+            // --preset-out <file.vstpreset>: the plugin's default sound as the Bitwig export writes it (a check of
+            // plugin.preset on a real plugin).
+            if (const std::string out = option(args, "--preset-out", ""); !out.empty()) {
+              r["presetBytes"] = (int64_t)host.saveVstPreset(key, out);
+            }
+          } else {
+            r["problem"] = why;
+          }
+          results.push_back(std::move(r));
+          host.releaseAll();
+        }
+        return 0;
+      });
+      emit(results.dump());
       return 0;
     }
     if (mode == "qualify" && args.size() >= 2) {  // each plugin of the file plays on its own (see qualify.hpp)
@@ -612,13 +668,13 @@ int main(int argc, char** argv) {
     if (mode == "serve") return serve(nullptr);
     if (mode == "soak" && args.size() >= 2) return soak(nullptr, args);
     if (mode == "loopcheck" && args.size() >= 2) return loopcheck(nullptr, args);
-    if (mode == "scan" || mode == "qualify" || mode == "matrix") { emit("[]"); return 0; }  // no plugin support in this build
+    if (mode == "scan" || mode == "qualify" || mode == "params" || mode == "matrix") { emit("[]"); return 0; }  // no plugin support in this build
 #endif
     if (mode == "knobcheck" && args.size() >= 2) return knobcheck(args);
     if (mode == "demo") { std::cout << demoProject(args.size() > 1 ? std::stod(args[1]) : 145).dump(2) << '\n'; return 0; }
     if (mode == "devices") { std::cout << makeMiniaudioOutput()->devices(json::object()).dump(2) << '\n'; return 0; }
     if (mode == "render" && args.size() >= 3) {
-      std::ifstream in(args[1]);
+      std::ifstream in(utf8Path(args[1]));
       if (!in) throw std::runtime_error("Cannot read " + args[1]);
       json project = json::parse(in);
 #ifdef CORE_ENGINE_PLUGINS
@@ -660,7 +716,7 @@ int main(int argc, char** argv) {
       std::cout << report.dump(2) << '\n';
       return 0;
     }
-    std::cerr << "usage: core-engine serve | render <project.json> <out.wav> [--stems] [--mono] [--start-tick N --end-tick N --tail-ms MS] | measure [--out dir] [--realtime] | demo [bpm] | devices | scan <file.vst3> | qualify <file.vst3> | matrix <file.vst3> | soak <project.json> [--minutes 120] | loopcheck <project.json> [--passes 4] [--bars 8] [--out wav]\n";
+    std::cerr << "usage: core-engine serve | render <project.json> <out.wav> [--stems] [--mono] [--start-tick N --end-tick N --tail-ms MS] | measure [--out dir] [--realtime] | demo [bpm] | devices | scan <file.vst3> | qualify <file.vst3> | params <file.vst3> [--id <plugin id>] [--preset-out <file.vstpreset>] | matrix <file.vst3> | soak <project.json> [--minutes 120] | loopcheck <project.json> [--passes 4] [--bars 8] [--out wav]\n";
     return mode == "help" ? 0 : 2;
   } catch (const std::exception& e) {
     std::cerr << "error: " << e.what() << '\n';

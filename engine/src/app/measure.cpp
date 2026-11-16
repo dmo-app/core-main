@@ -142,13 +142,16 @@ json liveCase(const json& opts, const std::string& edit, float baselineStep, std
   server.handle({{"cmd", "engine.resetStats"}});
   server.handle({{"cmd", "transport.play"}});
   const auto t0 = std::chrono::steady_clock::now();
-  int edits = 0;
+  int edits = 0, refused = 0;
   while (engine.captured() < (int64_t)(seconds * sr)) {
     std::this_thread::sleep_for(std::chrono::milliseconds(edit == "bpm" ? 1000 : 100));
     if (std::chrono::steady_clock::now() - t0 > std::chrono::seconds((int)seconds + 5)) break;  // device stalled
     if (edit == "filter") {
-      json params = {{"tone", edits % 2 ? 1200 : 200}, {"length", 70}, {"sustain", 0.1}, {"release", 12}};
-      server.handle({{"cmd", "track.set"}, {"args", {{"trackId", "bass"}, {"patch", {{"params", params}}}}}});
+      // A live edit every 100 ms. The engine has no instrument of its own any more (its parameters are gone): the
+      // kick's level moves instead, on a track that still has notes, and a refused edit is counted (sweep: the old
+      // edit used parameters that did not exist and ignored the refusal).
+      const json r = server.handle({{"cmd", "track.set"}, {"args", {{"trackId", "kick"}, {"patch", {{"gainDb", edits % 2 ? -3.0 : 0.0}}}}}});
+      if (!r.value("ok", false)) ++refused;
       ++edits;
     } else if (edit == "bpm") {
       server.handle({{"cmd", "tempo.set"}, {"args", {{"bpm", edits % 2 ? 190 : 200}}}});
@@ -168,7 +171,7 @@ json liveCase(const json& opts, const std::string& edit, float baselineStep, std
               {"callbackFrames", {stats["minCallbackFrames"], stats["maxCallbackFrames"]}},
               {"latencyMs", device.value("latencyMs", 0.0)}, {"exclusive", device.value("exclusive", false)},
               {"backend", device.value("backend", "")}, {"device", device.value("device", "")},
-              {"seconds", n / sr}, {"edits", edits}, {"peak", c.peak}, {"clippedSamples", c.clipped}, {"finite", c.finite},
+              {"seconds", n / sr}, {"edits", edits}, {"refusedEdits", refused}, {"peak", c.peak}, {"clippedSamples", c.clipped}, {"finite", c.finite},
               {"overruns", stats["overruns"]}, {"starvations", stats["starvations"]},
               {"maxLoadPercent", stats["maxRenderMs"].get<double>() / (std::max(1.0, (double)stats["maxCallbackFrames"].get<uint64_t>()) * 1000.0 / sr) * 100},
               {"maxEditToAudioMs", stats["maxEditToAudioMs"]}};

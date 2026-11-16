@@ -1,6 +1,7 @@
 #include "Plugins.h"
 #include <algorithm>
 #include <juce_events/juce_events.h>
+#include <filesystem>
 
 namespace core::app {
 
@@ -10,9 +11,11 @@ constexpr int kQualifyTimeoutMs = 60000;  // per plugin file (a few seconds of a
 
 // Runs core-engine <mode> <file> with a time limit; false (and problem) if it hung or could not start.
 bool runEngine(const juce::File& engine, const juce::String& mode, const juce::File& plugin, int timeoutMs, juce::String& output,
-               int& exitCode, juce::String* problem) {
+               int& exitCode, juce::String* problem, const juce::StringArray& extra = {}) {
   juce::ChildProcess child;
-  if (!child.start(juce::StringArray{engine.getFullPathName(), mode, plugin.getFullPathName()}, juce::ChildProcess::wantStdOut)) {
+  juce::StringArray args{engine.getFullPathName(), mode, plugin.getFullPathName()};
+  args.addArray(extra);
+  if (!child.start(args, juce::ChildProcess::wantStdOut)) {
     if (problem) *problem = "the engine could not be started";
     return false;
   }
@@ -140,6 +143,36 @@ PluginCatalog::json PluginCatalog::scanFile(const juce::File& engine, const juce
     if (problem) *problem = "the scan gave no answer";
     return json();
   }
+}
+
+PluginCatalog::json PluginCatalog::paramsOf(const juce::File& engine, const json& plugin, juce::String* problem) {
+  juce::String output;
+  int exitCode = 0;
+  const juce::File file(juce::String::fromUTF8(plugin.value("file", std::string()).c_str()));
+  const juce::String id = juce::String::fromUTF8(plugin.value("id", std::string()).c_str());
+  if (!runEngine(engine, "params", file, kQualifyTimeoutMs, output, exitCode, problem, juce::StringArray{juce::String("--id"), id})) return json();
+  if (exitCode != 0) { if (problem) *problem = "the plugin stopped while it was read (exit " + juce::String(exitCode) + ")"; return json(); }
+  try {
+    const json results = lastJsonLine(output);
+    for (const auto& r : results)
+      if (r.value("id", std::string()) == plugin.value("id", std::string())) {
+        if (r.contains("params")) return r["params"];
+        if (problem) *problem = juce::String::fromUTF8(r.value("problem", std::string("it did not load")).c_str());
+        return json();
+      }
+    if (problem) *problem = "the plugin is not in its file any more (scan again)";
+  } catch (const std::exception&) {
+    if (problem) *problem = "the engine gave no answer";
+  }
+  return json();
+}
+
+juce::File PluginCatalog::rolesFile() {
+  return juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory).getChildFile("Core").getChildFile("roles.json");
+}
+
+core::doc::RoleMap PluginCatalog::roles(std::string* problem) {
+  return core::doc::loadRoleMap(std::filesystem::path(rolesFile().getFullPathName().toWideCharPointer()), problem);
 }
 
 PluginCatalog::json PluginCatalog::qualifyFile(const juce::File& engine, const juce::File& plugin, juce::String* problem) {

@@ -104,9 +104,11 @@ void Engine::stop(bool rewind, bool silenceTails) {
 }
 
 void Engine::setLoop(bool enabled, int64_t start, int64_t end) {
-  loopStart_.store(std::max<int64_t>(0, start));
+  start = std::max<int64_t>(0, start);  // the end is measured from the start as kept (sweep: it used the unclamped one)
+  loopStart_.store(start);
   loopEnd_.store(std::max<int64_t>(start + 1, end));
   loopEnabled_.store(enabled && end > start);
+  loopForPending_.store(pending_.load(std::memory_order_acquire) != nullptr, std::memory_order_release);
 }
 
 bool Engine::liveNote(const std::string& trackId, int pitch, double velocity, bool on, int64_t offAfter) {
@@ -198,23 +200,29 @@ void Engine::process(float* L, float* R, int frames) {
   // 1. New project state: keep the sounding notes, retire the old graph.
   int64_t pos = position_.load(std::memory_order_relaxed);
   if (Graph* next = pending_.exchange(nullptr, std::memory_order_acq_rel)) {
+    if (!current_) loopForPending_.store(false, std::memory_order_relaxed);  // the first graph moves nothing
     if (current_) {
       const int64_t before = pos;  // the same moment in the old graph's samples
       // Tempo change: stay on the same musical position (and loop region), keep the notes sounding.
       const TempoMap& from = current_->tempo();
       const TempoMap& to = next->tempo();
+      const bool loopAlreadyNew = loopForPending_.exchange(false, std::memory_order_acq_rel);  // set for this tempo: stays
       if (from.constant() && to.constant()) {
         const double ratio = to.startSamplesPerTick() / from.startSamplesPerTick();
         if (ratio != 1.0) {
           pos = (int64_t)std::llround(pos * ratio);
-          loopStart_.store((int64_t)std::llround(loopStart_.load() * ratio));
-          loopEnd_.store((int64_t)std::llround(loopEnd_.load() * ratio));
+          if (!loopAlreadyNew) {
+            loopStart_.store((int64_t)std::llround(loopStart_.load() * ratio));
+            loopEnd_.store((int64_t)std::llround(loopEnd_.load() * ratio));
+          }
         }
       } else {  // a song with tempo changes: through the musical position
         auto move = [&](int64_t s) { return (int64_t)std::llround(to.sampleAt(from.tickAt((double)s))); };
         pos = move(pos);
-        loopStart_.store(move(loopStart_.load()));
-        loopEnd_.store(move(loopEnd_.load()));
+        if (!loopAlreadyNew) {
+          loopStart_.store(move(loopStart_.load()));
+          loopEnd_.store(move(loopEnd_.load()));
+        }
       }
       if (liveFallback_.load(std::memory_order_relaxed)) next->stopLiveWorkers();
       next->adopt(*current_);

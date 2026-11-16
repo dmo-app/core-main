@@ -53,8 +53,11 @@ std::vector<AutosaveInfo> findAutosaves(const fs::path& folder, const std::strin
 }
 
 Document readAutosave(const fs::path& file) {
-  const json j = json::parse(readTextFile(file));
-  if (j.value("format", std::string()) != kFormat || !j.contains("document")) throw std::runtime_error("not an autosave of Core");
+  // Audit 2 (2026-11-16): a damaged autosave says so in plain words (the reader shows it and leaves the file).
+  const json j = json::parse(readTextFile(file), nullptr, false);
+  if (j.is_discarded()) throw std::runtime_error("The autosave is damaged (not readable JSON).");
+  if (!j.is_object() || !j.contains("format") || j["format"] != kFormat || !j.contains("document"))
+    throw std::runtime_error("This is not an autosave of Core.");
   return parseDocument(j["document"]);
 }
 

@@ -76,6 +76,7 @@ int makeBuildup(Pattern& pattern, const BuildupOptions& options);  // notes writ
 // --- Pattern library ("core-pattern" v1) --------------------------------------------------------------------------
 struct PatternPreset {
   std::string id, name, role, description, status = "hypothesis", source, origin;  // origin: root kind
+  std::string approval;            // what Diogo said, for an approved pattern
   std::vector<std::string> styles, tags;
   int64_t lengthTicks = 4 * kPpq * 4;
   int root = -1;                   // the pitch the notes are written around (< 0: drums, never transposed)

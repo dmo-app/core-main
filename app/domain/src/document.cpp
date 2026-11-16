@@ -23,6 +23,19 @@ bool validId(const std::string& id) {
   return std::regex_match(id, pattern);
 }
 
+// True when a part of the path (between '/' or '\\') is "..": that would leave the project folder.
+bool hasDotDotPart(const std::string& path) {
+  size_t start = 0;
+  while (true) {
+    const size_t end = path.find_first_of("/\\", start);
+    if (path.compare(start, (end == std::string::npos ? path.size() : end) - start, "..") == 0 &&
+        (end == std::string::npos ? path.size() : end) - start == 2)
+      return true;
+    if (end == std::string::npos) return false;
+    start = end + 1;
+  }
+}
+
 // Reads the known keys of one object and keeps the others for writing back.
 class Reader {
   json rest_;
@@ -70,7 +83,8 @@ public:
     if (v.is_null()) return fallback;
     if (!v.is_string()) throw DocumentError(at(key), "must be text");
     std::string s = v.get<std::string>();
-    if (s.size() > maxLength) throw DocumentError(at(key), "is longer than " + std::to_string(maxLength) + " characters");
+    // Bytes of UTF-8, as the limit counts them: an accented letter takes 2 (deep hunt P01: it said "characters").
+    if (s.size() > maxLength) throw DocumentError(at(key), "is longer than " + std::to_string(maxLength) + " bytes (an accented letter counts as 2)");
     return s;
   }
   json object(const char* key) {
@@ -163,6 +177,53 @@ json envelopesJson(const std::vector<Automation>& list) {
     envelopes.push_back({{"param", a.param}, {"points", points}});
   }
   return envelopes;
+}
+
+// Effect ids the engine would rename (deep hunt P03): ':' (it splits "fx:<track>:<id>"), longer than 40 bytes, empty or
+// used twice in a chain. The engine renamed them on its side only, so the app's plugin keys and curves pointed at
+// nothing and the plugin's state was lost. They are renamed here as the engine does (the first of a pair keeps the id
+// and the curves; ':' becomes '_'; a number is added), with the curves and modulators that name them, so the engine
+// gets ids it keeps as they are.
+void cleanEffectIds(json& chain, std::vector<Automation>& curves, json* modulators) {
+  auto clean = [](const std::string& id) { return !id.empty() && id.size() <= 40 && id.find(':') == std::string::npos; };
+  std::vector<std::string> ids;
+  std::vector<bool> keep;
+  for (const auto& fx : chain) {
+    const std::string id = fx.contains("id") && fx["id"].is_string() ? fx["id"].get<std::string>() : std::string();
+    const bool k = clean(id) && std::find(ids.begin(), ids.end(), id) == ids.end();
+    if (k) ids.push_back(id);
+    keep.push_back(k);
+  }
+  for (size_t i = 0; i < chain.size(); ++i) {
+    if (keep[i]) continue;
+    json& fx = chain[i];
+    const std::string old = fx.contains("id") && fx["id"].is_string() ? fx["id"].get<std::string>() : std::string();
+    std::string base = old.empty() ? std::string("fx") : old.substr(0, 40);
+    while (!base.empty() && ((unsigned char)base.back() & 0xC0) == 0x80) base.pop_back();  // never half a character
+    std::replace(base.begin(), base.end(), ':', '_');
+    if (base.empty()) base = "fx";
+    std::string id = base;
+    for (int n = 2; std::find(ids.begin(), ids.end(), id) != ids.end(); ++n) {
+      std::string root = base.substr(0, 36);
+      while (!root.empty() && ((unsigned char)root.back() & 0xC0) == 0x80) root.pop_back();
+      id = root + "_" + std::to_string(n);
+    }
+    const bool owned = !old.empty() && std::find(ids.begin(), ids.end(), old) != ids.end();  // a twin before keeps them
+    ids.push_back(id);
+    fx["id"] = id;
+    if (owned || old.empty()) continue;
+    const std::string from = "fx:" + old + ":", to = "fx:" + id + ":";
+    for (auto& a : curves)
+      if (a.param.rfind(from, 0) == 0) {
+        const std::string renamed = to + a.param.substr(from.size());
+        if (std::none_of(curves.begin(), curves.end(), [&](const Automation& o) { return o.param == renamed; }) && renamed.size() <= 64)
+          a.param = renamed;
+      }
+    if (modulators)
+      for (auto& m : *modulators)
+        if (m.is_object() && m.contains("param") && m["param"].is_string() && m["param"].get<std::string>().rfind(from, 0) == 0)
+          m["param"] = to + m["param"].get<std::string>().substr(from.size());
+  }
 }
 
 Track parseTrack(const json& v, const std::string& path, const std::set<std::string>& assetIds) {
@@ -330,6 +391,7 @@ Track parseTrack(const json& v, const std::string& path, const std::set<std::str
     if (!modIds.insert(m["id"].get<std::string>()).second) throw DocumentError(where + ".id", "is used twice in this track");
     if (!m.contains("param") || !m["param"].is_string()) throw DocumentError(where + ".param", "is required");
   }
+  cleanEffectIds(t.effects, t.automation, &t.modulators);
   t.extra = r.rest();
   return t;
 }
@@ -455,6 +517,24 @@ const Track* Document::findTrack(const std::string& id) const {
 // A song saved between 2026-11-08 and 2026-11-16 turned its VST tracks into W-Core and marked them: the mark goes
 // (the plugin is not known any more; the track keeps its notes). Plugin effects and their curves stay: Core plays
 // plugins again (Diogo 2026-11-16).
+// "master" names the master in plugin keys ("fx:master:<fx>") and routing: a track with that id (an import of
+// master.wav made one, audit B02) would share the master's plugin states. It is renamed, with what points at it.
+static void renameMasterTrack(Document& d) {
+  Track* bad = nullptr;
+  std::set<std::string> ids;
+  for (auto& t : d.tracks) { ids.insert(t.id); if (t.id == "master") bad = &t; }
+  if (!bad) return;
+  std::string id = "master-track";
+  for (int n = 2; ids.count(id); ++n) id = "master-track-" + std::to_string(n);
+  bad->id = id;
+  for (auto& t : d.tracks) {
+    if (t.mix.output == "master") t.mix.output = id;
+    for (auto& sd : t.mix.sends) if (sd.to == "master") sd.to = id;
+    for (auto& fx : t.effects)
+      if (fx.is_object() && fx.contains("sidechain") && fx["sidechain"] == "master") fx["sidechain"] = id;
+  }
+}
+
 static void dropVst(Document& d) {
   for (auto& t : d.tracks)
     if (t.instrument.extra.is_object()) t.instrument.extra.erase("fromVst");
@@ -481,7 +561,8 @@ Document parseDocument(const json& input, int* migratedFrom) {
   d.name = r.string("name", "", 200);
   Reader tr(r.object("transport"), "transport");
   d.bpm = tr.number("bpm", 145, kMinBpm, kMaxBpm);
-  if (tr.integer("ppq", kPpq, kPpq, kPpq) != kPpq) throw DocumentError("transport.ppq", "must be 960");
+  if (tr.integer("ppq", kPpq, 1, 1000000) != kPpq)  // one message, not "between 960 and 960" (deep hunt §4)
+    throw DocumentError("transport.ppq", "must be " + std::to_string(kPpq) + ": Core songs use " + std::to_string(kPpq) + " ticks per beat");
   json meter = tr.take("timeSignature");
   if (!meter.is_null() && meter != json::array({4, 4})) throw DocumentError("transport.timeSignature", "only 4/4 is supported");
   json loop = tr.take("loop");
@@ -515,6 +596,7 @@ Document parseDocument(const json& input, int* migratedFrom) {
   d.masterAutomation = readAutomation(mr, true);
   for (size_t i = 0; i < d.masterEffects.size(); ++i)
     if (!d.masterEffects[i].is_object()) throw DocumentError(item(mr.at("effects"), i), "must be an object");
+  cleanEffectIds(d.masterEffects, d.masterAutomation, nullptr);
   d.masterExtra = mr.rest();
   // Assets first: audio clips refer to them.
   const json assets = r.array("assets", 4096);
@@ -527,9 +609,9 @@ Document parseDocument(const json& input, int* migratedFrom) {
     if (!assetIds.insert(a.id).second) throw DocumentError(ar.at("id"), "is used twice");
     a.name = ar.string("name", a.id, 200);
     a.path = ar.string("path", "", 400);
-    // Inside the project folder: relative, no "..", no drive or root.
+    // Inside the project folder: relative, no ".." part, no drive or root ("take..1.wav" is a valid name).
     if (a.path.empty() || a.path[0] == '/' || a.path[0] == '\\' || a.path.find(':') != std::string::npos ||
-        a.path.find("..") != std::string::npos)
+        hasDotDotPart(a.path))
       throw DocumentError(ar.at("path"), "must be a path inside the project folder");
     a.sha256 = ar.string("sha256", "", 64);
     a.sampleRate = ar.number("sampleRate", 48000, 8000, 384000);
@@ -547,6 +629,7 @@ Document parseDocument(const json& input, int* migratedFrom) {
     if (!ids.insert(t.id).second) throw DocumentError(item("tracks", i) + ".id", "is used by another track");
     d.tracks.push_back(std::move(t));
   }
+  renameMasterTrack(d);
   checkRouting(d);
   const json sections = r.array("sections", kMaxSections);
   std::set<std::string> sectionIds;

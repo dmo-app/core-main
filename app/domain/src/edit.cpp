@@ -12,6 +12,12 @@
 namespace core::doc {
 
 namespace {
+// Cut a UTF-8 string to at most max bytes without splitting a character.
+std::string cutUtf8(const std::string& s, size_t max) {
+  if (s.size() <= max) return s;
+  while (max > 0 && ((unsigned char)s[max] & 0xC0) == 0x80) --max;
+  return s.substr(0, max);
+}
 // W-Core knobs every layer takes from Wave 1 (engine WaveStack::sync).
 constexpr const char* kWaveSharedKnobs[] = {"mode", "glide", "driftHz", "bend", "modWheel", "polyVoices", "legato", "glideAlways"};
 
@@ -301,7 +307,8 @@ bool instrumentAtDefaults(const Track& track) {
 std::string uniqueTrackId(const Document& doc, const std::string& base) {
   const std::string root = slug(base);
   std::string id = root;
-  for (int n = 2; doc.findTrack(id); ++n) id = root + "-" + std::to_string(n);
+  // "master" is the master's name in plugin keys and routing (audit B02): a track never takes it.
+  for (int n = 2; doc.findTrack(id) || id == "master"; ++n) id = root + "-" + std::to_string(n);
   return id;
 }
 
@@ -314,7 +321,7 @@ std::string addTrack(Document& doc, const std::string& role, const std::string& 
   std::string label = name;
   if (label.empty())
     for (const auto& c : builtinInstruments()) if (role == c.name) label = c.label;
-  t.name = (label.empty() ? (role.empty() ? std::string("Track") : role) : label).substr(0, 80);
+  t.name = cutUtf8(label.empty() ? (role.empty() ? std::string("Track") : role) : label, 80);  // never half a character
   t.instrument.kind = "none";
   // One 1-bar pattern played over the whole song: edit it and hear it at once.
   Pattern p;
@@ -340,12 +347,25 @@ std::string duplicateTrack(Document& doc, const std::string& trackId) {
   return doc.tracks[(size_t)at].id;
 }
 
+std::string shownAfterRemoval(const Document& now, const std::vector<std::string>& orderBefore, const std::string& removed,
+                              std::set<std::string>& alsoSelected) {
+  for (auto it = alsoSelected.begin(); it != alsoSelected.end();) it = now.findTrack(*it) ? std::next(it) : alsoSelected.erase(it);
+  for (const auto& t : now.tracks)
+    if (alsoSelected.count(t.id)) { alsoSelected.erase(t.id); return t.id; }
+  const auto at = std::find(orderBefore.begin(), orderBefore.end(), removed);
+  if (at != orderBefore.end()) {
+    for (auto it = at + 1; it != orderBefore.end(); ++it) if (now.findTrack(*it)) return *it;
+    for (auto it = at; it != orderBefore.begin();) if (now.findTrack(*--it)) return *it;
+  }
+  return now.tracks.empty() ? std::string() : now.tracks.front().id;
+}
+
 void renameTrack(Document& doc, const std::string& trackId, const std::string& name) {
   std::string clean = name;
   clean.erase(0, clean.find_first_not_of(" \t"));
   clean.erase(clean.find_last_not_of(" \t") + 1);
   if (clean.empty()) throw DocumentError("name", "cannot be empty");
-  if (clean.size() > 80) throw DocumentError("name", "is longer than 80 characters");
+  if (clean.size() > 80) throw DocumentError("name", "is longer than 80 bytes (an accented letter counts as 2)");
   find(doc, trackId).name = clean;  // the id stays: it is what links meters, history and the engine
 }
 
@@ -354,7 +374,7 @@ Track& trackById(Document& doc, const std::string& trackId) { return find(doc, t
 std::string newNoteId(const Pattern& pattern) {
   long highest = 0;
   for (const auto& n : pattern.notes)
-    if (n.id.size() > 1 && n.id[0] == 'n') highest = std::max(highest, std::strtol(n.id.c_str() + 1, nullptr, 10));
+    if (n.id.size() > 1 && n.id[0] == 'n') highest = std::max(highest, idNumber(n.id.c_str() + 1));
   return "n" + std::to_string(highest + 1);
 }
 
@@ -436,7 +456,7 @@ template <typename List>
 std::string nextId(const List& items, const std::string& prefix) {
   long highest = 0;
   for (const auto& x : items)
-    if (x.id.rfind(prefix, 0) == 0) highest = std::max(highest, std::strtol(x.id.c_str() + prefix.size(), nullptr, 10));
+    if (x.id.rfind(prefix, 0) == 0) highest = std::max(highest, idNumber(x.id.c_str() + prefix.size()));
   return prefix + std::to_string(highest + 1);
 }
 Clip& clipById(Track& t, const std::string& clipId) {
@@ -450,6 +470,8 @@ void sortClips(Track& t) {
 
 std::string addPattern(Track& track, int64_t lengthTicks) {
   if (track.patterns.size() >= 64) throw DocumentError("patterns", "the track has the maximum of 64 patterns");
+  // The reader's range (1/32 .. 64 bars): a 0 length divided by zero in the projection (sweep).
+  if (lengthTicks < kPpq / 8 || lengthTicks > 64LL * 4 * kPpq) throw DocumentError("patterns", "a pattern is 1/32 to 64 bars long");
   Pattern p;
   p.id = nextId(track.patterns, "p");
   p.name = std::to_string(track.patterns.size() + 1);
@@ -604,8 +626,7 @@ RegionIsolation isolateRegion(Document& doc, const std::string& trackId, int64_t
         second.lengthTicks = c.startTick + c.lengthTicks - at;
         const Pattern* p = t.findPattern(c.patternId);
         const int64_t len = p ? std::max<int64_t>(1, p->lengthTicks) : 1;
-        second.offsetTicks = (c.offsetTicks + (at - c.startTick)) % len;
-        second.extra = json::object();
+        second.offsetTicks = (c.offsetTicks + (at - c.startTick)) % len;  // its other fields stay (sweep: they were wiped)
         c.lengthTicks = at - c.startTick;
         added.push_back(second);
       }
@@ -639,8 +660,12 @@ RegionIsolation isolateRegion(Document& doc, const std::string& trackId, int64_t
     } else {
       copy.id = nextId(t.patterns, "p");
     }
-    copy.name = (copy.name + " region").substr(0, 40);
-    copy.extra = json::object();
+    copy.name = copy.name + " region";
+    if (copy.name.size() > 40) {  // never cut inside a character (a broken name made the song unsavable)
+      size_t cut = 40;
+      while (cut > 0 && ((unsigned char)copy.name[cut] & 0xC0) == 0x80) --cut;
+      copy.name.resize(cut);
+    }
     t.patterns.push_back(copy);
     for (auto& c : t.clips) if (inside(c) && c.patternId == pid) c.patternId = copy.id;
     out.patterns.emplace_back(pid, copy.id);
@@ -899,17 +924,57 @@ void deleteTime(Document& doc, int64_t from, int64_t ticks) {
     kept.push_back(sec);
   }
   doc.sections = kept;
-  // Tempo: the tempo at `to` carries on from `from` (the changes inside the cut collapse onto it).
-  std::vector<TempoPoint> tempo;
-  for (auto p : doc.tempoMap) {
-    p.tick = map(p.tick);
-    if (!tempo.empty() && tempo.back().tick == p.tick) tempo.back() = p;
-    else tempo.push_back(p);
+  // Tempo: the song plays as before up to `from`, and from there on as it played from `to` (audit B03: a glide
+  // that crosses either edge keeps its shape, rather than the cut dropping its end point).
+  if (!doc.tempoMap.empty()) {
+    const int64_t oldLength = doc.lengthTicks;
+    const double atTo = bpmAt(doc, to);
+    const TempoPoint* firstAfter = nullptr;
+    for (const auto& p : doc.tempoMap) if (p.tick > to) { firstAfter = &p; break; }
+    const TempoPoint* crossing = nullptr;  // the point the song is heading for at `from`
+    for (const auto& p : doc.tempoMap) if (p.tick > from) { crossing = &p; break; }
+    std::vector<TempoPoint> tempo;
+    for (const auto& p : doc.tempoMap) if (p.tick <= from) tempo.push_back(p);
+    if (from == 0) {
+      doc.bpm = atTo;
+    } else {
+      const bool step = to < oldLength && (std::abs(bpmAt(doc, from) - atTo) > 1e-9 || (firstAfter && firstAfter->ramp));
+      if (crossing && crossing->ramp) {  // still gliding at `from`: arrive where the glide was
+        const int64_t at = step || to >= oldLength ? from - 1 : from;
+        if (at >= 1 && (tempo.empty() || at > tempo.back().tick)) {
+          TempoPoint p = *crossing;
+          p.tick = at;
+          p.bpm = bpmAt(doc, at);
+          tempo.push_back(p);
+        }
+      }
+      // A point already at `from` arriving by a glide moves one tick back, so the step can take its place (or, at
+      // the new end of the song, so it stays inside it).
+      if ((step || to >= oldLength) && !tempo.empty() && tempo.back().tick == from) {
+        TempoPoint arrive = tempo.back();
+        tempo.pop_back();
+        if (arrive.ramp && from - 1 >= 1 && (tempo.empty() || from - 1 > tempo.back().tick)) {
+          arrive.tick = from - 1;
+          arrive.bpm = bpmAt(doc, from - 1);
+          tempo.push_back(arrive);
+        }
+      }
+      if (step) {
+        TempoPoint p;
+        p.tick = from;
+        p.bpm = atTo;
+        tempo.push_back(p);
+      }
+    }
+    for (auto p : doc.tempoMap)
+      if (p.tick > to) { p.tick -= ticks; tempo.push_back(p); }
+    doc.lengthTicks -= ticks;
+    tempo.erase(std::remove_if(tempo.begin(), tempo.end(), [&](const TempoPoint& p) { return p.tick < 1 || p.tick >= doc.lengthTicks; }),
+                tempo.end());
+    doc.tempoMap = tempo;
+  } else {
+    doc.lengthTicks -= ticks;
   }
-  if (!tempo.empty() && tempo.front().tick == 0) { doc.bpm = tempo.front().bpm; tempo.erase(tempo.begin()); }
-  doc.lengthTicks -= ticks;
-  tempo.erase(std::remove_if(tempo.begin(), tempo.end(), [&](const TempoPoint& p) { return p.tick >= doc.lengthTicks; }), tempo.end());
-  doc.tempoMap = tempo;
   const int64_t ls = map(doc.loop.startTick), le = map(doc.loop.endTick);
   doc.loop.startTick = ls;
   doc.loop.endTick = le;
@@ -1308,7 +1373,7 @@ std::string nextEffectId(const json& chain) {
   long highest = 0;
   for (const auto& fx : chain)
     if (fx.is_object() && fx.contains("id") && fx["id"].is_string() && fx["id"].get<std::string>().rfind("fx", 0) == 0)
-      highest = std::max(highest, std::strtol(fx["id"].get<std::string>().c_str() + 2, nullptr, 10));
+      highest = std::max(highest, idNumber(fx["id"].get<std::string>().c_str() + 2));
   return "fx" + std::to_string(highest + 1);
 }
 
@@ -1782,12 +1847,6 @@ void setAutomationInRange(Document& doc, const std::string& trackId, const std::
 // ---- audio
 
 namespace {
-// Cut a UTF-8 string to at most max bytes without splitting a character.
-std::string cutUtf8(const std::string& s, size_t max) {
-  if (s.size() <= max) return s;
-  while (max > 0 && ((unsigned char)s[max] & 0xC0) == 0x80) --max;
-  return s.substr(0, max);
-}
 
 AudioClip& audioClipById(Track& t, const std::string& id) {
   for (auto& c : t.audioClips) if (c.id == id) return c;

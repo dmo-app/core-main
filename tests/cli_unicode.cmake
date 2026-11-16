@@ -1,0 +1,20 @@
+# Auditoria B05 (2026-11-16): a linha de comandos le e escreve caminhos com acentos e com caracteres fora da pagina
+# de codigos do Windows (antes: "Cannot read" e "invalid UTF-8 byte" no JSON da resposta).
+file(MAKE_DIRECTORY "${WORK}")
+execute_process(COMMAND "${ENGINE}" demo 145 OUTPUT_FILE "${WORK}/unicode-src.json" RESULT_VARIABLE rc)
+if(NOT rc EQUAL 0)
+  message(FATAL_ERROR "core-engine demo saiu com ${rc}")
+endif()
+set(in "${WORK}/música-漢字.json")
+set(out "${WORK}/saída-ação-漢字.wav")
+file(COPY_FILE "${WORK}/unicode-src.json" "${in}")
+file(REMOVE "${out}")
+execute_process(COMMAND "${ENGINE}" render "${in}" "${out}" --end-tick 960 --tail-ms 0
+                OUTPUT_VARIABLE stdout ERROR_VARIABLE stderr RESULT_VARIABLE rc)
+if(NOT rc EQUAL 0)
+  message(FATAL_ERROR "render com caminhos Unicode saiu com ${rc}: ${stderr}${stdout}")
+endif()
+if(NOT EXISTS "${out}")
+  message(FATAL_ERROR "render nao escreveu ${out}")
+endif()
+message(STATUS "Unicode: ${out}")

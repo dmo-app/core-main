@@ -31,6 +31,11 @@ public:
   bool setParameter(const std::string& key, int index, float normalized);
   // The parameters that can be automated: [{id, name, value, default, steps, text}] (empty if not loaded).
   json parameters(const std::string& key);
+  // The loaded plugin's state as a .vstpreset file, in base64 (what a VST3 host such as Bitwig loads), from
+  // JUCE's VST3 client extension. Empty if the plugin is not loaded or is not a VST3.
+  std::string vstPreset(const std::string& key);
+  // The same written to a file (UTF-8 path); returns its size in bytes, 0 if nothing was written.
+  size_t saveVstPreset(const std::string& key, const std::string& fileUtf8);
 
 private:
   struct Impl;

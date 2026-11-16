@@ -57,6 +57,7 @@ const char* kCommands[][2] = {
     {"plugins.states", "The state of every loaded plugin -> {key: base64} (saved in the document)"},
     {"plugin.editor", "{key, open} opens or closes a plugin's own editor window"},
     {"plugins.release", "Another song: every loaded plugin is let go (the next load starts from that song's states)"},
+    {"plugin.preset", "{key} the loaded plugin's sound as a .vstpreset file -> {preset: base64} (VST3 only)"},
     {"plugin.params", "{key} the parameters of a loaded plugin that can be automated -> [{id, name, value, default, steps, text}]"},
   {"commands.list", "This list"},
 };
@@ -316,15 +317,16 @@ json Server::execute(const std::string& cmd, const json& args) {
   if (cmd == "commands.list") return commandList();
   if (cmd == "devices.list") { auto out = makeOutput_(); return out ? out->devices(args) : json::array(); }
   if (cmd == "engine.start") {
-    if (output_) { output_->stop(); output_.reset(); }
+    // The arguments are checked before the sound stops: a refused start changes nothing (sweep: it used to leave
+    // the device stopped).
     double sr = numArg(args, "sampleRate", sampleRate_);
     if (!(sr >= 8000 && sr <= 384000)) throw std::runtime_error("sampleRate must be 8000-384000.");
     // M5: tracks on several cores while playing. {liveThreads: n} or CORE_LIVE_THREADS; default 4 (0 = serial).
     const int live = (int)std::clamp(numArg(args, "liveThreads", (double)liveThreadsFromEnv()), 0.0, 32.0);
-    if (args.contains("listenDb")) {
-      if (!args["listenDb"].is_number()) throw std::runtime_error("listenDb must be a number (dB).");
+    if (args.contains("listenDb") && !args["listenDb"].is_number()) throw std::runtime_error("listenDb must be a number (dB).");
+    if (output_) { output_->stop(); output_.reset(); }
+    if (args.contains("listenDb"))
       listenDb_ = std::clamp(args["listenDb"].get<double>(), OutputGuard::kListenMinDb, OutputGuard::kListenMaxDb);
-    }
     if (sr != sampleRate_ || !engine_ || live != engine_->liveThreads()) {
       sampleRate_ = sr;
       engine_ = std::make_unique<Engine>(sampleRate_, live);
@@ -549,6 +551,14 @@ json Server::execute(const std::string& cmd, const json& args) {
     if (!plugins_) return json::array();
     return plugins_->parameters(strArg(args, "key"));
   }
+  if (cmd == "plugin.preset") {
+    // {key} -> {preset: base64 of a .vstpreset} (the Bitwig export: the same plugin with the same sound).
+    if (!plugins_) throw std::runtime_error("Plugins are not available in this engine.");
+    const std::string key = strArg(args, "key");
+    const std::string preset = plugins_->vstPreset(key);
+    if (preset.empty()) throw std::runtime_error("No VST3 preset for " + key + " (not loaded, or not a VST3).");
+    return json{{"preset", preset}};
+  }
   if (cmd == "plugin.editor") {
     if (!plugins_) throw std::runtime_error("Plugins are not available in this engine.");
     std::string why;
@@ -565,7 +575,7 @@ json Server::execute(const std::string& cmd, const json& args) {
     request.sampleRate = numArg(args, "sampleRate", sampleRate_);
     if (!(request.sampleRate >= 8000 && request.sampleRate <= 384000)) throw std::runtime_error("sampleRate must be 8000-384000.");
     request.bits = (int)integerArg(args, "bits", 24, 24, 32);
-    request.tailSeconds = numArg(args, "tailMs", 2000) / 1000.0;
+    request.tailSeconds = numArg(args, "tailMs", kDefaultTailMs) / 1000.0;
     if (args.contains("files")) {
       if (!args["files"].is_array()) throw std::runtime_error("'files' must be a list.");
       for (const auto& f : args["files"]) {
@@ -604,7 +614,7 @@ json Server::render(const json& args) {
   const int channels = args.value("mono", false) ? 1 : 2;  // mono: (L + R) / 2 in every file
   double sr = numArg(args, "sampleRate", sampleRate_);
   if (!(sr >= 8000 && sr <= 384000)) throw std::runtime_error("sampleRate must be 8000-384000.");
-  const double tail = numArg(args, "tailMs", 1500);
+  const double tail = numArg(args, "tailMs", kDefaultTailMs);
   if (!(tail >= 0 && tail <= 60000)) throw std::runtime_error("tailMs must be 0-60000.");
   // A region (startTick/endTick), as render.start does it but on this thread (the CLI): the song is played from its start up to endTick (held notes, tails and LFOs are where they would
   // be), then cut there; the file starts at startTick.
@@ -614,7 +624,8 @@ json Server::render(const json& args) {
   if (region) {
     const int64_t endTick = integerArg(args, "endTick", project.lengthTicks, -1, project.lengthTicks);
     const int64_t startTick = integerArg(args, "startTick", 0, 0, project.lengthTicks);
-    if (endTick > 0) project.lengthTicks = std::min(project.lengthTicks, endTick);
+    // As render.start: an explicit end of 0 is an empty region and is refused (audit B06: it exported the whole song).
+    if (endTick >= 0) project.lengthTicks = std::min(project.lengthTicks, endTick);
     if (!(startTick >= 0 && startTick < project.lengthTicks)) throw std::runtime_error("The region must start at 0 or later and before its end.");
     skip = TempoMap(project.bpm, project.tempoMap, sr).sampleOfTick(startTick);
   }
@@ -639,14 +650,12 @@ json Server::render(const json& args) {
   }
   {  // C2: checked before anything is written
     ExportLevel mix;
-    mix.add(r.L.data(), (int)r.L.size());
-    mix.add(r.R.data(), (int)r.R.size());
+    mix.addFrames(r.L.data(), r.R.data(), (int)std::min(r.L.size(), r.R.size()), channels == 1);  // what the file holds
     checkExportLevel(mix, outputs[0]);
     r.peak = mix.peak;
     for (size_t i = 0; i < r.stemL.size(); ++i) {
       ExportLevel stem;
-      stem.add(r.stemL[i].data(), (int)r.stemL[i].size());
-      stem.add(r.stemR[i].data(), (int)r.stemR[i].size());
+      stem.addFrames(r.stemL[i].data(), r.stemR[i].data(), (int)std::min(r.stemL[i].size(), r.stemR[i].size()), channels == 1);
       checkExportLevel(stem, outputs[i + 1]);
     }
   }

@@ -84,7 +84,7 @@ bool Translation::has(std::string_view english) const {
 
 Translation translationFromJson(const json& value) {
   if (!value.is_object() || value.value("format", "") != kLanguageFormat) throw DocumentError("format", "not a Core language file");
-  if (!value.contains("version") || !value["version"].is_number_integer() || value["version"].get<int>() != kLanguageVersion)
+  if (!value.contains("version") || !value["version"].is_number_integer() || value["version"].get<int64_t>() != kLanguageVersion)
     throw DocumentError("version", "this Core reads language files of version 1");
   Translation t;
   if (!value.contains("code") || !value["code"].is_string()) throw DocumentError("code", "the language's code is missing");

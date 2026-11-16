@@ -19,7 +19,7 @@ struct Draw {
   double unit() { return (double)(rng() >> 11) * (1.0 / 9007199254740992.0); }  // [0, 1)
 };
 
-long noteNumber(const std::string& id) { return id.size() > 1 && id[0] == 'n' ? std::strtol(id.c_str() + 1, nullptr, 10) : 0; }
+long noteNumber(const std::string& id) { return id.size() > 1 && id[0] == 'n' ? idNumber(id.c_str() + 1) : 0; }
 
 struct Ids {  // new note ids n<highest + 1>, n<highest + 2>...
   long next = 1;
@@ -307,7 +307,8 @@ PatternPreset presetFromJson(const json& j) {
   p.source = str(j, "source");
   p.status = j.contains("status") ? str(j, "status") : "hypothesis";
   if (p.status != "draft" && p.status != "hypothesis" && p.status != "approved") throw DocumentError("status", "draft, hypothesis or approved");
-  if (p.status == "approved" && str(j, "approval").empty()) throw DocumentError("approval", "an approved pattern says what Diogo said");
+  p.approval = str(j, "approval");
+  if (p.status == "approved" && p.approval.empty()) throw DocumentError("approval", "an approved pattern says what Diogo said");
   for (const char* key : {"styles", "tags"}) {
     auto& out = std::string(key) == "styles" ? p.styles : p.tags;
     if (j.contains(key)) {
@@ -347,6 +348,7 @@ json presetToJson(const PatternPreset& p) {
   json j = {{"format", "core-pattern"}, {"version", 1}, {"id", p.id}, {"name", p.name}, {"role", p.role}, {"styles", p.styles},
             {"tags", p.tags}, {"status", p.status}, {"description", p.description}, {"source", p.source},
             {"lengthTicks", p.lengthTicks}, {"root", p.root}, {"notes", notes}};
+  if (!p.approval.empty()) j["approval"] = p.approval;  // an approved pattern reads back (sweep: it was dropped)
   return j;
 }
 
@@ -385,7 +387,10 @@ PatternPreset savePatternPreset(const std::filesystem::path& folder, PatternPres
     return std::filesystem::exists(folder / (id + ".json"), ec);
   };
   const std::string base = p.id;
-  for (int k = 2; used(p.id); ++k) p.id = base + "-" + std::to_string(k);
+  for (int k = 2; used(p.id); ++k) {
+    const std::string suffix = "-" + std::to_string(k);  // the id stays within 80 (sweep: it could pass and not read back)
+    p.id = base.substr(0, 80 - suffix.size()) + suffix;
+  }
   p.file = folder / (p.id + ".json");
   std::filesystem::create_directories(p.file.parent_path());
   {
