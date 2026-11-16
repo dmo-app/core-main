@@ -9,10 +9,20 @@
 #include <thread>
 #include "support/check.hpp"
 #include "core/rt_workers.hpp"
+#include "core/server.hpp"
+#include "io/device.hpp"
+#include <cstdlib>
 
 using namespace core;
 
 namespace {
+void setEnv(const char* name, const char* value) {  // "" = unset
+#ifdef _WIN32
+  _putenv_s(name, value);
+#else
+  if (*value) setenv(name, value, 1); else unsetenv(name);
+#endif
+}
 std::mutex gMutex;
 std::map<void*, std::thread::id> gLive;  // token -> thread que o registou (ainda não devolvido)
 int gInits = 0, gExits = 0, gWrongThread = 0, gUnknownToken = 0;
@@ -116,6 +126,32 @@ TEST("mmcss: um worker que nunca teve trabalho não se regista nem devolve nada"
   CHECK_EQ(gInits, 0);
   CHECK_EQ(gExits, 0);
   off();
+}
+
+// Decisão do Diogo (2026-11-16, cartão "Desligar até passar o soak"): o M5 fica desligado por defeito até ao soak de
+// 8 h; CORE_LIVE_THREADS=4 volta a ligá-lo num comando.
+TEST("m5: sem CORE_LIVE_THREADS o motor arranca serial (0 workers); CORE_LIVE_THREADS=4 liga-o") {
+  setEnv("CORE_LIVE_THREADS", "");
+  CHECK_EQ(defaultLiveThreads(), 0);
+  {
+    Server server([] { return makeMiniaudioOutput(); }, 48000);
+    json r = server.handle({{"cmd", "engine.start"}, {"args", {{"backend", "null"}}}});
+    CHECK(r.value("ok", false));
+    CHECK_EQ(server.handle({{"cmd", "engine.stats"}})["result"]["liveThreads"].get<int>(), 0);
+    server.handle({{"cmd", "engine.stop"}});
+  }
+  setEnv("CORE_LIVE_THREADS", "4");
+  CHECK_EQ(defaultLiveThreads(), 4);
+  {
+    Server server([] { return makeMiniaudioOutput(); }, 48000);
+    json r = server.handle({{"cmd", "engine.start"}, {"args", {{"backend", "null"}}}});
+    CHECK(r.value("ok", false));
+    CHECK_EQ(server.handle({{"cmd", "engine.stats"}})["result"]["liveThreads"].get<int>(), 4);
+    server.handle({{"cmd", "engine.stop"}});
+  }
+  setEnv("CORE_LIVE_THREADS", "0");
+  CHECK_EQ(defaultLiveThreads(), 0);
+  setEnv("CORE_LIVE_THREADS", "");
 }
 
 CORE_TEST_MAIN

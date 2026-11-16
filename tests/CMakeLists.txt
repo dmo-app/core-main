@@ -92,9 +92,10 @@ target_link_libraries(freeze_tests PRIVATE core_domain core_engine_lib)
 add_test(NAME freeze_tests COMMAND freeze_tests)
 
 # #78 MMCSS: os workers do tempo real registam-se e devolvem o registo no teardown (init/exit simétricos, fallback).
-add_executable(rt_tests rt_tests.cpp)
+add_executable(rt_tests rt_tests.cpp ${CMAKE_SOURCE_DIR}/engine/src/io/device.cpp)
 target_include_directories(rt_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/engine/src)
-target_link_libraries(rt_tests PRIVATE core_engine_lib)
+target_link_libraries(rt_tests PRIVATE core_engine_lib miniaudio_impl)
+
 add_test(NAME rt_tests COMMAND rt_tests)
 
 # The command line: what the app and the scripts call.
