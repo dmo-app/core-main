@@ -322,6 +322,7 @@ ai::Config AiPanel::configNow() const {
   c.provider.apiKey = apiKey().toStdString();
   c.effort = kEfforts[juce::jlimit(0, (int)std::size(kEfforts) - 1, prefs_.effort)];
   c.maxUsdPerMessage = prefs_.maxUsd;
+  c.stream = true;  // the answer shows as it comes (Anthropic; other providers are not streamed)
   c.permissions = permissions_;
   for (const auto& m : ai::permissionModes())
     if (u8(m) == prefs_.mode) c.permissions.mode = m;
@@ -374,11 +375,13 @@ void AiPanel::send() {
 
 void AiPanel::post(json body) {
   const ai::HttpRequest req = chat_->http(body);
+  const bool streaming = req.body.value("stream", false);
   const std::string data = req.body.dump(-1, ' ', false, json::error_handler_t::replace);
   juce::String headers;
   for (const auto& [k, v] : req.headers) headers += u8(k) + ": " + u8(v) + "\r\n";
   const juce::String endpoint = u8(req.url);
-  std::thread([this, alive = alive_, headers, endpoint, data] {
+  live_.clear();
+  std::thread([this, alive = alive_, headers, endpoint, data, streaming] {
     json response;
     juce::String failure;
     int status = 0;
@@ -388,9 +391,38 @@ void AiPanel::post(json body) {
                              .withConnectionTimeoutMs(180000)
                              .withStatusCode(&status);
     if (auto stream = url.createInputStream(options)) {
-      const juce::String text = stream->readEntireStreamAsString();
-      response = json::parse(text.toStdString(), nullptr, false);
-      if (response.is_discarded()) failure = u8("the answer is not JSON (HTTP ") + juce::String(status) + ")";
+      if (streaming) {
+        // The answer as it comes (A8): the text and the calls show in the status line while the model works; the
+        // finished message is the same one a request without streaming gets.
+        ai::StreamAssembler a;
+        a.onText = [this, alive](const std::string& t) {
+          juce::MessageManager::callAsync([this, alive, t] {
+            if (alive->load()) liveText(u8(t));
+          });
+        };
+        a.onTool = [this, alive](const std::string& name) {
+          juce::MessageManager::callAsync([this, alive, name] {
+            if (alive->load()) liveText(u8("\n[") + u8(name) + u8("] "));
+          });
+        };
+        std::string raw;
+        char buf[4096];
+        for (int n; (n = stream->read(buf, (int)sizeof buf)) > 0;) {
+          a.feed(std::string_view(buf, (size_t)n));
+          if (!a.sawEvents() && raw.size() < (1u << 20)) raw.append(buf, (size_t)n);
+        }
+        a.finish();
+        if (a.sawEvents()) {
+          response = a.message();
+        } else {  // not a stream: an HTTP error's JSON
+          response = json::parse(raw, nullptr, false);
+          if (response.is_discarded()) failure = u8("the answer is not JSON (HTTP ") + juce::String(status) + ")";
+        }
+      } else {
+        const juce::String text = stream->readEntireStreamAsString();
+        response = json::parse(text.toStdString(), nullptr, false);
+        if (response.is_discarded()) failure = u8("the answer is not JSON (HTTP ") + juce::String(status) + ")";
+      }
     } else {
       failure = u8("no connection to ") + endpoint;
     }
@@ -398,6 +430,15 @@ void AiPanel::post(json body) {
       if (alive->load()) answered(response, failure);
     });
   }).detach();
+}
+
+void AiPanel::liveText(const juce::String& piece) {
+  if (!busy_) return;
+  live_ += piece;
+  // The status line shows the end of what has come so far (one line: the panel stays as it is).
+  juce::String shown = live_.replace("\n", " ").trim();
+  if (shown.length() > 160) shown = juce::String::fromUTF8("\xe2\x80\xa6") + shown.getLastCharacters(160);
+  status_.setText(shown, juce::dontSendNotification);
 }
 
 void AiPanel::answered(const json& response, const juce::String& failure) {
@@ -411,7 +452,8 @@ void AiPanel::answered(const json& response, const juce::String& failure) {
   const json next = chat_->onResponse(response, host_.song());
   showCost();
   if (!next.is_null()) {
-    status_.setText(u8("Working… ") + juce::String((int)chat_->log().size()) + u8(" call(s) so far"), juce::dontSendNotification);
+    if (live_.isEmpty())
+      status_.setText(u8("Working… ") + juce::String((int)chat_->log().size()) + u8(" call(s) so far"), juce::dontSendNotification);
     post(next);
     return;
   }

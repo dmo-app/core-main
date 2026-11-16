@@ -17,6 +17,7 @@
 #include "provider.hpp"
 #include "score.hpp"
 #include "support/check.hpp"
+#include "stream.hpp"
 #include "synth.hpp"
 #include "synth_roles.hpp"
 
@@ -1087,6 +1088,104 @@ void kinds() {
 }
 }  // namespace taxonomy_t
 
+// Streaming (A8): the events become the same message a request without streaming gets.
+namespace stream_t {
+std::string sse(const json& e) { return "event: " + e.value("type", std::string()) + "\ndata: " + e.dump() + "\n\n"; }
+
+std::string sample() {
+  std::string s;
+  s += sse({{"type", "message_start"}, {"message", {{"id", "m1"}, {"type", "message"}, {"role", "assistant"}, {"content", json::array()},
+                                                   {"stop_reason", nullptr}, {"usage", {{"input_tokens", 10}, {"cache_read_input_tokens", 900}, {"output_tokens", 1}}}}}});
+  s += ": ping\n\n";
+  s += sse({{"type", "content_block_start"}, {"index", 0}, {"content_block", {{"type", "thinking"}, {"thinking", ""}}}});
+  s += sse({{"type", "content_block_delta"}, {"index", 0}, {"delta", {{"type", "thinking_delta"}, {"thinking", "a forma primeiro"}}}});
+  s += sse({{"type", "content_block_delta"}, {"index", 0}, {"delta", {{"type", "signature_delta"}, {"signature", "sig"}}}});
+  s += sse({{"type", "content_block_stop"}, {"index", 0}});
+  s += sse({{"type", "content_block_start"}, {"index", 1}, {"content_block", {{"type", "text"}, {"text", ""}}}});
+  s += sse({{"type", "content_block_delta"}, {"index", 1}, {"delta", {{"type", "text_delta"}, {"text", "Vou criar "}}}});
+  s += sse({{"type", "content_block_delta"}, {"index", 1}, {"delta", {{"type", "text_delta"}, {"text", "a forma."}}}});
+  s += sse({{"type", "content_block_stop"}, {"index", 1}});
+  s += sse({{"type", "content_block_start"}, {"index", 2}, {"content_block", {{"type", "tool_use"}, {"id", "t1"}, {"name", "shape"}, {"input", json::object()}}}});
+  s += sse({{"type", "content_block_delta"}, {"index", 2}, {"delta", {{"type", "input_json_delta"}, {"partial_json", "{\"shape\": \"darkps"}}}});
+  s += sse({{"type", "content_block_delta"}, {"index", 2}, {"delta", {{"type", "input_json_delta"}, {"partial_json", "ycore-64\"}"}}}});
+  s += sse({{"type", "content_block_stop"}, {"index", 2}});
+  s += sse({{"type", "message_delta"}, {"delta", {{"stop_reason", "tool_use"}, {"stop_sequence", nullptr}}}, {"usage", {{"output_tokens", 42}}}});
+  s += sse({{"type", "message_stop"}});
+  return s;
+}
+
+void assemble(const doc::PCoreCatalog& cat) {
+  const std::string body = sample();
+  // Any chunk size gives the same message (the network cuts lines anywhere, \r\n too).
+  json first;
+  for (size_t chunk : {(size_t)1, (size_t)7, (size_t)64, body.size()}) {
+    ai::StreamAssembler a;
+    std::string text;
+    std::vector<std::string> tools;
+    a.onText = [&](const std::string& t) { text += t; };
+    a.onTool = [&](const std::string& n) { tools.push_back(n); };
+    for (size_t at = 0; at < body.size(); at += chunk) a.feed(std::string_view(body).substr(at, chunk));
+    a.finish();
+    CHECK(a.sawEvents() && a.complete());
+    CHECK_EQ(text, std::string("Vou criar a forma."));
+    CHECK(tools.size() == 1 && tools[0] == "shape");
+    const json m = a.message();
+    if (first.is_null()) first = m;
+    CHECK_EQ(m, first);
+  }
+  CHECK_EQ(first["stop_reason"], json("tool_use"));
+  CHECK_EQ(first["usage"]["output_tokens"], json(42));
+  CHECK_EQ(first["usage"]["cache_read_input_tokens"], json(900));
+  CHECK(first["content"].size() == 3);
+  CHECK_EQ(first["content"][0]["thinking"], json("a forma primeiro"));
+  CHECK_EQ(first["content"][0]["signature"], json("sig"));
+  CHECK_EQ(first["content"][2]["input"], json({{"shape", "darkpsycore-64"}}));
+
+  // The chat takes it as any answer: the call is checked and goes in the proposal.
+  const auto fns = control::buildFunctions(&cat);
+  ai::Config cfg;
+  cfg.stream = true;
+  ai::Chat chat(cfg, fns, &cat);
+  const doc::Document song = doc::newEmptyDocument();
+  const json req = chat.ask("cria a estrutura", song);
+  CHECK_EQ(req.value("stream", false), true);
+  chat.onResponse(first, song);
+  CHECK_EQ(chat.proposal()["calls"].size(), (size_t)1);
+  CHECK(chat.usage().output == 42);
+
+  // An OpenAI-compatible provider is not streamed.
+  ai::Config o;
+  o.stream = true;
+  o.provider.kind = "openai";
+  ai::Chat other(o, fns, &cat);
+  CHECK(!other.ask("olá", song).contains("stream"));
+}
+
+void failures() {
+  {  // an error event mid-stream
+    ai::StreamAssembler a;
+    a.feed(sse({{"type", "message_start"}, {"message", {{"content", json::array()}, {"usage", json::object()}}}}));
+    a.feed(sse({{"type", "error"}, {"error", {{"type", "overloaded_error"}, {"message", "Overloaded"}}}}));
+    a.finish();
+    CHECK_EQ(a.message()["error"]["type"], json("overloaded_error"));
+  }
+  {  // cut before the end: an error, so the message leaves the conversation
+    ai::StreamAssembler a;
+    const std::string body = sample();
+    a.feed(std::string_view(body).substr(0, body.size() / 2));
+    a.finish();
+    CHECK(!a.complete());
+    CHECK_EQ(a.message()["type"], json("error"));
+  }
+  {  // not a stream at all (an HTTP error's JSON): no events, the app reads the body as JSON
+    ai::StreamAssembler a;
+    a.feed(R"({"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key"}})");
+    a.finish();
+    CHECK(!a.sawEvents());
+  }
+}
+}  // namespace stream_t
+
 // The gateway view (ai-daw's help/call idea): "ajuda" + "fazer" in place of every edit tool, the same checks.
 namespace gateway_t {
 using ai_chat_t::answer;
@@ -1166,6 +1265,8 @@ TEST("song: a style's id as align") { bench_t::alignByStyle(catalog()); }
 TEST("catalog: the gateway view (ajuda / fazer)") { gateway_t::gatewayMode(catalog()); }
 TEST("ai: the synth is Vital") { synth_t::vital(); }
 TEST("ai: the kinds of calls left out") { taxonomy_t::kinds(); }
+TEST("ai: streaming, assembled") { stream_t::assemble(catalog()); }
+TEST("ai: streaming, when it fails") { stream_t::failures(); }
 TEST("ai: models") { ai_knowledge_t::models(); }
 TEST("ai: knowledge base") { ai_knowledge_t::knowledgeBase(knowledgeDb()); }
 TEST("ai: the consult tool") { ai_knowledge_t::consultTool(knowledgeDb()); }

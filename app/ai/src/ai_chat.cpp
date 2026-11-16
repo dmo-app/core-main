@@ -179,13 +179,15 @@ void Chat::reset() {
 }
 
 json Chat::request(const doc::Document& song) const {
-  return {{"model", config_.model},
+  json r = {{"model", config_.model},
           {"max_tokens", config_.maxTokens},
           {"system", system_.is_null() ? systemFor(song, pcore_, config_.permissions.mode, config_.gateway) : system_},
           {"tools", tools_},
           {"messages", messages_},
           {"output_config", {{"effort", config_.effort}}},
           {"cache_control", {{"type", "ephemeral"}}}};
+  if (config_.stream && config_.provider.kind != "openai") r["stream"] = true;
+  return r;
 }
 
 json Chat::withZone(json proposal) const {
