@@ -10,6 +10,10 @@
 #include "gate.hpp"
 #include "role_tools.hpp"
 #include "roles.hpp"
+#include "sfz_kit.hpp"
+#include <filesystem>
+#include <fstream>
+#include <sstream>
 #include "synth_roles.hpp"
 
 using namespace core;
@@ -251,6 +255,48 @@ TEST("tools dos cartoes: a AI chama space, fx, roll, suck, pump e buildup") {
   }
   CHECK_EQ(lines.size(), (size_t)6);
   for (const auto& l : lines) CHECK(l.find(": ") != std::string::npos);
+}
+
+TEST("kit sfz: os one-shots da biblioteca nas notas GM, alguns por nota, com o estilo primeiro") {
+  doc::SampleIndex idx;
+  idx.root = "D:\\Samples";
+  auto add = [&](const std::string& path, const std::string& role, bool loop = false, const std::string& style = "", double peak = -9) {
+    doc::LibrarySample s;
+    s.path = path;
+    s.file = "D:/Samples/" + path;
+    s.seconds = loop ? 4 : 0.4;
+    s.peakDb = peak;
+    s.info.role = role;
+    s.info.loop = loop;
+    if (!style.empty()) s.info.styles = {style};
+    idx.samples.push_back(s);
+  };
+  for (int i = 0; i < 6; ++i) add("Kicks/Kick " + std::to_string(i) + ".wav", "kick");
+  add("Kicks/ZZ Hitech Kick.wav", "kick", false, "hitech");
+  add("Loops/Kick Loop.wav", "kick", true);
+  add("Hats/Closed 1.wav", "hat");
+  add("Hats/Open 1.wav", "openhat");
+  add("FX/Riser.wav", "riser");
+  const doc::SfzKit kit = doc::makeSfzDrumKit(idx, {4, "hitech"});
+  CHECK_EQ(kit.samples.at(36).size(), (size_t)4);
+  CHECK_EQ(kit.samples.at(36).front(), std::string("Kicks/ZZ Hitech Kick.wav"));  // o estilo primeiro
+  CHECK(!kit.samples.count(38));                                                   // nao ha caixa
+  CHECK_EQ(kit.regions, 6);
+  CHECK(kit.text.find("default_path=D:/Samples/") != std::string::npos);
+  CHECK(kit.text.find("seq_length=4") != std::string::npos);
+  CHECK(kit.text.find("group=2 off_by=1") != std::string::npos);
+  CHECK(kit.text.find("volume=6.0 sample=Kicks/Kick 0.wav") != std::string::npos);  // -9 dBFS -> -3
+  CHECK(kit.text.find("Kick Loop") == std::string::npos);
+  CHECK(kit.text.find("Riser") == std::string::npos);
+  const auto file = std::filesystem::temp_directory_path() / "core-sfz-test" / "Core AI Drums.sfz";
+  doc::writeSfzDrumKit(kit, file);
+  std::ifstream in(file);
+  std::stringstream back;
+  back << in.rdbuf();
+  CHECK_EQ(back.str(), kit.text);
+  std::filesystem::remove_all(file.parent_path());
+  doc::SampleIndex none;
+  CHECK_THROWS(doc::makeSfzDrumKit(none));
 }
 
 CORE_TEST_MAIN

@@ -30,6 +30,7 @@
 #include "bitwig.hpp"
 #include "roles.hpp"
 #include "synth_roles.hpp"
+#include "sfz_kit.hpp"
 #include "core_plugins.hpp"
 #include "role_tools.hpp"
 
@@ -5180,7 +5181,7 @@ bool MainComponent::previewLibrarySample(const doc::LibrarySample& sample, const
 
 namespace { enum MenuId { kMidiNone = 200, kMidiDevice = 201, kNewEmpty = 50, kOpen = 1, kSave, kSaveAs, kExport24, kExport32, kQuit, kUndo, kRedo, kImportAudio, kRelocate, kDevice = 100,
                        kMidiDevicesEnd = 400, kPluginCoreFirst = 420 /* + place in doc::corePlugins(), up to 20 */,
-                       kPluginPatterns = 440, kPluginSilent = 442,
+                       kPluginPatterns = 440, kPluginSilent = 442, kPluginSfzKit = 443,
                        kPluginScan = 460, kPluginFolder, kPluginRetry, kMasterFx = 2400 /* + 60 */, kMasterFxAdd = 2500 /* + 400 */,
                        kOpenLogs = 580, kAbout = 581, kExportMono = 590, kImportMidi = 595, kExportMidi = 596, kExportBitwig = 597,
                        kSampleFolder = 1600, kSampleRescan, kSampleApply, kSampleAuto, kSampleShuffle, kSampleCatalogUndo,
@@ -5275,6 +5276,9 @@ juce::PopupMenu MainComponent::getMenuForIndex(int index, const juce::String&) {
       menu.addItem(juce::PopupMenu::Item(u8("Give the silent tracks their role's plugin (") + juce::String(silent) + u8(" silent)"))
                        .setID(kPluginSilent).setEnabled(silent > 0));
     }
+    // sfizz plays the AI's drums: a kit of the library's own one-shots (Documents\SFZ\Core AI Drums.sfz).
+    menu.addItem(juce::PopupMenu::Item(u8("Make the sfizz drum kit from the sample library")).setID(kPluginSfzKit)
+                     .setEnabled(!sampleIndex_.samples.empty()));
     menu.addSectionHeader(u8("VST3 plugins"));
     menu.addItem(juce::PopupMenu::Item(plugins_->scanning() ? u8("Scanning: ") + plugins_->progress() : u8("Scan plugins (VST3)"))
                      .setID(kPluginScan).setEnabled(!plugins_->scanning()));
@@ -5450,6 +5454,21 @@ void MainComponent::menuItemSelected(int id, int) {
     case kMidiNone: openMidiInput({}); break;
     case kPluginPatterns: openPatterns(); break;
     case kPluginSilent: giveSilentTracksPlugins(); break;
+    case kPluginSfzKit: {
+      const juce::File file = juce::File::getSpecialLocation(juce::File::userDocumentsDirectory).getChildFile("SFZ").getChildFile("Core AI Drums.sfz");
+      try {
+        const doc::SfzKit kit = doc::makeSfzDrumKit(sampleIndex_, {4, doc::songStyle(history_.current())});
+        doc::writeSfzDrumKit(kit, pathOf(file));
+        notice_ = u8("sfizz drum kit: ") + juce::String(kit.regions) + u8(" samples on ") + juce::String((int)kit.samples.size()) +
+                  u8(" notes, in ") + file.getFullPathName() + u8(" (open it in sfizz)");
+        logLine(notice_);
+        file.revealToUser();
+      } catch (const std::exception& e) {
+        showError(u8("sfizz drum kit"), u8(e.what()));
+      }
+      repaint();
+      break;
+    }
     case kPluginScan: scanPlugins(); break;
     case kPluginRetry: plugins_->clearQuarantine(); scanPlugins(); break;
     case kPluginFolder: {
