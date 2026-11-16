@@ -4834,7 +4834,7 @@ bool MainComponent::previewLibrarySample(const doc::LibrarySample& sample, const
 
 namespace { enum MenuId { kMidiNone = 200, kMidiDevice = 201, kNewEmpty = 50, kOpen = 1, kSave, kSaveAs, kExport24, kExport32, kQuit, kUndo, kRedo, kImportAudio, kRelocate, kDevice = 100,
                        kMidiDevicesEnd = 400, kPluginCoreFirst = 420 /* + place in doc::corePlugins(), up to 20 */,
-                       kPluginPatterns = 440, kPluginSong = 441, kPluginSilent = 442,
+                       kPluginPatterns = 440, kPluginSilent = 442,
                        kPluginScan = 460, kPluginFolder, kPluginRetry, kMasterFx = 2400 /* + 60 */, kMasterFxAdd = 2500 /* + 400 */,
                        kOpenLogs = 580, kAbout = 581, kExportMono = 590, kImportMidi = 595, kExportMidi = 596, kExportBitwig = 597,
                        kSampleFolder = 1600, kSampleRescan, kSampleApply, kSampleAuto, kSampleShuffle, kSampleCatalogUndo,
@@ -4851,7 +4851,7 @@ juce::String MainComponent::MenuBar::getTooltip() {
       "Undo and redo, and Randomize a song made from a style template (pattern, tempo, sound)",
       "Show or hide the Library and Inspector; open the Mixer; the UI size",
       "Cut or render samples, the audio output and the MIDI input",
-      "Patterns (the channel rack) and the Song window; the VST3 plugins: scan, folders, the master's effects",
+      "Patterns (the channel rack) and Core's tools; the VST3 plugins: scan, folders, the master's effects",
       "Your sample library: its folder, rescan, the best samples for this song",
       "AICORE, Core's add-on: open its chat, its proposals, its folder",
       "Logs (problems, crash dumps) and the version",
@@ -4920,7 +4920,6 @@ juce::PopupMenu MainComponent::getMenuForIndex(int index, const juce::String&) {
     // Core's own windows first: the Patterns window is where songs start (Diogo 2026-11-16), and it plays the tracks' plugins.
     menu.addSectionHeader(u8("Core"));
     menu.addItem(juce::PopupMenu::Item(u8("Patterns (channel rack, templates)…")).setID(kPluginPatterns));
-    menu.addItem(juce::PopupMenu::Item(u8("Song (S-Core: the sections and who plays in each)")).setID(kPluginSong));
     {  // A song from before 0.7.0: its old Core sounds are kept but silent (Diogo 2026-11-16, "não sai som").
       int silent = 0;
       for (const auto& t : history_.current().tracks) silent += t.instrument.kind == "builtin" || t.instrument.kind == "none";
@@ -5096,7 +5095,6 @@ void MainComponent::menuItemSelected(int id, int) {
     case kRelocate: relocateMissing(); break;
     case kMidiNone: openMidiInput({}); break;
     case kPluginPatterns: openPatterns(); break;
-    case kPluginSong: openScore(); break;
     case kPluginSilent: giveSilentTracksPlugins(); break;
     case kPluginScan: scanPlugins(); break;
     case kPluginRetry: plugins_->clearQuarantine(); scanPlugins(); break;
