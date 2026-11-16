@@ -21,6 +21,7 @@
 #include "InspectorPanel.h"
 #include "LibraryPanel.h"
 #include "PatternEditor.h"
+#include "MultiTrackEditor.h"
 #include "PatternsWindow.h"
 #include "PluginCards.h"
 #include "Plugins.h"
@@ -241,7 +242,9 @@ private:
   void collectSampleAnalysis();
   juce::String templatesStamp_;
   bool templatesLoaded_ = false;
-  void showTrackMenu(const std::string& trackId);  // right click on a track
+  void showTrackMenu(const std::string& trackId);  // the track's own items (rename, duplicate, remove...)
+  void showMainMenu(const std::string& trackId, int64_t tick);  // right click: Tools, Instruments, Import, MIDI, Sample, Music
+  juce::PopupMenu legacyMenu(int index, const juce::String& name);  // the menus that were on the top bar, by their old place
   void showAddTrackMenu();
   // The Patterns window (P-Core's channel rack), a window of its own beside this one (Diogo, 2026-11-08). While it
   // plays a pattern, the engine gets that pattern alone, looped (doc::rackPlayDocument); stopping gives the song back.
@@ -438,6 +441,7 @@ public:
   static uint64_t patternSignature(const doc::Pattern& pattern);
 private:
   PatternEditor editor_{*this};
+  MultiTrackEditor multi_{*this};  // the bottom panel: several tracks on the song's timeline
   std::unique_ptr<AudioEditor> audioEditor_;
   SCorePanel score_{*this};
   std::unique_ptr<MixerPanel> mixer_;  // the Mixer in the bottom panel (top bar: Mixer, Ctrl+M)

@@ -534,7 +534,7 @@ public:
   void mouseDown(const juce::MouseEvent& e) override {
     if (inLane(e.x) && owner_.startPan(e)) return;  // the hand: drag the song sideways
     if (!inLane(e.x)) {
-      if (e.mods.isPopupMenu()) { if (!owner_.trackSelected(id_)) owner_.selectOnlyTrack(id_); owner_.showTrackMenu(id_); return; }
+      if (e.mods.isPopupMenu()) { if (!owner_.trackSelected(id_)) owner_.selectOnlyTrack(id_); owner_.showMainMenu(id_, -1); return; }
       if (e.mods.isCommandDown()) owner_.toggleTrackSelected(id_);
       else if (e.mods.isShiftDown()) owner_.selectTracksTo(id_);
       else {
@@ -548,7 +548,7 @@ public:
     bool edge = false;
     const doc::Clip* hit = clipAt(e.x, &edge);
     if (!hit) {
-      if (e.mods.isPopupMenu()) { owner_.selectTrack(id_); owner_.showTrackMenu(id_); return; }
+      if (e.mods.isPopupMenu()) { owner_.selectTrack(id_); owner_.showMainMenu(id_, laneTick(e.x, kBar)); return; }
       if (!e.mods.isCommandDown()) owner_.selectTrack(id_);
       emptyLanePress(e);
       return;
@@ -614,7 +614,7 @@ public:
     int edge = 0;
     const doc::AudioClip* hit = audioClipAt(e.x, &edge);
     if (!hit) {
-      if (e.mods.isPopupMenu()) { owner_.selectClip(id_, {}); owner_.showTrackMenu(id_); return; }
+      if (e.mods.isPopupMenu()) { owner_.selectClip(id_, {}); owner_.showMainMenu(id_, laneTick(e.x, 1)); return; }
       if (!e.mods.isCommandDown()) owner_.selectClip(id_, {});
       emptyLanePress(e);
       return;
@@ -2058,7 +2058,26 @@ MainComponent::MainComponent(EngineSession::Options options, doc::Document docum
   };
   addChildComponent(revertAccepted_);
 
-  addAndMakeVisible(editor_);
+  addChildComponent(editor_);
+  addAndMakeVisible(multi_);
+  multi_.arrangeRange = [this] {
+    if (!timeSel_.empty()) return std::pair<int64_t, int64_t>{timeSel_.fromTick, timeSel_.toTick};
+    return std::pair<int64_t, int64_t>{(int64_t)viewStart(), (int64_t)(viewStart() + viewLength())};
+  };
+  multi_.onActiveTrack = [this](const std::string& id) { if (id != selectedTrack_) selectTrack(id); };
+  multi_.onEditMenu = [this](const std::string& trackId, int64_t from, int64_t to, juce::Component& target) {
+    // The note tools work on a pattern: the one the song plays where the bars shown start.
+    const doc::Track* t = history_.current().findTrack(trackId);
+    if (!t) return;
+    const doc::Clip* c = doc::clipAt(*t, from);
+    for (int64_t at = from; !c && at < to; at += 4 * doc::kPpq) c = doc::clipAt(*t, at);
+    if (!c) { notice_ = u8("Edit: no clip of this track in the bars shown."); repaint(); return; }
+    const doc::Pattern* p = t->findPattern(c->patternId);
+    if (!p) return;
+    editor_.setTrack(trackId, c->patternId);
+    const int64_t start = doc::patternTickIn(*c, *p, std::max(from, c->startTick)) / (4 * doc::kPpq) * (4 * doc::kPpq);
+    editor_.showToolsFor(start, std::min(p->lengthTicks, start + (to - from)), target);
+  };
   audioEditor_ = std::make_unique<AudioEditor>(*this);
   addChildComponent(*audioEditor_);
   addChildComponent(score_);
@@ -2239,6 +2258,7 @@ void MainComponent::edit(const std::function<void(doc::Document&)>& change, cons
   else for (size_t i = 0; i < rows_.size(); ++i) rows_[i]->update(history_.current().tracks[i]);
   loop_.setToggleState(after.enabled, juce::dontSendNotification);
   editor_.documentChanged();
+  multi_.documentChanged();
   showEditorForSelection();
   repaint(timelineArea());
   if (patternsWindow_) patternsWindow_->panel().documentChanged();
@@ -2284,6 +2304,7 @@ void MainComponent::documentChanged(bool rebuildRows) {
   else for (size_t i = 0; i < rows_.size(); ++i) rows_[i]->update(d.tracks[i]);
   splitRows_ = std::max(splitRows_, (int)rows_.size());
   editor_.documentChanged();
+  multi_.documentChanged();
   if (editor_.track().empty() && !d.tracks.empty() && !d.findTrack(selectedTrack_)) selectTrack(d.tracks.front().id);
   showEditorForSelection();
   repaint();
@@ -2565,7 +2586,7 @@ void MainComponent::openPatterns() {
     };
     h.openPianoRoll = [this](const std::string& trackId, const std::string& patternId) {
       selectTrack(trackId);
-      editor_.setTrack(trackId, patternId);
+      editor_.setTrack(trackId, patternId); multi_.setTrack(trackId);
       if (auto* top = getTopLevelComponent()) top->toFront(true);
     };
     h.openEffects = [this](const std::string& trackId) {
@@ -2612,6 +2633,7 @@ void MainComponent::placeBottomPanels() {
   score_.setBounds(area);
   automation_->setBounds(area);
   editor_.setBounds(area);
+  multi_.setBounds(area);
   audioEditor_->setBounds(area);
 }
 
@@ -2625,7 +2647,7 @@ void MainComponent::showEditorForSelection() {
   if (library_.isVisible() != libraryShown()) resized();  // the Mixer closed by another view: the side panels come back
   if (mixerOpen_) {
     mixer_->documentChanged();
-    for (juce::Component* c : std::initializer_list<juce::Component*>{automation_.get(), &score_, audioEditor_.get(), &editor_}) c->setVisible(false);
+    for (juce::Component* c : std::initializer_list<juce::Component*>{automation_.get(), &score_, audioEditor_.get(), &editor_, &multi_}) c->setVisible(false);
     return;
   }
   // Automation of a track or the master, until something else is chosen.
@@ -2636,6 +2658,7 @@ void MainComponent::showEditorForSelection() {
     score_.setVisible(false);
     audioEditor_->setVisible(false);
     editor_.setVisible(false);
+    multi_.setVisible(false);
     return;
   }
   // Stage Core (the song's parts), until it is closed or something else is chosen.
@@ -2644,6 +2667,7 @@ void MainComponent::showEditorForSelection() {
     score_.documentChanged();
     audioEditor_->setVisible(false);
     editor_.setVisible(false);
+    multi_.setVisible(false);
     return;
   }
   const doc::Track* t = history_.current().findTrack(selectedTrack_);
@@ -2653,7 +2677,10 @@ void MainComponent::showEditorForSelection() {
   else audioEditor_->setClip({}, {});
   audioEditor_->documentChanged();
   audioEditor_->setVisible(audioClip);
-  editor_.setVisible(!audioClip);
+  // The bottom panel is the multi-track editor (Diogo 2026-11-16); the single-track editor stays hidden and lends it
+  // its note tools (Edit ▾).
+  editor_.setVisible(false);
+  multi_.setVisible(!audioClip);
 }
 
 void MainComponent::selectTrack(const std::string& trackId) {
@@ -2662,7 +2689,7 @@ void MainComponent::selectTrack(const std::string& trackId) {
   automationOpen_ = false;
   boxClips_.clear();
   if (trackId != selectedTrack_) { selectedTrack_ = trackId; selectedClip_.clear(); }
-  editor_.setTrack(trackId);
+  editor_.setTrack(trackId); multi_.setTrack(trackId);
   if (mixer_ && mixerOpen_ && !trackId.empty()) mixer_->select(trackId);  // a click on a track row chooses its strip
   showEditorForSelection();
   { std::lock_guard<std::mutex> g(liveMutex_); liveTrack_ = editor_.track(); }
@@ -2728,7 +2755,7 @@ void MainComponent::selectClip(const std::string& trackId, const std::string& cl
   const doc::Track* t = history_.current().findTrack(trackId);
   std::string patternId;
   if (t) for (const auto& c : t->clips) if (c.id == clipId) patternId = c.patternId;
-  editor_.setTrack(trackId, patternId);
+  editor_.setTrack(trackId, patternId); multi_.setTrack(trackId);
   { std::lock_guard<std::mutex> g(liveMutex_); liveTrack_ = editor_.track(); }
   showEditorForSelection();
   for (auto& row : rows_) row->repaint();
@@ -3652,7 +3679,7 @@ void MainComponent::buildRows() {
     for (const auto& row : rows_) before.push_back(row->id());
     selectedTrack_ = doc::shownAfterRemoval(history_.current(), before, selectedTrack_, alsoSelected_);
     selectedClip_.clear();
-    editor_.setTrack(selectedTrack_);
+    editor_.setTrack(selectedTrack_); multi_.setTrack(selectedTrack_);
     std::lock_guard<std::mutex> g(liveMutex_);
     liveTrack_ = selectedTrack_;
   }
@@ -3663,7 +3690,8 @@ void MainComponent::buildRows() {
     tracksHolder_.addAndMakeVisible(*rows_.back());
   }
   editor_.documentChanged();
-  if (editor_.track().empty() && !history_.current().tracks.empty()) editor_.setTrack(history_.current().tracks.front().id);
+  multi_.documentChanged();
+  if (editor_.track().empty() && !history_.current().tracks.empty()) { editor_.setTrack(history_.current().tracks.front().id); multi_.setTrack(history_.current().tracks.front().id); }
   // The first time only: room for the song's tracks (up to eight), never taller than the screen. Later the window
   // keeps its size and the tracks scroll.
   if (getHeight() == 0) {
@@ -4650,7 +4678,7 @@ void MainComponent::deleteTemplate(const std::string& templateId) {
 void MainComponent::showAddTrackMenu() {
   juce::PopupMenu menu;
   // The plugins of this PC first (Diogo 2026-11-16: the sound comes from plugins), by maker.
-  const std::vector<nlohmann::json> instruments = plugins_->instruments();
+  const std::vector<nlohmann::json> instruments = doc::manualPlugins(plugins_->instruments());
   menu.addSectionHeader(u8("Plugin instruments"));
   {
     std::map<std::string, juce::PopupMenu> byVendor;
@@ -4663,10 +4691,6 @@ void MainComponent::showAddTrackMenu() {
     if (instruments.empty()) menu.addItem(juce::PopupMenu::Item(u8("None found yet: Plugins menu > Scan plugins")).setID(99999).setEnabled(false));
   }
   menu.addSeparator();
-  const std::vector<doc::InstrumentChoice>& native = doc::builtinInstruments();
-  menu.addSectionHeader(u8("Core's own instruments"));
-  for (size_t i = 0; i < native.size(); ++i)
-    if (native[i].name != std::string("sampler")) menu.addItem(3000 + (int)i, u8(native[i].label));
   menu.addItem(1002, u8("Sampler track (empty)"));
   menu.addSeparator();
   menu.addItem(1000, u8("Audio track (empty)"));
@@ -4710,7 +4734,7 @@ void MainComponent::showTrackMenu(const std::string& trackId) {
   const doc::Track* current = history_.current().findTrack(trackId);
   // Core's own instruments (ids 800 + place in builtinInstruments()).
   juce::PopupMenu replace;
-  const std::vector<nlohmann::json> instruments = plugins_->instruments(), pluginFx = plugins_->effects();
+  const std::vector<nlohmann::json> instruments = doc::manualPlugins(plugins_->instruments()), pluginFx = doc::manualPlugins(plugins_->effects());
   auto byVendor = [](const std::vector<nlohmann::json>& list, int firstId, const std::function<bool(const nlohmann::json&)>& ticked) {
     std::map<std::string, juce::PopupMenu> groups;
     for (size_t i = 0; i < list.size(); ++i) {
@@ -4748,11 +4772,6 @@ void MainComponent::showTrackMenu(const std::string& trackId) {
       return current->instrument.kind == "plugin" && current->instrument.plugin.value("id", std::string()) == p.value("id", std::string()) &&
              current->instrument.plugin.value("file", std::string()) == p.value("file", std::string());
     }));
-    replace.addSeparator();
-    const std::vector<doc::InstrumentChoice>& native = doc::builtinInstruments();
-    for (size_t i = 0; i < native.size(); ++i)
-      replace.addItem(juce::PopupMenu::Item(u8(native[i].label)).setID(800 + (int)i)
-                          .setTicked(current->instrument.kind == "builtin" && current->instrument.name == native[i].name));
     menu.addSubMenu(u8("Replace instrument"), replace);
   }
   std::vector<std::string> offered;
@@ -5291,16 +5310,98 @@ namespace { enum MenuId { kMidiNone = 200, kMidiDevice = 201, kNewEmpty = 50, kO
                        kPluginHelpFirst = 3000 /* + the plugin's place in pluginHelpIds(), up to 100 */ }; }
 
 
+// The right-click menu (Diogo 2026-11-16): "lado direito do rato dá-me acesso a tools, instruments, import, midi,
+// sample, music". The same short menu on a track, its lane or a clip's place; what it acts on is the track clicked.
+// The track's own items (rename, duplicate, remove...) are one more line at the end.
+void MainComponent::showMainMenu(const std::string& trackId, int64_t tick) {
+  juce::Component::SafePointer<MainComponent> safe(this);
+  const doc::Track* t = history_.current().findTrack(trackId);
+  juce::PopupMenu menu;
+  if (t) menu.addSectionHeader(u8(t->name));
+  const bool notes = t && doc::playsPatterns(*t);
+  // Tools: Core's tools on this track, the Patterns window, AICORE.
+  juce::PopupMenu tools;
+  tools.addItem(juce::PopupMenu::Item(u8("Patterns (channel rack)…")).setID(kPluginPatterns));
+  if (notes) tools.addSubMenu(u8("Core tools"), coreToolsMenu(trackId));
+  tools.addSubMenu(u8("AICORE"), legacyMenu(6, {}));
+  menu.addSubMenu(u8("Tools"), tools);
+  // Instruments: the plugins of Diogo's list (and the AI's), to play this track or on a new one; effects; the scan.
+  juce::PopupMenu instruments;
+  const auto inst = doc::manualPlugins(plugins_->instruments()), fx = doc::manualPlugins(plugins_->effects());
+  if (notes) {
+    juce::PopupMenu play;
+    for (const auto& p : inst)
+      play.addItem(juce::PopupMenu::Item(u8(p.value("name", std::string("Plugin")))).setAction([safe, trackId, p] {
+        if (!safe) return;
+        safe->fetchPluginStates();
+        safe->edit([&](doc::Document& d) { doc::replaceInstrumentWithPlugin(d, trackId, p); }, u8("Instrument: ") + u8(p.value("name", std::string())));
+        safe->session_->openPluginEditor(doc::pluginKey(trackId));
+      }));
+    if (inst.empty()) play.addItem(juce::PopupMenu::Item(u8("None of your plugins found yet: Scan plugins")).setEnabled(false));
+    instruments.addSubMenu(u8("Play this track with"), play);
+  }
+  juce::PopupMenu fresh;
+  for (const auto& p : inst)
+    fresh.addItem(juce::PopupMenu::Item(u8(p.value("name", std::string("Plugin")))).setAction([safe, p] {
+      if (!safe) return;
+      std::string id;
+      safe->edit([&](doc::Document& d) { id = doc::addPluginTrack(d, p); }, u8("Add ") + u8(p.value("name", std::string())));
+      if (!id.empty()) { safe->selectTrack(id); safe->session_->openPluginEditor(doc::pluginKey(id)); }
+    }));
+  instruments.addSubMenu(u8("New track with"), fresh);
+  if (t) {
+    juce::PopupMenu effects;
+    for (const auto& p : fx)
+      effects.addItem(juce::PopupMenu::Item(u8(p.value("name", std::string("Plugin")))).setAction([safe, trackId, p] {
+        if (!safe) return;
+        int at = -1;
+        safe->edit([&](doc::Document& d) { at = doc::addPluginEffect(d, trackId, p); }, u8("Add ") + u8(p.value("name", std::string())));
+        if (const doc::Track* now = safe->history_.current().findTrack(trackId); now && at >= 0 && at < (int)now->effects.size())
+          safe->session_->openPluginEditor(doc::pluginKey(trackId, now->effects[(size_t)at].value("id", std::string())));
+      }));
+    instruments.addSubMenu(u8("Add an effect to this track"), effects);
+  }
+  instruments.addSeparator();
+  instruments.addSubMenu(u8("Plugins: scan, folders, master effects"), legacyMenu(4, {}));
+  menu.addSubMenu(u8("Instruments"), instruments);
+  juce::PopupMenu import;
+  import.addItem(juce::PopupMenu::Item(u8("Audio (WAV)…")).setID(kImportAudio));
+  import.addItem(juce::PopupMenu::Item(u8("MIDI (.mid)…")).setID(kImportMidi));
+  menu.addSubMenu(u8("Import"), import);
+  juce::PopupMenu midi;
+  midi.addItem(juce::PopupMenu::Item(u8("Import MIDI (.mid)…")).setID(kImportMidi));
+  midi.addItem(juce::PopupMenu::Item(u8("Export MIDI (.mid)…")).setID(kExportMidi));
+  midi.addItem(juce::PopupMenu::Item(u8("Export for Bitwig (MIDI + plugin presets)…")).setID(kExportBitwig));
+  menu.addSubMenu(u8("MIDI"), midi);
+  juce::PopupMenu sample = legacyMenu(5, {});
+  sample.addSeparator();
+  sample.addItem(juce::PopupMenu::Item(u8("New sampler track")).setAction([safe] {
+    if (!safe) return;
+    std::string id;
+    safe->edit([&](doc::Document& d) { id = doc::addTrack(d, "sampler"); }, u8("Sampler track"));
+    if (!id.empty()) safe->selectTrack(id);
+  }));
+  menu.addSubMenu(u8("Sample"), sample);
+  juce::PopupMenu music;
+  music.addItem(juce::PopupMenu::Item(u8("New song")).setID(kNewEmpty));
+  music.addItem(juce::PopupMenu::Item(u8("Open…")).setID(kOpen));
+  if (tick >= 0)
+    music.addItem(juce::PopupMenu::Item(u8("Section here…")).setAction([safe, tick] { if (safe) safe->showSectionMenu(tick); }));
+  music.addItem(juce::PopupMenu::Item(u8("Export WAV 24-bit…")).setID(kExport24));
+  menu.addSubMenu(u8("Music"), music);
+  if (t) {
+    menu.addSeparator();
+    menu.addItem(juce::PopupMenu::Item(u8("Track: rename, duplicate, effects, remove…")).setAction([safe, trackId] { if (safe) safe->showTrackMenu(trackId); }));
+  }
+  menu.showMenuAsync(juce::PopupMenu::Options(), [safe](int r) { if (safe && r > 0) safe->menuItemSelected(r, 0); });
+}
+
 juce::String MainComponent::MenuBar::getTooltip() {
   static const char* const help[] = {
-      "Songs: new, open, save, import audio, export WAV (templates are in the Library)",
-      "Undo and redo, and Randomize a song made from a style template (pattern, tempo, sound)",
+      "Songs: new, open, save, import, export, the audio output and MIDI input",
+      "Undo and redo, and Randomize a song made from a style template (pattern, tempo)",
       "Show or hide the Library and Inspector; open the Mixer; the UI size",
-      "Cut or render samples, the audio output and the MIDI input",
-      "Patterns (the channel rack) and Core's tools; the VST3 plugins: scan, folders, the master's effects",
-      "Your sample library: its folder, rescan, the best samples for this song",
-      "AICORE, Core's add-on: open its chat, its proposals, its folder",
-      "Logs (problems, crash dumps) and the version",
+      "Logs (problems, crash dumps) and the version. Everything else: right-click the tracks",
   };
 
   auto* model = getModel();
@@ -5314,9 +5415,16 @@ juce::String MainComponent::MenuBar::getTooltip() {
   return {};
 }
 
-juce::StringArray MainComponent::getMenuBarNames() { return {"File", "Edit", "View", "Audio", "Plugins", "Samples", "AICORE", "Help"}; }
+// Diogo 2026-11-16: a clean top bar (File, Edit, View, Help). Plugins, Samples and AICORE are in the right-click menu
+// (Tools, Instruments, Import, MIDI, Sample, Music); the audio output and MIDI input are in File.
+juce::StringArray MainComponent::getMenuBarNames() { return {"File", "Edit", "View", "Help"}; }
 
-juce::PopupMenu MainComponent::getMenuForIndex(int index, const juce::String&) {
+juce::PopupMenu MainComponent::getMenuForIndex(int index, const juce::String& name) {
+  static const int legacy[] = {0, 1, 2, 7};
+  return legacyMenu(index >= 0 && index < 4 ? legacy[index] : index, name);
+}
+
+juce::PopupMenu MainComponent::legacyMenu(int index, const juce::String&) {
   juce::PopupMenu menu;
   if (index == 2) {  // View: the side panels
     menu.addItem(juce::PopupMenu::Item(u8("Library")).setID(kViewLibrary).setTicked(libraryShown()));
@@ -5367,6 +5475,7 @@ juce::PopupMenu MainComponent::getMenuForIndex(int index, const juce::String&) {
     menu.addSeparator();
     menu.addItem(juce::PopupMenu::Item(u8("Settings…")).setID(kSettings));
     menu.addItem(juce::PopupMenu::Item(u8("Keyboard shortcuts…")).setID(kShortcuts));
+    menu.addSubMenu(u8("Audio output and MIDI input"), legacyMenu(3, {}));
     menu.addSeparator();
     menu.addItem(juce::PopupMenu::Item("Quit").setID(kQuit));
   } else if (index == 3) {
@@ -5407,7 +5516,7 @@ juce::PopupMenu MainComponent::getMenuForIndex(int index, const juce::String&) {
         one.addItem(juce::PopupMenu::Item(u8("Remove")).setID(kMasterFx + 20 + (int)i));
         master.addSubMenu(u8(fx["plugin"].value("name", std::string("Plugin"))), one);
       }
-      const auto effects = plugins_->effects();
+      const auto effects = doc::manualPlugins(plugins_->effects());
       juce::PopupMenu add;
       for (size_t i = 0; i < effects.size() && i < 400; ++i)
         add.addItem(kMasterFxAdd + (int)i, u8(effects[i].value("name", std::string("Plugin"))) + "  (" + u8(effects[i].value("vendor", std::string())) + ")");
@@ -5476,7 +5585,6 @@ juce::PopupMenu MainComponent::getMenuForIndex(int index, const juce::String&) {
     menu.addItem(juce::PopupMenu::Item(u8("Randomize (medium)")).setID(kRandomize + 2).setEnabled(styled));
     menu.addItem(juce::PopupMenu::Item(u8("Randomize (bold)")).setID(kRandomize + 3).setEnabled(styled));
     menu.addItem(juce::PopupMenu::Item(u8("Randomize tempo per section")).setID(kRandomize + 4).setEnabled(styled));
-    menu.addItem(juce::PopupMenu::Item(u8("Randomize sound (built-in instruments)")).setID(kRandomize + 5).setEnabled(styled));
   }
   // Shortcut hints on the right, as in other Windows programs.
   juce::PopupMenu::MenuItemIterator it(menu);
@@ -5573,7 +5681,7 @@ void MainComponent::menuItemSelected(int id, int) {
     }
     default:
       if (id >= kMasterFxAdd && id < kMasterFxAdd + 400) {
-        const auto effects = plugins_->effects();
+        const auto effects = doc::manualPlugins(plugins_->effects());
         if (id - kMasterFxAdd >= (int)effects.size()) break;
         const nlohmann::json plugin = effects[(size_t)(id - kMasterFxAdd)];
         int at = -1;
@@ -6712,7 +6820,8 @@ void MainComponent::timerCallback() {
     for (size_t i = 0; i < 6; ++i) rail_[i]->setToggleState(states[i], juce::dontSendNotification);
   }
   repaint(timelineArea());
-  editor_.playheadMoved();  // only the old and the new line, not the whole piano roll
+  editor_.playheadMoved();
+  multi_.playheadMoved();  // only the old and the new line, not the whole piano roll
   // A sound or effect that failed while playing is silent until the next change: say which, once.
   {
     std::string failedNow;
@@ -7116,7 +7225,7 @@ void MainComponent::selfTestStep() {
       edit([](doc::Document& d) { doc::resizeClip(doc::trackById(d, "bass"), "c1", 8 * kBar); }, "Clip length");
       std::string p2;
       edit([&](doc::Document& d) { p2 = doc::addPattern(doc::trackById(d, "bass"), kBar); }, u8("New pattern"));
-      editor_.setTrack("bass", p2);
+      editor_.setTrack("bass", p2); multi_.setTrack("bass");
       addClipAt("bass", 8 * kBar);  // a clip of the pattern shown in the editor
       editor_.clickCell(0, 45);
       editor_.clickCell(kBeat, 45);
@@ -7235,7 +7344,7 @@ void MainComponent::selfTestStep() {
     case 26: {  // the audio editor: select one second in the middle and remove it (one undo step), then keep a part
       const std::string trackId = t.audioTrack, clipId = history_.current().findTrack(trackId)->audioClips[0].id;
       selectClip(trackId, clipId);
-      if (!audioEditor_->isVisible() || editor_.isVisible() || audioEditor_->clipId() != clipId) return finish(false, "audio editor not shown");
+      if (!audioEditor_->isVisible() || multi_.isVisible() || audioEditor_->clipId() != clipId) return finish(false, "audio editor not shown");
       audioEditor_->select(0.5, 1.0);
       audioEditor_->removeSelection();
       if (history_.current().findTrack(trackId)->audioClips.size() != 2) return finish(false, "remove selection");
@@ -7324,7 +7433,7 @@ void MainComponent::selfTestStep() {
       break;
     case 31: {  // automation: the bass volume falls over 4 bars
       openAutomation("bass", "gainDb");
-      if (!automation_->isVisible() || editor_.isVisible()) return finish(false, "automation editor not shown");
+      if (!automation_->isVisible() || multi_.isVisible()) return finish(false, "automation editor not shown");
       automation_->addPoint(0, 0);
       automation_->addPoint(4 * kBar, -40);
       const doc::Track& bass = *history_.current().findTrack("bass");
@@ -7338,7 +7447,7 @@ void MainComponent::selfTestStep() {
     case 32:
       if (applied && snap_.playing && inStep > 1200) {
         keyPressed(juce::KeyPress(juce::KeyPress::escapeKey));  // Esc closes the panel: the pattern editor again
-        if (automation_->isVisible() || !editor_.isVisible()) return finish(false, "Esc did not close the automation panel");
+        if (automation_->isVisible() || !multi_.isVisible()) return finish(false, "Esc did not close the automation panel");
         next("automation plays");
       }
       else if (inStep > 5000) return finish(false, "automation not applied");

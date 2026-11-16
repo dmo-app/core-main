@@ -291,6 +291,32 @@ bool fillKickRole(RoleMap& map, const std::vector<json>& instruments) {
   return false;
 }
 
+bool inManualPluginList(const json& plugin) {
+  if (!plugin.is_object()) return false;
+  if (isAiPlugin(plugin)) return true;
+  std::string name = plugin.value("name", std::string()) + " | " + plugin.value("vendor", std::string());
+  for (auto& c : name) c = (char)std::tolower((unsigned char)c);
+  // Soundtoys: only the five on the list (the other 18 are installed but stay out).
+  if (name.find("soundtoys") != std::string::npos) {
+    for (const char* p : {"echoboy", "crystallizer", "decapitator", "alterboy", "microshift"})
+      if (name.find(p) != std::string::npos) return true;
+    return false;
+  }
+  for (const char* p : {"serum", "fabfilter", "pro-q", "pro-r", "pro-c", "pro-l", "pro-mb", "pro-g", "pro-ds", "saturn", "volcano",
+                        "timeless", "twin 3", "simplon", "valhalla", "supermassive", "vintageverb", "echoboy", "crystallizer",
+                        "decapitator", "alterboy", "microshift", "devious", "bassfocus", "bass focus", "multipass", "infiltrator",
+                        "snap heap", "auto-tune", "harmony engine", "vocoder v", "khs", "kilohearts", "kick 3", "sonic academy",
+                        "909", "kick/bass", "kickbass"})
+    if (name.find(p) != std::string::npos) return true;
+  return false;
+}
+
+std::vector<json> manualPlugins(const std::vector<json>& all) {
+  std::vector<json> out;
+  for (const auto& p : all) if (inManualPluginList(p)) out.push_back(p);
+  return out;
+}
+
 bool isAiPlugin(const json& plugin) {
   if (!plugin.is_object()) return false;
   std::string name = plugin.value("name", std::string());

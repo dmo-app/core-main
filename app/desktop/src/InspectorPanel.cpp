@@ -212,11 +212,8 @@ juce::String soundDescription(const doc::Track& t) {
   if (i.kind == "audio") return "Plays audio files as they are, placed on the timeline.";
   if (i.kind == "bus") return "A bus: other tracks send their sound here, so one set of effects plays on all of them.";
   if (i.kind == "plugin") return "Played by a plugin: double-click the track's name to open its window.";
-  if (i.name == "kick") return "Core's own kick: a sine that falls fast from Start pitch to End pitch. The fall is the punch, the low end is the body, "
-                               "Click adds the attack and Decay sets how long it sounds.";
-  if (i.name == "hats") return "Core's own hats: bright filtered noise. Closed hats are short, open hats ring longer; Tone sets how bright.";
-  if (i.name == "snare") return "Core's own snare and clap: a short tone with noise for the snare, quick bursts of noise for the clap.";
-  if (i.name == "drums") return "Kick and hats on one track: kick on C1 (36), closed hats on F#1 (42), open hats on A#1 (46).";
+  if (i.kind == "builtin" && i.name != "sampler")
+    return "Silent: Core's old sound (the sound comes from plugins). Right-click the track > Instruments > Play this track with.";
   if (i.name == "sampler") return "Plays your samples: each zone is one file over a range of keys, tuned from its root key.";
   return {};
 }
@@ -236,6 +233,7 @@ juce::String effectDescription(const std::string& id) {
 // The sound's settings and the effects' settings, with what each thing is: the part of the Inspector to learn from.
 void describeSound(std::vector<InspectorLine>& lines, const doc::Track& t) {
   note(lines, soundDescription(t));
+  return;  // Diogo 2026-11-16: no sound settings in Core; the sound is the plugin's (its own window)
   if (t.instrument.kind != "builtin") return;
   const doc::InstrumentInfo* info = doc::findInstrumentInfo(t.instrument.name);
   if (!info || info->params.empty()) return;

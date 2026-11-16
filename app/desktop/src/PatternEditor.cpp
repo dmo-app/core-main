@@ -1296,6 +1296,16 @@ std::pair<int64_t, int64_t> PatternEditor::visibleBars() const {
 
 std::set<std::string> PatternEditor::toolIds() const { return selected_; }
 
+void PatternEditor::showToolsFor(int64_t from, int64_t to, juce::Component& target) {
+  if (!currentTrack()) return;
+  selected_.clear();
+  viewStart_ = (double)std::max<int64_t>(0, from);
+  viewLength_ = (double)std::max<int64_t>(4 * doc::kPpq, to - from);
+  menuTarget_ = &target;
+  showTools();
+  menuTarget_ = nullptr;
+}
+
 void PatternEditor::normalize(const doc::NormalizeOptions& options, const juce::String& label) {
   if (!currentTrack()) return;
   const auto shown = visibleBars();
@@ -1694,7 +1704,7 @@ void PatternEditor::showTools() {
   m.addSeparator();
   m.addItem(kPCore, u8("Patterns window…"));
   m.addItem(juce::PopupMenu::Item(u8("Save the bars shown as a pattern…")).setID(kSave).setEnabled(onSavePattern != nullptr && to > from));
-  m.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&edit_), [safe = juce::Component::SafePointer<PatternEditor>(this), from, to, tempo](int r) {
+  m.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(menuTarget_ ? menuTarget_ : &edit_), [safe = juce::Component::SafePointer<PatternEditor>(this), from, to, tempo](int r) {
     if (!safe || r <= 0) return;
     auto& self = *safe;
     if (r == kPCore) { if (self.onOpenPatterns) self.onOpenPatterns(); return; }

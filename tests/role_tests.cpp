@@ -441,3 +441,19 @@ TEST("kick: papel proprio, preenchido pelo plugin com kick no nome, com a bateri
   CHECK_EQ(trackById(d, kickId).instrument.plugin.value("name", std::string()), std::string("Kick 3"));
   CHECK_EQ(findKickTrack(d), kickId);
 }
+
+// A lista do Diogo (16/11): os menus mostram so os plugins da lista dele e os da AI.
+TEST("plugins: so a lista do Diogo e os da AI entram nos menus") {
+  auto plug = [](const std::string& name, const std::string& vendor) {
+    return json{{"format", "vst3"}, {"id", name}, {"name", name}, {"vendor", vendor}, {"file", "C:/" + name + ".vst3"}};
+  };
+  CHECK(inManualPluginList(plug("Serum 2", "Xfer Records")));
+  CHECK(inManualPluginList(plug("Pro-Q 4", "FabFilter")));
+  CHECK(inManualPluginList(plug("Valhalla Supermassive", "Valhalla DSP, LLC")));
+  CHECK(inManualPluginList(plug("EchoBoy", "Soundtoys")));
+  CHECK(!inManualPluginList(plug("FilterFreak1", "Soundtoys")));  // so 5 dos 23 Soundtoys
+  CHECK(inManualPluginList(plug("Kick 3", "Sonic Academy")));
+  CHECK(inManualPluginList(plug("Vital", "Vital Audio")));        // da AI
+  CHECK(!inManualPluginList(plug("Some Random Synth", "Other")));
+  CHECK_EQ(manualPlugins({plug("Pro-L 2", "FabFilter"), plug("Junk", "X")}).size(), (size_t)1);
+}
