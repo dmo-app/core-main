@@ -290,10 +290,13 @@ TEST("kit sfz: os one-shots da biblioteca nas notas GM, alguns por nota, com o e
   CHECK(kit.text.find("Riser") == std::string::npos);
   const auto file = std::filesystem::temp_directory_path() / "core-sfz-test" / "Core AI Drums.sfz";
   doc::writeSfzDrumKit(kit, file);
-  std::ifstream in(file);
-  std::stringstream back;
-  back << in.rdbuf();
-  CHECK_EQ(back.str(), kit.text);
+  {
+    // Fechado antes do remove_all: o Windows não apaga ficheiros abertos.
+    std::ifstream in(file);
+    std::stringstream back;
+    back << in.rdbuf();
+    CHECK_EQ(back.str(), kit.text);
+  }
   std::filesystem::remove_all(file.parent_path());
   doc::SampleIndex none;
   CHECK_THROWS(doc::makeSfzDrumKit(none));
