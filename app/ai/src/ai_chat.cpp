@@ -24,13 +24,18 @@ const char* kSystem =
     "de fora, corrige e volta a tentar, ou explica.\n"
     "- Lê a música (ler_musica) antes de mexer numa música que já tem pistas ou secções.\n"
     "- Para uma batida: pistas que faltem (track), depois P-Core (pcore) em cada pista, com o mesmo estilo e compassos "
-    "para kick, baixo e hats, para ficarem alinhados. Para a estrutura: shape, depois arrange. Para mudar uma parte: "
+    "para kick, baixo e hats, para ficarem alinhados. Se a música ainda não tem secções e o pedido fala de uma (o drop...), "
+    "começa por shape. \"A estrutura\" de uma música é completa: shape, as pistas que faltem (track: kick, bass, hats e as "
+    "outras partes do estilo), pcore em cada uma e por fim arrange; não pares na forma. Para mudar uma parte: "
     "plays (tirar ou pôr uma pista numa secção) e pcore com mode alter ou outra forma.\n"
     "- Usa os ids exactos das opções (formas, estilos, escalas). Para ver as formas de uma parte, usa formas_pcore.\n"
     "- Quando não souberes como se faz algo num estilo (BPM, KBBB, energia, arranjo, mistura), consulta o manual "
     "(consultar_manual) com poucas palavras-chave, antes de propor.\n"
     "- Uma pista nova não tem som até o Diogo escolher o plugin (VST3); diz-lhe isso quando criares pistas.\n"
-    "- No fim, responde com uma ou duas frases: o que propuseste e o que ele deve ouvir. Esse texto é o título da proposta.";
+    "- Escreve pouco: entre chamadas não escrevas texto (as chamadas ficam registadas na proposta) e não repitas o que "
+    "as chamadas já dizem.\n"
+    "- No fim, responde com uma frase curta (até 25 palavras): o que propuseste e o que ele deve ouvir. Esse texto é o "
+    "título da proposta.";
 
 // The song as the model reads it: Core's song (control::songJson) plus, per track, its part, its pattern and where it
 // plays.
@@ -174,13 +179,15 @@ void Chat::reset() {
 }
 
 json Chat::request(const doc::Document& song) const {
-  return {{"model", config_.model},
+  json r = {{"model", config_.model},
           {"max_tokens", config_.maxTokens},
           {"system", system_.is_null() ? systemFor(song, pcore_, config_.permissions.mode, config_.gateway) : system_},
           {"tools", tools_},
           {"messages", messages_},
           {"output_config", {{"effort", config_.effort}}},
           {"cache_control", {{"type", "ephemeral"}}}};
+  if (config_.stream && config_.provider.kind != "openai") r["stream"] = true;
+  return r;
 }
 
 json Chat::withZone(json proposal) const {

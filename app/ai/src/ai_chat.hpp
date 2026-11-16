@@ -43,6 +43,7 @@ struct Config {
   double maxUsdPerMessage = 0.25; // a message stops asking the model when it has cost this much (0 = no limit)
   Permissions permissions;        // what the model may do (catalog.hpp): ask, readonly, trusted
   bool gateway = false;           // "ajuda" + "fazer" in place of every edit tool (catalog.hpp: smaller requests)
+  bool stream = false;            // Anthropic only: the answer comes as events (stream.hpp); the panel sets it
 };
 
 // Claude's tool definitions: the catalog's Anthropic view (catalog.hpp), every action offered. The chat itself offers

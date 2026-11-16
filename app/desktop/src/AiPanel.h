@@ -19,6 +19,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 #include "ai_chat.hpp"
 #include "models.hpp"
+#include "stream.hpp"
 
 namespace core::app {
 
@@ -72,6 +73,7 @@ private:
   void send();
   void post(nlohmann::json body);                  // on a background thread; the answer comes back here
   void answered(const nlohmann::json& response, const juce::String& failure);
+  void liveText(const juce::String& piece);         // a piece of the answer as it streams (shown in the status line)
   void finished();
   void say(const juce::String& who, const juce::String& text);
   void showCost();
@@ -120,6 +122,7 @@ private:
   ai::Permissions permissions_;  // from ai-settings.json; the panel's mode over it
   const ai::Memory* chatMemory_ = nullptr;  // the memory chat_ was made with (none when not shared)
   juce::Label status_, cost_;
+  juce::String live_;  // what the current request has streamed so far
   bool busy_ = false;
   // The chat on screen: what was said (for Copy and the file), its file, when it began.
   std::vector<std::pair<juce::String, juce::String>> said_;
