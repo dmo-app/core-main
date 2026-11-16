@@ -83,10 +83,15 @@ add_test(NAME cli_unicode COMMAND ${CMAKE_COMMAND} -DENGINE=$<TARGET_FILE:core-e
 
 set_tests_properties(engine_tests domain_tests role_tests midi_tests bug_tests audit_tests audit2_tests hunt_tests round3_tests bitwig_tests cli_version cli_demo_render cli_measure cli_unicode
                      PROPERTIES LABELS merge TIMEOUT 300)
+# Labels por area (2026-11-16, plano de testes T03), alem do nivel. ci/testes.txt e a lista que o gate confere.
+#   ai      o que a AI chama (tools, catalogo, propostas)
+#   ui      a app com janela (eventos de rato e teclado)
+#   plugins plugins reais (Vital, sfizz); fora do gate, a mao (T19). Vazio ate la.
+set_tests_properties(role_tests round3_tests PROPERTIES LABELS "merge;ai")
 
 # The app's own end-to-end test (play, undo, save/reopen, export... on the null device, with its test plugins).
 # It opens Core's window for ~20 s, so it has its own label.
 if(TARGET CoreApp)
   add_test(NAME desktop_self_test COMMAND CoreApp --self-test ${CMAKE_CURRENT_BINARY_DIR}/self-test.png)
-  set_tests_properties(desktop_self_test PROPERTIES LABELS desktop TIMEOUT 600)
+  set_tests_properties(desktop_self_test PROPERTIES LABELS "desktop;ui" TIMEOUT 600)
 endif()
