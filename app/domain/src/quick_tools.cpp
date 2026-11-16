@@ -94,7 +94,13 @@ int shiftRackRow(Document& doc, const std::string& slotId, const std::string& tr
   for (auto& tr : doc.tracks) if (tr.id == trackId) t = &tr;
   if (!t) throw DocumentError("tracks", "no track '" + trackId + "'");
   if (it == slot->tracks.end() || !t->findPattern(it->second)) return 0;  // an empty row
-  return rotatePatternNotes(patternById(*t, it->second), (int64_t)steps * kSixteenth);
+  // With swing the odd 1/16s are played late: take the swing off, rotate on the straight grid, put it back, so a
+  // step that moves keeps the groove of the place it lands on (not the delay of the place it came from).
+  const double swing = slot->swing;
+  if (swing > 0) setRackSwing(doc, slotId, 0);
+  const int moved = rotatePatternNotes(patternById(trackById(doc, trackId), it->second), (int64_t)steps * kSixteenth);
+  if (swing > 0) setRackSwing(doc, slotId, swing);
+  return moved;
 }
 
 // ---- nudge
@@ -149,7 +155,6 @@ std::string cannotFreeze(const Document& doc, const std::string& trackId) {
   const Track* t = doc.findTrack(trackId);
   if (!t) return "There is no such track.";
   if (isFrozen(*t)) return "The track is already frozen.";
-  if (!extraString(t->extra, kFrozenFromKey).empty()) return "This is a frozen track's audio: unfreeze the original instead.";
   if (t->instrument.kind == "audio") return "An audio track has no plugins to freeze.";
   if (t->instrument.kind == "bus") return "A bus cannot be frozen: freeze the tracks that feed it.";
   bool plugins = t->instrument.kind == "plugin";

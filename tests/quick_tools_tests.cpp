@@ -309,4 +309,49 @@ TEST("freeze: recusas claras (já congelada, áudio, sem plugins, muda, o própr
   CHECK_EQ(toJson(d).dump(), before);
 }
 
+// ---- casos-limite encontrados na verificação (2026-11-16, "tem de se ver se existem bugs")
+
+TEST("shift de linha com swing: o groove fica no sítio (os 1/16 pares não herdam o atraso dos ímpares)") {
+  Document d = newEmptyDocument();
+  const std::string bass = bassTrack(d);
+  const std::string hats = addTrack(d, "", "Hats");
+  const std::string slot = addRackSlot(d, "Main Groove", 1);
+  rackPatternFor(d, slot, bass).notes.clear();
+  rackPatternFor(d, slot, hats).notes.clear();
+  // Um baixo no 1.º e no 2.º 1/16, um hat no 2.º; swing ligado depois (os 1/16 ímpares vão para trás).
+  toggleRackStep(rackPatternFor(d, slot, bass), 0, kStep, 36, 0.8, 0);
+  toggleRackStep(rackPatternFor(d, slot, bass), kStep, kStep, 36, 0.8, 0);
+  toggleRackStep(rackPatternFor(d, slot, hats), kStep, kStep, 42, 0.8, 0);
+  setRackSwing(d, slot, 0.5);
+  const Pattern hatsBefore = *rackPattern(d, *findRackSlot(rackSlots(d), slot), hats);
+  const int64_t late = rackPattern(d, *findRackSlot(rackSlots(d), slot), bass)->notes[1].tick - kStep;  // o atraso do swing
+  CHECK(late > 0);
+  CHECK_EQ(shiftRackRow(d, slot, bass, 1), 2);
+  const Pattern& p = *rackPattern(d, *findRackSlot(rackSlots(d), slot), bass);
+  // Agora no 2.º 1/16 (com swing) e no 3.º (direito, sem atraso).
+  CHECK_EQ(p.notes[0].tick, kStep + late);
+  CHECK_EQ(p.notes[1].tick, 2 * kStep);
+  // A outra linha não mexeu.
+  const Pattern& h = *rackPattern(d, *findRackSlot(rackSlots(d), slot), hats);
+  CHECK_EQ(h.notes.size(), hatsBefore.notes.size());
+  if (!h.notes.empty()) CHECK_EQ(h.notes[0].tick, hatsBefore.notes[0].tick);
+  CHECK_NEAR(findRackSlot(rackSlots(d), slot)->swing, 0.5, 1e-9);
+}
+
+TEST("duplicar uma pista congelada: a cópia não fica presa ao áudio da original") {
+  Document d = newEmptyDocument();
+  const std::string bass = bassTrack(d);
+  const fs::path dir = freshDir("freeze-duplicar");
+  const Printed p = freezeTrack(d, bass, renderFile(dir), dir);
+  const std::string copy = duplicateTrack(d, bass);
+  // Unfreeze da cópia não pode apagar o áudio congelado da original.
+  if (isFrozen(*d.findTrack(copy))) unfreezeTrack(d, copy);
+  CHECK(!isFrozen(*d.findTrack(copy)));
+  CHECK(d.findTrack(p.trackId) != nullptr);
+  CHECK(isFrozen(*d.findTrack(bass)));
+  // E a cópia do áudio congelado também não se diz "frozen" de ninguém.
+  const std::string audioCopy = duplicateTrack(d, p.trackId);
+  CHECK(!d.findTrack(audioCopy)->extra.contains("frozenFrom"));
+}
+
 CORE_TEST_MAIN

@@ -342,6 +342,9 @@ std::string duplicateTrack(Document& doc, const std::string& trackId) {
   copy.id = uniqueTrackId(doc, trackId);
   copy.name = (it->name + " 2").substr(0, 80);
   copy.mix.solo = false;
+  // A copy of a frozen track is not frozen (Freeze, quick_tools.hpp): its Unfreeze would remove the original's audio.
+  // It keeps the mute it was copied with; Unmute plays its plugins.
+  if (copy.extra.is_object()) { copy.extra.erase("frozen"); copy.extra.erase("frozenFrom"); }
   const auto at = it - doc.tracks.begin() + 1;  // right after the original
   doc.tracks.insert(doc.tracks.begin() + at, std::move(copy));
   return doc.tracks[(size_t)at].id;
