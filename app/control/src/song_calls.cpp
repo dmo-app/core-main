@@ -258,7 +258,9 @@ bool validate(const json& c, const CoreFunction& f, const doc::Document& song, c
     if (known.empty())
       if (const doc::Section* s = sectionNamed(song, section)) known = pending.section(s->name);
     if (known.empty()) {
-      problems.push_back("no section called \"" + section + "\": " + f.name + " left out (sections: " + listOf(pending.sections) + ")");
+      problems.push_back("no section called \"" + section + "\": " + f.name + " left out " +
+                         (pending.sections.empty() ? std::string("(the song has no sections yet: call shape first, then this again)")
+                                                   : "(sections: " + listOf(pending.sections) + ")"));
       return false;
     }
     call.sectionName = known;

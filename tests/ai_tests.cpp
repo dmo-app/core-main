@@ -137,6 +137,11 @@ void leftOut(const doc::PCoreCatalog& cat) {
   };
   CHECK_EQ(problemsOf({{"fn", "shape"}, {"shape", "polka-12"}}).calls.size(), (size_t)0);
   CHECK_EQ(problemsOf({{"fn", "plays"}, {"on", "Kick"}, {"section", "Drop"}, {"play", "on"}}).calls.size(), (size_t)0);  // no sections yet
+  {  // the reason says what to do: shape first (the error the Haiku met in the benches)
+    const auto p = problemsOf({{"fn", "pcore"}, {"on", "Kick"}, {"section", "Drop"}});
+    CHECK(p.calls.empty() && !p.problems.empty() && p.problems[0].find("call shape first") != std::string::npos);
+    if (!p.problems.empty()) CHECK_EQ(ai::problemKind(p.problems[0]), std::string("section"));
+  }
   CHECK_EQ(problemsOf({{"fn", "pcore"}, {"section", "Drop"}}).calls.size(), (size_t)0);  // no track
   CHECK_EQ(problemsOf({{"fn", "pcore"}, {"on", "Kick"}, {"args", {{"variationEvery", 3}}}}).calls.size(), (size_t)0);
   CHECK_EQ(problemsOf({{"fn", "pcore"}, {"on", "Kick"}, {"args", {{"bars", 65}}}}).calls.size(), (size_t)0);
