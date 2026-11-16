@@ -6,6 +6,7 @@
 #include <sstream>
 #include <string_view>
 #include "edit.hpp"
+#include "song_calls.hpp"
 #include "stutter.hpp"
 
 namespace core::control {
@@ -234,7 +235,7 @@ const FunctionArg* CoreFunction::findArg(const std::string& id) const {
 }
 
 // What AICORE can call since Core's own sound left (2026-11-16): STUTTER, VOICE STUTTER, the mixer and opening windows.
-std::vector<CoreFunction> buildFunctions() {
+std::vector<CoreFunction> buildFunctions(const doc::PCoreCatalog* pcore) {
   std::vector<CoreFunction> out;
   for (const auto& pc : pluginCalls())
     if (auto f = pc.describe()) out.push_back(std::move(*f));
@@ -254,6 +255,7 @@ std::vector<CoreFunction> buildFunctions() {
                      "\"mixer\", \"score\" (Stage Core, the song's parts), or an effect's id or name (a plugin effect's window). Changes nothing";
   open.tags = {"open", "window", "plugin", "abrir"};
   out.push_back(std::move(open));
+  songcalls::addFunctions(out, pcore);  // the AI inside Core (2026-11-16): tracks, P-Core, S-Core
   return out;
 }
 
@@ -467,6 +469,7 @@ Proposal validateProposal(const json& raw, const std::vector<CoreFunction>& func
     return p;
   }
   const std::string style = songStyleKey(song);
+  songcalls::Pending pending = songcalls::startPending(song);
   for (const auto& c : calls) {
     const std::string fnId = str(c, "fn");
     const CoreFunction* f = fnId.empty() ? nullptr : findFunction(functions, fnId);
@@ -497,10 +500,21 @@ Proposal validateProposal(const json& raw, const std::vector<CoreFunction>& func
         if (track) {
           call.trackId = track->id;
           call.trackName = track->name;
+        } else if (const auto* nt = pending.newTrack(on)) {  // made by an earlier "track" call of this proposal
+          call.trackId = "new:" + nt->first;
+          call.trackName = nt->first;
         } else {
           call.warnings.push_back("no track called \"" + on + "\": choose one when applying");
         }
       }
+    }
+    if (songcalls::isSongFamily(f->family)) {
+      if (songcalls::validate(c, *f, song, track, call, pending, p.problems)) p.calls.push_back(std::move(call));
+      continue;
+    }
+    if (call.trackId.rfind("new:", 0) == 0) {
+      p.problems.push_back(f->name + " on the new track " + call.trackName + ": only P-Core, Arrange and Plays can use it in the same proposal: left out");
+      continue;
     }
     // "set": the effect already there, its preset and knobs (checked against what that effect is).
     if (f->family == "setting") {
@@ -724,6 +738,7 @@ Proposal validateProposal(const json& raw, const std::vector<CoreFunction>& func
 }
 
 std::string describeCall(const Call& c) {
+  if (songcalls::isSongFamily(c.fn->family)) return songcalls::describe(c);
   std::string out = c.fn->name;
   if (c.fn->family == "sample") out += " " + c.sampleName;
   if (c.fn->family == "setting") out = "Set " + c.effectName;
@@ -749,7 +764,13 @@ std::string describeCall(const Call& c) {
 
 std::vector<std::string> applyProposal(doc::Document& song, const Proposal& p, const std::string& chosenTrack, const ApplyEnv& env) {
   std::vector<std::string> lines;
-  for (const auto& c : p.calls) {
+  std::map<std::string, std::string> made;  // new tracks of this proposal: name -> id
+  for (size_t i = 0; i < p.calls.size();) {
+    if (songcalls::isSongFamily(p.calls[i].fn->family)) {
+      for (auto& line : songcalls::apply(song, p, i, made, env)) lines.push_back(std::move(line));
+      continue;
+    }
+    const Call& c = p.calls[i++];
     const std::string where = c.trackId.empty() ? chosenTrack : c.trackId;
     if (where.empty()) throw doc::DocumentError("calls", "choose a track for " + c.fn->name);
     const bool master = where == "master";

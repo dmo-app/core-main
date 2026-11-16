@@ -30,6 +30,7 @@
 #include <string>
 #include <vector>
 #include "document.hpp"
+#include "pcore.hpp"
 #include "samples.hpp"
 
 namespace core::control {
@@ -70,7 +71,8 @@ struct CoreFunction {
 // The functions this Core can call now: the built-in effects, every Style FX (Core's own devices and presets,
 // doc::applyNativeRack, no macros), Core's own plugins and "sample". Built every time: a new Style FX file changes
 // it at once.
-std::vector<CoreFunction> buildFunctions();
+// With a P-Core catalogue, "pcore" lists its parts, shapes, styles and scales (else it takes any, checked when applied).
+std::vector<CoreFunction> buildFunctions(const doc::PCoreCatalog* pcore = nullptr);
 // By id, or by the part after the family ("buildup/roll", "reverb") when only one function has it.
 const CoreFunction* findFunction(const std::vector<CoreFunction>& functions, const std::string& id);
 
@@ -134,6 +136,7 @@ std::string describeCall(const Call& call);
 // What applying needs from the app.
 struct ApplyEnv {
   const doc::SampleIndex* samples = nullptr;
+  const doc::PCoreCatalog* pcore = nullptr;  // "pcore" calls (pcore/styles.json)
 };
 // Makes every call of the proposal on `song` (the caller commits it as one undo step). chosenTrack: for the calls
 // without a track ("master" for the master). Throws doc::DocumentError when a call is refused: then nothing

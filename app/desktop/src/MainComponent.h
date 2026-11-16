@@ -20,6 +20,7 @@
 #include "InspectorPanel.h"
 #include "LibraryPanel.h"
 #include "PatternEditor.h"
+#include "AiPanel.h"
 #include "PatternsWindow.h"
 #include "Plugins.h"
 #include "Waveforms.h"
@@ -164,6 +165,8 @@ private:
   std::vector<control::CoreFunction> callableFunctions() const;
   void pollBridge();          // the timer: the state written when it changed, the inbox read when it changed
   void showProposals();       // the AI button
+  void openAiChat();          // AI > AI chat: Core's own AI (AiPanel)
+  std::vector<std::string> applyAiProposal(const nlohmann::json& proposal);  // one undo step; throws when refused
   void applyProposal(int index, juce::Component* button);
   void finishProposal(int index, const std::string& status, const json& result);
   int indexOf(const std::string& proposalId) const;
@@ -244,6 +247,8 @@ private:
   // plays a pattern, the engine gets that pattern alone, looped (doc::rackPlayDocument); stopping gives the song back.
   void openPatterns();
   std::unique_ptr<PatternsWindow> patternsWindow_;
+  std::unique_ptr<ai::Knowledge> aiKnowledge_;  // the AI's style knowledge base (ai/ beside Core.exe), opened with the chat
+  std::unique_ptr<AiWindow> aiWindow_;  // Core's own AI chat (AI > AI chat)
   struct PatternPlay { std::string slot; std::optional<doc::Document> preview; int64_t openTick = 0; };
   std::optional<PatternPlay> patternPlay_;
   int64_t patternSongTick_ = 0;  // where the song was when the pattern started playing

@@ -20,6 +20,13 @@ target_link_libraries(domain_tests PRIVATE core_domain core_engine_lib)
 target_compile_definitions(domain_tests PRIVATE CORE_TEMPLATES_DIR="${CMAKE_SOURCE_DIR}/templates")
 add_test(NAME domain_tests COMMAND domain_tests)
 
+# The AI inside Core: the song's calls, the chat (canned answers, no network), the knowledge base, the providers.
+add_executable(ai_tests ai_tests.cpp)
+target_include_directories(ai_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(ai_tests PRIVATE core_ai)
+target_compile_definitions(ai_tests PRIVATE CORE_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+add_test(NAME ai_tests COMMAND ai_tests)
+
 # The command line: what the app and the scripts call.
 add_test(NAME cli_version COMMAND core-engine --version)
 set_tests_properties(cli_version PROPERTIES PASS_REGULAR_EXPRESSION "core-engine ${CORE_VERSION}")
@@ -28,7 +35,7 @@ add_test(NAME cli_demo_render COMMAND ${CMAKE_COMMAND} -DENGINE=$<TARGET_FILE:co
 add_test(NAME cli_measure COMMAND ${CMAKE_COMMAND} -DENGINE=$<TARGET_FILE:core-engine> -DWORK=${CMAKE_CURRENT_BINARY_DIR}/cli
                                   -P ${CMAKE_CURRENT_SOURCE_DIR}/cli_measure.cmake)
 
-set_tests_properties(engine_tests domain_tests cli_version cli_demo_render cli_measure PROPERTIES LABELS merge TIMEOUT 300)
+set_tests_properties(engine_tests domain_tests ai_tests cli_version cli_demo_render cli_measure PROPERTIES LABELS merge TIMEOUT 300)
 
 # The app's own end-to-end test (play, undo, save/reopen, export... on the null device, with its test plugins).
 # It opens Core's window for ~20 s, so it has its own label.

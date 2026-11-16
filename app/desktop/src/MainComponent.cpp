@@ -2065,6 +2065,7 @@ MainComponent::MainComponent(EngineSession::Options options, doc::Document docum
 MainComponent::~MainComponent() {
   globalKeys_.reset();  // no more keys into a component being destroyed
   patternsWindow_.reset();  // its buttons call this window
+  aiWindow_.reset();        // its Apply calls this window
   if (settingsWindow_ != nullptr) delete settingsWindow_.getComponent();  // it shows this window's settings and jobs
   if (sampleScan_) sampleScan_->stop = true;  // its thread owns what it uses and ends at the next file
   if (analysisJob_) analysisJob_->stop = true;  // the same
@@ -3237,7 +3238,48 @@ void MainComponent::setAiControl(bool on) {
 }
 
 std::vector<control::CoreFunction> MainComponent::callableFunctions() const {
-  return control::buildFunctions();
+  return control::buildFunctions(pcoreCatalog_ ? &*pcoreCatalog_ : nullptr);
+}
+
+// Core's own AI (2026-11-16): the chat window. Its proposals are checked here and applied as one "AI: ..." step.
+void MainComponent::openAiChat() {
+  if (!aiWindow_) {
+    AiPanel::Host h;
+    h.song = [this]() -> const doc::Document& { return history_.current(); };
+    h.functions = [this] { return callableFunctions(); };
+    h.pcore = pcoreCatalog_ ? &*pcoreCatalog_ : nullptr;
+    if (!aiKnowledge_) {  // ai/core-ai-knowledge.sqlite beside Core.exe (the AI package's), opened once
+      const juce::File db = juce::File::getSpecialLocation(juce::File::currentExecutableFile).getParentDirectory().getChildFile("ai").getChildFile("core-ai-knowledge.sqlite");
+      std::string why;
+      aiKnowledge_ = ai::Knowledge::open(pathOf(db), &why);
+      logLine(aiKnowledge_ ? "AI: knowledge base " + u8(aiKnowledge_->from()) + " (" + juce::String(aiKnowledge_->size()) + " chunks)" : "AI: " + u8(why));
+    }
+    h.knowledge = aiKnowledge_.get();
+    h.keyFolder = bridgeFolder();
+    h.apply = [this](const json& proposal) { return applyAiProposal(proposal); };
+    aiWindow_ = std::make_unique<AiWindow>(std::move(h));
+  }
+  aiWindow_->show();
+}
+
+std::vector<std::string> MainComponent::applyAiProposal(const json& proposal) {
+  const doc::SampleIndex* samples = hasSampleIndex_ ? &sampleIndex_ : nullptr;
+  const control::Proposal p = control::validateProposal(proposal, callableFunctions(), history_.current(), samples);
+  if (p.calls.empty()) throw doc::DocumentError("calls", "nothing in the proposal can be applied");
+  const std::string target = selectedTrack_.empty() ? editor_.track() : selectedTrack_;  // calls without a track
+  if (p.needsTrack() && !history_.current().findTrack(target)) throw doc::DocumentError("calls", "select a track first: some calls name none");
+  control::ApplyEnv env{samples, pcoreCatalog_ ? &*pcoreCatalog_ : nullptr};
+  doc::Document probe = history_.current();  // refused here, before any undo step
+  const std::vector<std::string> lines = control::applyProposal(probe, p, target, env);
+  std::string label = control::kAiLabelPrefix + (p.summary.empty() ? lines.front() : p.summary);
+  if (label.size() > 70) {
+    size_t cut = 70;
+    while (cut > 0 && ((unsigned char)label[cut] & 0xC0) == 0x80) --cut;
+    label = label.substr(0, cut) + "\xE2\x80\xA6";
+  }
+  edit([&](doc::Document& d) { control::applyProposal(d, p, target, env); }, u8(label));
+  notice_ = u8(label) + u8(" (Edit > Undo takes it back)");
+  return lines;
 }
 
 // Every second: the state AICORE reads (written when it changed), and the proposals waiting.
@@ -3330,7 +3372,7 @@ void MainComponent::applyProposal(int index, juce::Component* button) {
   if (p.calls.empty()) return;
   auto run = [this, item, fns, samples](const std::string& target) {
     const control::Proposal again = control::validateProposal(item.proposal, fns, history_.current(), samples);
-    control::ApplyEnv env{samples};
+    control::ApplyEnv env{samples, pcoreCatalog_ ? &*pcoreCatalog_ : nullptr};
     std::vector<std::string> lines;
     try {
       doc::Document probe = history_.current();  // refused here, before any undo step
@@ -3399,7 +3441,7 @@ void MainComponent::aiBadgePressed(bool popup) {
   if (aiAllowed_ && !inbox_.empty()) showProposals();
 }
 
-namespace { enum AicoreMenuId { kAicoreOpen = 2000, kAicoreProposals, kAicoreBridge, kAicoreChoose, kAicoreAllow }; }
+namespace { enum AicoreMenuId { kAicoreOpen = 2000, kAicoreProposals, kAicoreBridge, kAicoreChoose, kAicoreAllow, kAiChat, kAiFolder }; }
 
 // The same items in the AICORE menu (menu bar) and on the button's right-click.
 static void addAicoreItems(juce::PopupMenu& menu, bool allowed, bool canSwitch, int waiting, const juce::String& state) {
@@ -4707,6 +4749,7 @@ juce::String MainComponent::MenuBar::getTooltip() {
       "Cut or render samples, the audio output and the MIDI input",
       "Core's own plugins: the song, the instruments, the gestures, each in its window",
       "Your sample library: its folder, rescan, the best samples for this song",
+      "Core's AI: ask for a beat, a song structure or a change to a part (a proposal you apply)",
       "AICORE, Core's add-on: open its chat, its proposals, its folder",
       "Logs (problems, crash dumps) and the version",
   };
@@ -4722,7 +4765,7 @@ juce::String MainComponent::MenuBar::getTooltip() {
   return {};
 }
 
-juce::StringArray MainComponent::getMenuBarNames() { return {"File", "Edit", "View", "Audio", "Plugins", "Samples", "AICORE", "Help"}; }
+juce::StringArray MainComponent::getMenuBarNames() { return {"File", "Edit", "View", "Audio", "Plugins", "Samples", "AI", "AICORE", "Help"}; }
 
 juce::PopupMenu MainComponent::getMenuForIndex(int index, const juce::String&) {
   juce::PopupMenu menu;
@@ -4831,9 +4874,12 @@ juce::PopupMenu MainComponent::getMenuForIndex(int index, const juce::String&) {
     menu.addItem(juce::PopupMenu::Item(u8("Shuffle samples (another good pick)")).setID(kSampleShuffle).setEnabled(hasSampleIndex_));
     menu.addItem(juce::PopupMenu::Item(u8("Suggest samples for new songs from style templates")).setID(kSampleAuto)
                      .setTicked(settings_.getUserSettings()->getBoolValue("suggestSamples", true)));
-  } else if (index == 5) {  // AICORE: the same items as the AICORE button's right-click
+  } else if (index == 5) {  // Core's own AI (2026-11-16): the chat window, apart from AICORE
+    menu.addItem(juce::PopupMenu::Item(u8("AI chat…")).setID(kAiChat));
+    menu.addItem(juce::PopupMenu::Item(u8("Open the AI folder (the key file)")).setID(kAiFolder));
+  } else if (index == 6) {  // AICORE: the same items as the AICORE button's right-click
     addAicoreItems(menu, aiAllowed_, realOutput_, aiAllowed_ ? (int)inbox_.size() : 0, aicoreState(aicore_, aiAllowed_));
-  } else if (index == 6) {
+  } else if (index == 7) {
     menu.addItem(juce::PopupMenu::Item(u8("Open the logs folder (problems, crash dumps)")).setID(kOpenLogs));
     menu.addSeparator();
     menu.addItem(juce::PopupMenu::Item(u8("About Core (version ") + CORE_VERSION + ")").setID(kAbout));
@@ -4878,6 +4924,8 @@ juce::PopupMenu MainComponent::getMenuForIndex(int index, const juce::String&) {
 
 void MainComponent::menuItemSelected(int id, int) {
   switch (id) {
+    case kAiChat: openAiChat(); break;
+    case kAiFolder: bridgeFolder().createDirectory(); bridgeFolder().startAsProcess(); break;
     case kAicoreOpen: openAicore(); break;
     case kAicoreProposals: showProposals(); break;
     case kAicoreAllow: setAiControl(!aiAllowed_); break;
