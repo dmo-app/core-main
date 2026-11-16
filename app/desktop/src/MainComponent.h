@@ -436,7 +436,21 @@ private:
   static constexpr int64_t kLiveWaveBin = 30;  // 1/128 note at 960 ppq
   std::map<std::string, LiveWave> liveWaves_;  // trackId|patternId
   void captureLiveWaves();
+  // Each track's stem over the song, rendered by the engine in the background with the plugins (as an export), so
+  // the clips draw the sound their plugins make (Diogo 2026-11-16: waveforms, as in Bitwig). The shown ones stay
+  // until newer ones are written (no flicker while editing).
+  struct Stems {
+    juce::File folder;                           // a temp folder of this window, removed when it closes
+    std::map<std::string, std::string> shown;    // trackId -> file
+    std::map<std::string, std::string> pending;  // the files of the render running now
+    int64_t renderedRevision = -1, pendingRevision = -1, seenRevision = -1;
+    double seenAt = 0, failedAt = 0;
+    std::map<std::string, float> loudest;        // file -> its loudest peak (each stem is drawn to the clip's height)
+  } stems_;
+  void updateStems();
 public:
+  std::shared_ptr<const Waveform> stemWave(const std::string& trackId);
+  float stemGain(const std::string& trackId);  // what brings the stem's loudest peak to the clip's height
   const LiveWave* liveWave(const std::string& trackId, const doc::Pattern& pattern) const;
   static uint64_t patternSignature(const doc::Pattern& pattern);
 private:

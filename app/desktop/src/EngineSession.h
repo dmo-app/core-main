@@ -78,6 +78,7 @@ struct SessionSnapshot {
   std::vector<float> effectSpectrum;
   std::map<std::string, std::pair<float, float>> trackPeaks;  // ids of the applied revision
   ExportJob exportJob;
+  ExportJob waveJob;  // the stems rendered in the background so the clips show their sound (renderWaves)
   std::vector<std::string> devices;  // output devices the engine can open
   std::string device;                // the one in use ("" = none)
   // Sounds and effects that failed while playing and went silent until the next change: "track: unit".
@@ -116,6 +117,10 @@ public:
   struct ExportFile { std::string pathUtf8, trackId; bool withoutMasterGain = false; bool mono = false; };
   void exportFiles(const std::vector<ExportFile>& files, int64_t startTick, int64_t endTick, int bits);
   void cancelExport();
+  // The tracks' stems over the whole song, rendered in the background by the engine with its own plugin instances
+  // (as an export), so the clips can draw the sound the plugins make (Diogo 2026-11-16: waveforms, as in Bitwig).
+  // Never in the way of an export: one asked while these render cancels them. Mono, 24 bit, no tail.
+  void renderWaves(const std::vector<std::string>& pathsUtf8, const std::vector<std::string>& trackIds);
   void selectDevice(const std::string& name);  // also used by later restarts
   // Live notes (computer keyboard, MIDI): any thread. They reach the engine in order with the other
   // commands and play at the start of its next audio block (latency: one device buffer).
@@ -153,7 +158,7 @@ public:
 
 private:
   struct Action {
-    enum Kind { Play, Stop, Home, Seek, SetLoop, Export, CancelExport, SelectDevice, LiveNote, Panic, Cpu, ResetLoudness, Analysis, Listen, Watch, PluginStates, PluginParams, PluginPreset, PluginEditor, ReleasePlugins } kind;
+    enum Kind { Play, Stop, Home, Seek, SetLoop, Export, WaveRender, CancelExport, SelectDevice, LiveNote, Panic, Cpu, ResetLoudness, Analysis, Listen, Watch, PluginStates, PluginParams, PluginPreset, PluginEditor, ReleasePlugins } kind;
     int64_t tick = 0;
     std::string text;
     int bits = 24;

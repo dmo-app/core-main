@@ -1,6 +1,7 @@
 #include "MainComponent.h"
 #include "ChoiceDialog.h"
 #include "core/project.hpp"
+#include "track_waves.hpp"
 #include "follow.hpp"
 #include "stutter.hpp"
 #include "Language.h"
@@ -361,6 +362,26 @@ public:
   // A pattern's sound inside its clip, every repeat: the peaks as a light veil and the RMS body over them, in the
   // track's colour and see-through, so the grid shows behind. The fader's level is in the picture (a quieter track
   // draws smaller), the mute dims it.
+  // The part of the track's stem under a clip (the stem has the fader in it already). A silent part (a plugin
+  // that makes no sound there): the clip shows its notes instead.
+  bool stemHeard(const doc::Clip& c, const Waveform& w) const {
+    const auto [a, b] = doc::stemSeconds(owner_.history_.current(), (double)c.startTick, (double)(c.startTick + c.lengthTicks));
+    return w.peakBetween(a, b) > 0.001f;
+  }
+  void paintStemWave(juce::Graphics& g, const doc::Clip& c, const Waveform& w, juce::Rectangle<int> box, int x0, int x1) {
+    const auto area = box.reduced(0, 3);
+    const auto visible = area.getIntersection(g.getClipBounds());
+    if (visible.isEmpty() || x1 <= x0 || w.peaks.empty()) return;
+    const doc::Document& d = owner_.history_.current();
+    const double ticksPerPixel = (double)c.lengthTicks / (double)(x1 - x0);
+    const juce::Colour colour = colour_.interpolatedWith(kText, 0.3f).withAlpha(track_.mix.mute ? 0.35f : 0.82f);
+    const float mid = (float)area.getCentreY(), half = area.getHeight() / 2.0f - 1.0f, gain = owner_.stemGain(id_);
+    for (int x = visible.getX(); x < visible.getRight(); ++x) {
+      const double from = (double)c.startTick + (x - x0) * ticksPerPixel;
+      const auto [a, b] = doc::stemSeconds(d, from, from + ticksPerPixel);
+      drawWaveColumn(g, w, (float)x, mid, half, a, b, colour, gain);
+    }
+  }
   void paintClipWave(juce::Graphics& g, const doc::Clip& c, const doc::Pattern& p, const Waveform& w, juce::Rectangle<int> box, int x0, int x1) {
     const auto area = box.reduced(0, 3);
     const auto visible = area.getIntersection(g.getClipBounds());
@@ -499,7 +520,9 @@ public:
         if (const int x = laneX((double)t); x > box.getX() + 2 && x < box.getRight() - 1) g.drawVerticalLine(x, (float)box.getY() + 2, (float)box.getBottom() - 2);
       // The pattern's real sound as a waveform (rendered by the engine's instruments in the background); its notes
       // until the first render is done, or when there is no sound to show (a plugin, silence).
-      if (auto wave = owner_.patternWaves_.get(owner_.history_.current(), owner_.history_.revision(), id_, p->id, owner_.projectDir()))
+      if (auto stem = owner_.stemWave(id_); stem && stemHeard(c, *stem))
+        paintStemWave(g, c, *stem, box, x0, x1);
+      else if (auto wave = owner_.patternWaves_.get(owner_.history_.current(), owner_.history_.revision(), id_, p->id, owner_.projectDir()))
         paintClipWave(g, c, *p, *wave, box, x0, x1);
       else if (const auto* live = owner_.liveWave(id_, *p))
         paintLiveWave(g, c, *p, *live, box, x0, x1);
@@ -2223,6 +2246,7 @@ MainComponent::~MainComponent() {
   for (int i = 0; i < 300 && autosaveJob_ && autosaveJob_->state.load() == 0; ++i) juce::Thread::sleep(10);  // a copy being written finishes first
   doc::removeAutosave(doc::autosavePath(pathOf(autosaveFolder()), autosaveSession_));  // a clean end: nothing to recover
   stopTimer();
+  if (stems_.folder != juce::File()) stems_.folder.deleteRecursively();  // the clips' stems: a cache
   if (midiInput_) midiInput_->stop();  // no more callbacks into a component being destroyed
   midiInput_.reset();
   session_.reset();  // closes the engine
@@ -6152,6 +6176,68 @@ void MainComponent::captureLiveWaves() {
   }
 }
 
+std::shared_ptr<const Waveform> MainComponent::stemWave(const std::string& trackId) {
+  const auto it = stems_.shown.find(trackId);
+  if (it == stems_.shown.end()) return nullptr;
+  return waves_.get("stem:" + it->second, juce::File(u8(it->second)));
+}
+
+float MainComponent::stemGain(const std::string& trackId) {
+  const auto it = stems_.shown.find(trackId);
+  if (it == stems_.shown.end()) return 1.0f;
+  auto known = stems_.loudest.find(it->second);
+  if (known == stems_.loudest.end()) {
+    const auto wave = stemWave(trackId);
+    if (!wave || wave->peaks.empty()) return 1.0f;
+    known = stems_.loudest.emplace(it->second, *std::max_element(wave->peaks.begin(), wave->peaks.end())).first;
+  }
+  return known->second > 0.001f ? std::min(50.0f, 0.95f / known->second) : 1.0f;
+}
+
+// Once the song has been still for a moment (stopped, no export, the engine has this revision): the stems of the
+// tracks whose clips play notes are rendered again; when they are written the clips draw them.
+void MainComponent::updateStems() {
+  const double now = juce::Time::getMillisecondCounterHiRes();
+  const ExportJob& job = snap_.waveJob;
+  if (stems_.pendingRevision >= 0 && !job.active() && job.state != "") {
+    if (job.state == "succeeded") {
+      for (const auto& [id, file] : stems_.shown)
+        if (stems_.pending.count(id) == 0 || stems_.pending[id] != file) juce::File(u8(file)).deleteFile();
+      stems_.shown = stems_.pending;
+      stems_.loudest.clear();
+      stems_.renderedRevision = stems_.pendingRevision;
+      repaint();
+    } else {
+      stems_.failedAt = now;  // cancelled for an export, or failed: tried again a little later
+      for (const auto& [id, file] : stems_.pending) juce::File(u8(file)).deleteFile();
+    }
+    stems_.pending.clear();
+    stems_.pendingRevision = -1;
+  }
+  if (snap_.acceptedRevision != stems_.seenRevision) { stems_.seenRevision = snap_.acceptedRevision; stems_.seenAt = now; }
+  if (stems_.pendingRevision >= 0 || job.active() || snap_.exportJob.active() || snap_.playing) return;
+  if (snap_.acceptedRevision < 0 || snap_.acceptedRevision != snap_.documentRevision || snap_.acceptedRevision == stems_.renderedRevision) return;
+  if (now - stems_.seenAt < 1200 || now - stems_.failedAt < 5000) return;
+  const auto ids = doc::tracksForWaves(history_.current());
+  if (ids.empty()) { stems_.renderedRevision = snap_.acceptedRevision; return; }
+  if (stems_.folder == juce::File()) {
+    const juce::File all = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("core-stems");
+    // A window that did not close cleanly (a crash) left its folder: gone after a day.
+    for (const auto& old : all.findChildFiles(juce::File::findDirectories, false))
+      if (old.getLastModificationTime() < juce::Time::getCurrentTime() - juce::RelativeTime::days(1)) old.deleteRecursively();
+    stems_.folder = all.getChildFile(juce::Uuid().toString());
+    stems_.folder.createDirectory();
+  }
+  std::vector<std::string> paths;
+  for (const auto& id : ids) {
+    const std::string path = stems_.folder.getChildFile(u8(doc::waveFileName(id, snap_.acceptedRevision))).getFullPathName().toStdString();
+    paths.push_back(path);
+    stems_.pending[id] = path;
+  }
+  stems_.pendingRevision = snap_.acceptedRevision;
+  session_->renderWaves(paths, ids);
+}
+
 void MainComponent::paintMasterRow(juce::Graphics& g, juce::Rectangle<int> row) {
   // As a track: the header (name, its level as a small meter), the lane empty (nothing is placed on the master).
   auto head = row.removeFromLeft(kTrackHead).reduced(0, 1);
@@ -6688,6 +6774,7 @@ void MainComponent::timerCallback() {
   if (sendPending_) { sendPending_ = false; session_->setDocument(engineDocument()); }  // a drag's latest state
   snap_ = session_->snapshot();
   captureLiveWaves();
+  updateStems();
   // A plugin's own window changed its sound: the song has unsaved changes (its state is taken when it is saved).
   if (snap_.pluginEdits != pluginEditsSeen_) { pluginEditsSeen_ = snap_.pluginEdits; pluginsDirty_ = true; }
   updatePlayTick();

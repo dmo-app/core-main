@@ -225,6 +225,22 @@ void EngineSession::exportWav(const std::string& pathUtf8, int bits) {
   wake_.notify_all();
 }
 void EngineSession::cancelExport() { queue({Action::CancelExport}); }
+
+void EngineSession::renderWaves(const std::vector<std::string>& pathsUtf8, const std::vector<std::string>& trackIds) {
+  if (pathsUtf8.empty() || pathsUtf8.size() != trackIds.size()) return;
+  json list = json::array();
+  for (size_t i = 0; i < pathsUtf8.size(); ++i) list.push_back({{"path", pathsUtf8[i]}, {"track", trackIds[i]}, {"mono", true}});
+  std::lock_guard<std::mutex> g(mutex_);
+  if (snap_.exportJob.active() || snap_.waveJob.active()) return;
+  snap_.waveJob = ExportJob{};
+  snap_.waveJob.state = "starting";
+  snap_.waveJob.path = pathsUtf8.front();
+  snap_.waveJob.files = (int)pathsUtf8.size();
+  Action a{Action::WaveRender};
+  a.args = {{"files", list}, {"startTick", 0}, {"endTick", json()}};
+  actions_.push_back(a);
+  wake_.notify_all();
+}
 void EngineSession::liveNote(const std::string& trackId, int pitch, double velocity, bool on) {
   Action a{Action::LiveNote};
   a.text = trackId;
@@ -298,7 +314,7 @@ void EngineSession::run() {
       // An export takes the document as it is now: send it first if an edit is still pending. So does opening a
       // plugin's window or reading its parameters: a plugin just added is only in the engine once its edit is sent
       // (audit R05: the editor was asked for a plugin the engine did not have yet).
-      const bool needsDocument = action.kind == Action::Export || action.kind == Action::PluginEditor || action.kind == Action::PluginParams ||
+      const bool needsDocument = action.kind == Action::Export || action.kind == Action::WaveRender || action.kind == Action::PluginEditor || action.kind == Action::PluginParams ||
                                  action.kind == Action::PluginPreset;
       if (needsDocument && wantedRevision_ > sentRevision_ && snap_.status != EngineStatus::Diverged) sync(lock);
       if (action.kind == Action::Export && (snap_.status == EngineStatus::Diverged || snap_.acceptedRevision != wantedRevision_)) {
@@ -306,6 +322,12 @@ void EngineSession::run() {
         snap_.exportJob.error = "The engine did not accept the current document; nothing was exported.";
         continue;
       }
+      if (action.kind == Action::WaveRender && (snap_.status == EngineStatus::Diverged || snap_.acceptedRevision != wantedRevision_ ||
+                                                snap_.exportJob.active())) {
+        snap_.waveJob.state = "failed";
+        continue;
+      }
+      const uint64_t waveJobId = snap_.waveJob.active() ? snap_.waveJob.jobId : 0;
       const doc::Loop loop = loop_;
       const int64_t accepted = snap_.acceptedRevision;
       const uint64_t jobId = snap_.exportJob.jobId;
@@ -330,9 +352,29 @@ void EngineSession::run() {
             args["bits"] = action.bits;
             args["tailMs"] = 2000;
             args["revision"] = accepted;
-            const json job = client_->command("render.start", args);
+            // The clips' waveforms give way: their render is cancelled and the export starts once it has stopped.
+            if (waveJobId) client_->command("render.cancel", {{"jobId", waveJobId}});
+            json job;
+            for (int attempt = 0;; ++attempt) {
+              try { job = client_->command("render.start", args); break; }
+              catch (const EngineError& e) {
+                if (!waveJobId || attempt >= 80 || std::string(e.what()).find("Another export") == std::string::npos) throw;
+                std::this_thread::sleep_for(std::chrono::milliseconds(25));
+              }
+            }
             std::lock_guard<std::mutex> g(mutex_);
             readJob(snap_.exportJob, job);  // the reply comes before any event of this job
+            break;
+          }
+          case Action::WaveRender: {
+            json args = action.args;
+            args["bits"] = 24;
+            args["tailMs"] = 0;
+            args["revision"] = accepted;
+            const json job = client_->command("render.start", args);
+            std::lock_guard<std::mutex> g(mutex_);
+            readJob(snap_.waveJob, job);
+            snap_.waveJob.revision = accepted;
             break;
           }
           case Action::CancelExport:
@@ -388,6 +430,7 @@ void EngineSession::run() {
       } catch (const EngineError& e) {
         std::lock_guard<std::mutex> g(mutex_);
         if (action.kind == Action::Export) { snap_.exportJob.state = "failed"; snap_.exportJob.error = e.what(); }
+        else if (action.kind == Action::WaveRender) { snap_.waveJob.state = "failed"; snap_.waveJob.error = e.what(); }
         else if (action.reply) action.reply->set_value(json());  // null: no answer
         else snap_.message = e.what();
       }
@@ -586,6 +629,11 @@ void EngineSession::onEvent(const json& event) {
   if (kind == "job") {
     // Only the current job's events: an older job to the same file must not be taken for it.
     if (snap_.exportJob.jobId != 0 && event.value("jobId", (uint64_t)0) == snap_.exportJob.jobId) readJob(snap_.exportJob, event);
+    if (snap_.waveJob.jobId != 0 && event.value("jobId", (uint64_t)0) == snap_.waveJob.jobId) {
+      const int64_t revision = snap_.waveJob.revision;
+      readJob(snap_.waveJob, event);
+      if (snap_.waveJob.revision < 0) snap_.waveJob.revision = revision;
+    }
     return;
   }
   if (kind != "state") return;
