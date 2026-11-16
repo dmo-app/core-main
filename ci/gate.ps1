@@ -55,14 +55,15 @@ if (-not $Online) {
 }
 
 # --- build limpa: apaga a pasta, mas so se for uma pasta de build (tem CMakeCache.txt) ou estiver vazia
-$clean = "nao"
+# (Nao "$clean": no PowerShell os nomes nao distinguem maiusculas, e $clean seria o parametro -Clean.)
+$buildLimpa = "nao"
 if ($Clean -and (Test-Path $Build)) {
   $isBuild = Test-Path (Join-Path $Build "CMakeCache.txt")
   $isEmpty = -not (Get-ChildItem -Force $Build | Select-Object -First 1)
   if (-not ($isBuild -or $isEmpty)) { Write-Host "Gate: $Build nao e uma pasta de build (sem CMakeCache.txt); nao apago."; exit 1 }
   Remove-Item -Recurse -Force $Build
 }
-if (-not (Test-Path (Join-Path $Build "CMakeCache.txt"))) { $clean = "sim" }
+if (-not (Test-Path (Join-Path $Build "CMakeCache.txt"))) { $buildLimpa = "sim" }
 New-Item -ItemType Directory -Force -Path $Build | Out-Null
 
 # vcvars64: o VS 18 BuildTools (o VS 2022 desta maquina nao tem vcvars64.bat); senao, o que o vswhere encontrar.
@@ -92,7 +93,7 @@ where cmake > "$cmakeFile"
 cmake -S "$src" -B "$Build" -G Ninja -DCMAKE_BUILD_TYPE=Release $juceArg || exit /b 1
 cmake --build "$Build" --parallel $Jobs || exit /b 1
 ctest --test-dir "$Build" $label --no-tests=error --output-on-failure --timeout 600 --output-junit "$junit"
-echo %ERRORLEVEL%> "$rcFile"
+> "$rcFile" echo %ERRORLEVEL%
 exit /b 0
 "@ | Set-Content -Encoding ASCII $bat
 
@@ -107,7 +108,7 @@ $ctestRc = if (Test-Path $rcFile) { (Get-Content $rcFile -First 1).Trim() } else
 $cmake = if (Test-Path $cmakeFile) { (Get-Content $cmakeFile -First 1).Trim() } else { "cmake" }
 $resumo = Join-Path $Build "gate-resumo.txt"
 & $cmake "-DSRC=$src" "-DBUILD=$Build" "-DJUNIT=$junit" "-DCTEST_RC=$(if ($ctestRc -match '^\d+$') { $ctestRc } else { 99 })" `
-         "-DSECS=$secs" "-DCLEAN=$clean" "-DAPP=ON" "-DBASE=$Base" "-DOUT=$resumo" -P (Join-Path $src "ci\resumo.cmake") 2>&1 | Out-Null
+         "-DSECS=$secs" "-DCLEAN=$buildLimpa" "-DAPP=ON" "-DBASE=$Base" "-DOUT=$resumo" -P (Join-Path $src "ci\resumo.cmake") 2>&1 | Out-Null
 $resumoRc = $LASTEXITCODE
 $ErrorActionPreference = "Stop"
 if ($buildRc -ne 0) {
