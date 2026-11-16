@@ -85,6 +85,11 @@ add_test(NAME vital_tests COMMAND vital_tests)
 # Windows only, by hand, with Vital installed: does the real Vital take Core's preset state? (see vital_check.cpp)
 add_executable(vital_check vital_check.cpp)
 target_link_libraries(vital_check PRIVATE core_domain core_engine_lib)
+# The arrangement's time selection (2026-11-16): copy, clear, paste and duplicate a piece of time on several tracks.
+add_executable(time_range_tests time_range_tests.cpp)
+target_include_directories(time_range_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(time_range_tests PRIVATE core_domain core_engine_lib)
+add_test(NAME time_range_tests COMMAND time_range_tests)
 
 # The command line: what the app and the scripts call.
 add_test(NAME cli_version COMMAND core-engine --version)
@@ -97,7 +102,7 @@ add_test(NAME cli_measure COMMAND ${CMAKE_COMMAND} -DENGINE=$<TARGET_FILE:core-e
 add_test(NAME cli_unicode COMMAND ${CMAKE_COMMAND} -DENGINE=$<TARGET_FILE:core-engine> -DWORK=${CMAKE_CURRENT_BINARY_DIR}/cli
                                   -P ${CMAKE_CURRENT_SOURCE_DIR}/cli_unicode.cmake)
 
-set_tests_properties(engine_tests domain_tests ai_tests aifx_tests role_tests midi_tests bug_tests audit_tests audit2_tests hunt_tests bitwig_tests vital_tests cli_version cli_demo_render cli_measure cli_unicode
+set_tests_properties(engine_tests domain_tests ai_tests aifx_tests role_tests midi_tests bug_tests audit_tests audit2_tests hunt_tests bitwig_tests vital_tests time_range_tests cli_version cli_demo_render cli_measure cli_unicode
                      PROPERTIES LABELS merge TIMEOUT 300)
 
 # The app's own end-to-end test (play, undo, save/reopen, export... on the null device, with its test plugins).
