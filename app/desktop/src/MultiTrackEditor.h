@@ -34,7 +34,7 @@ public:
 
   explicit MultiTrackEditor(Host& host) : host_(host) {
     setWantsKeyboardFocus(true);
-    for (auto* b : {&addSelected_, &edit_, &follow_}) {
+    for (auto* b : {&addSelected_, &edit_, &follow_, &zoomOut_, &zoomIn_, &foldButton_}) {
       addAndMakeVisible(*b);
       b->setColour(juce::TextButton::buttonColourId, theme::kControl);
     }
@@ -46,7 +46,20 @@ public:
     edit_.onClick = [this] { if (onEditMenu && !active_.empty()) onEditMenu(active_, from(), to(), edit_); };
     follow_.setButtonText(juce::String::fromUTF8("Follow arrange"));
     follow_.setTooltip(juce::String::fromUTF8("Show the arrangement's time selection (or what it shows) again"));
-    follow_.onClick = [this] { scrolled_ = false; repaint(); };
+    follow_.onClick = [this] { scrolled_ = false; scrollY_ = 0; resized(); repaint(); };
+    // Zoom (Diogo 2026-11-16: "poder ampliar o máximo e editar facilmente"): from 32 bars down to one beat.
+    zoomIn_.setButtonText("+");
+    zoomOut_.setButtonText(juce::String::fromUTF8("\u2212"));
+    zoomIn_.setTooltip(juce::String::fromUTF8("Zoom in (Ctrl+wheel), down to one beat"));
+    zoomOut_.setTooltip(juce::String::fromUTF8("Zoom out (Ctrl+wheel)"));
+    zoomIn_.onClick = [this] { zoomBy(0.5, rulerArea().getCentreX()); };
+    foldButton_.setButtonText("Fold");
+    foldButton_.setClickingTogglesState(true);
+    foldButton_.setToggleState(true, juce::dontSendNotification);
+    foldButton_.setColour(juce::TextButton::buttonOnColourId, theme::kPrimary);
+    foldButton_.setTooltip(juce::String::fromUTF8("Fold: only the keys that play (off: every key around them)"));
+    foldButton_.onClick = [this] { fold_ = foldButton_.getToggleState(); scrollY_ = 0; rowH_ = 0; repaint(); };
+    zoomOut_.onClick = [this] { zoomBy(2.0, rulerArea().getCentreX()); };
   }
 
   // The window: after any edit, undo or open.
@@ -81,7 +94,13 @@ public:
   void resized() override {
     auto top = getLocalBounds().removeFromTop(kChips).reduced(4, 3);
     edit_.setBounds(top.removeFromRight(64));
-    top.removeFromRight(4);
+    top.removeFromRight(6);
+    zoomIn_.setBounds(top.removeFromRight(24));
+    top.removeFromRight(2);
+    zoomOut_.setBounds(top.removeFromRight(24));
+    top.removeFromRight(6);
+    foldButton_.setBounds(top.removeFromRight(44));
+    top.removeFromRight(6);
     follow_.setBounds(top.removeFromRight(104));
     follow_.setVisible(scrolled_);
     top.removeFromRight(4);
@@ -96,7 +115,7 @@ public:
   bool keyPressed(const juce::KeyPress& key) override;
 
 private:
-  static constexpr int kChips = 28, kRuler = 20, kHead = 150, kVel = 44;
+  static constexpr int kChips = 28, kRuler = 34, kHead = 120, kVel = 56;
   static constexpr int64_t kBar = 4 * doc::kPpq, kStep = doc::kPpq / 4;
 
   struct Lane {
@@ -111,6 +130,7 @@ private:
     int64_t start = 0, length = 0;
     int pitch = 0;
     bool rightEdge = false;
+    std::string trackId;
   };
 
   static std::string named(const doc::Document& d, const char* word) {
@@ -156,6 +176,23 @@ private:
     repaint();
   }
 
+  // The grid: the finest of 1/64, 1/32, 1/16, 1/8, beat, bar whose steps are at least 14 px apart.
+  int64_t snapTicks() const {
+    const double px = (double)std::max(1, rulerArea().getWidth()) / (double)std::max<int64_t>(1, to() - from());
+    for (int64_t s : std::initializer_list<int64_t>{(int64_t)doc::kPpq / 16, (int64_t)doc::kPpq / 8, (int64_t)doc::kPpq / 4, (int64_t)doc::kPpq / 2, (int64_t)doc::kPpq, kBar})
+      if (s * px >= 14.0) return s;
+    return kBar;
+  }
+  void zoomBy(double factor, int x) {
+    const int64_t a = from(), len = to() - from();
+    const int64_t at = tickAt(x, false);
+    const double share = (double)(at - a) / (double)std::max<int64_t>(1, len);
+    viewLen_ = std::clamp<int64_t>((int64_t)std::llround((double)len * factor), doc::kPpq, 32 * kBar);
+    viewFrom_ = std::max<int64_t>(0, (at - (int64_t)(share * (double)viewLen_)) / (doc::kPpq / 4) * (doc::kPpq / 4));
+    scrolled_ = true;
+    resized();
+    repaint();
+  }
   int64_t from() const {
     if (scrolled_) return viewFrom_;
     auto r = arrangeRange ? arrangeRange() : std::pair<int64_t, int64_t>{0, 8 * kBar};
@@ -166,11 +203,13 @@ private:
     auto r = arrangeRange ? arrangeRange() : std::pair<int64_t, int64_t>{0, 8 * kBar};
     const int64_t a = std::max<int64_t>(0, r.first / kBar * kBar);
     const int64_t b = std::max(a + kBar, (r.second + kBar - 1) / kBar * kBar);
-    return std::min(b, a + 16 * kBar);  // notes stay readable: at most 16 bars
+    return std::min(b, a + 4 * kBar);  // big enough to edit: at most 4 bars (zoom out for more)
   }
   juce::Rectangle<int> chipsArea() const { return getLocalBounds().removeFromTop(kChips); }
   juce::Rectangle<int> rulerArea() const { return getLocalBounds().withTrimmedTop(kChips).removeFromTop(kRuler).withTrimmedLeft(kHead); }
   juce::Rectangle<int> lanesArea() const { return getLocalBounds().withTrimmedTop(kChips + kRuler).withTrimmedBottom(kVel); }
+  int lanesHeight_ = 0;  // all the lanes together (more than lanesArea: they scroll)
+  int scrollY_ = 0;
   juce::Rectangle<int> velArea() const { return getLocalBounds().removeFromBottom(kVel).withTrimmedLeft(kHead); }
   int xOf(int64_t tick) const {
     const auto r = rulerArea();
@@ -181,7 +220,8 @@ private:
     const auto r = rulerArea();
     const int64_t a = from(), b = to();
     const int64_t t = a + (int64_t)((double)(x - r.getX()) / std::max(1, r.getWidth()) * (double)(b - a));
-    return snap ? std::max<int64_t>(0, (t + (t >= 0 ? 0 : -kStep)) / kStep * kStep) : std::max<int64_t>(0, t);
+    const int64_t s = snapTicks();
+    return snap ? std::max<int64_t>(0, t / s * s) : std::max<int64_t>(0, t);
   }
   std::vector<Lane> lanes() const;
   std::vector<std::pair<juce::Rectangle<int>, std::string>> chips() const;
@@ -205,7 +245,7 @@ private:
   void setVelocityAt(juce::Point<int> p);
 
   Host& host_;
-  juce::TextButton addSelected_, edit_, follow_;
+  juce::TextButton addSelected_, edit_, follow_, zoomIn_, zoomOut_, foldButton_;
   int chipsRight_ = 0;
   std::vector<std::string> shown_;  // the lanes, in the song's order
   std::string active_;
@@ -214,7 +254,12 @@ private:
   int64_t viewFrom_ = 0, viewLen_ = 8 * kBar;
   std::set<std::string> selected_;  // patternId|noteId on the active track
   juce::Point<int> hover_{-1, -1};
-  enum class Drag { None, Move, Resize, Velocity } drag_ = Drag::None;
+  enum class Drag { None, Move, Resize, Velocity, Ruler } drag_ = Drag::None;
+  juce::Point<int> rulerStart_;
+  int64_t rulerFrom_ = 0, rulerLen_ = 0, rulerTick_ = 0;
+  bool fold_ = true;   // only the keys that play (Fold, as in Ableton and Bitwig)
+  float rowH_ = 0;     // the keys' height set with Alt+wheel (0: as tall as fit)
+  juce::String keyName(int pitch) const;
   Hit grabbed_;
   std::string dragTrack_;
   int64_t grabOffset_ = 0;
