@@ -472,6 +472,38 @@ json JuceHost::parameters(const std::string& key) {
   return out;
 }
 
+std::string JuceHost::vstPreset(const std::string& key) {
+  std::shared_ptr<JuceProcessor> p;
+  {
+    std::lock_guard<std::mutex> g(impl_->mutex);
+    auto it = impl_->live.find(key);
+    if (it != impl_->live.end()) p = it->second.processor;
+  }
+  std::string out;
+  if (!p || p->failed()) return out;
+  struct Visitor final : juce::ExtensionsVisitor {
+    juce::MemoryBlock preset;
+    void visitVST3Client(const VST3Client& client) override { preset = client.getPreset(); }
+  };
+  runSync([&] {
+    Visitor v;
+    if (!guarded([&] { p->instance().getExtensions(v); })) {
+      p->markFailed(PluginProcessor::Failure::Crash);
+      return;
+    }
+    if (v.preset.getSize() > 0) out = utf8(juce::Base64::toBase64(v.preset.getData(), v.preset.getSize()));
+  });
+  return out;
+}
+
+size_t JuceHost::saveVstPreset(const std::string& key, const std::string& fileUtf8) {
+  const std::string preset = vstPreset(key);
+  juce::MemoryOutputStream bytes;
+  if (preset.empty() || !juce::Base64::convertFromBase64(bytes, juce::String::fromUTF8(preset.c_str()))) return 0;
+  if (!juce::File(juce::String::fromUTF8(fileUtf8.c_str())).replaceWithData(bytes.getData(), bytes.getDataSize())) return 0;
+  return bytes.getDataSize();
+}
+
 void setAfterPluginCode(std::function<void()> f) { afterPluginCode() = std::move(f); }
 
 namespace {

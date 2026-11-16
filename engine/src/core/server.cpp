@@ -57,6 +57,7 @@ const char* kCommands[][2] = {
     {"plugins.states", "The state of every loaded plugin -> {key: base64} (saved in the document)"},
     {"plugin.editor", "{key, open} opens or closes a plugin's own editor window"},
     {"plugins.release", "Another song: every loaded plugin is let go (the next load starts from that song's states)"},
+    {"plugin.preset", "{key} the loaded plugin's sound as a .vstpreset file -> {preset: base64} (VST3 only)"},
     {"plugin.params", "{key} the parameters of a loaded plugin that can be automated -> [{id, name, value, default, steps, text}]"},
   {"commands.list", "This list"},
 };
@@ -549,6 +550,14 @@ json Server::execute(const std::string& cmd, const json& args) {
   if (cmd == "plugin.params") {
     if (!plugins_) return json::array();
     return plugins_->parameters(strArg(args, "key"));
+  }
+  if (cmd == "plugin.preset") {
+    // {key} -> {preset: base64 of a .vstpreset} (the Bitwig export: the same plugin with the same sound).
+    if (!plugins_) throw std::runtime_error("Plugins are not available in this engine.");
+    const std::string key = strArg(args, "key");
+    const std::string preset = plugins_->vstPreset(key);
+    if (preset.empty()) throw std::runtime_error("No VST3 preset for " + key + " (not loaded, or not a VST3).");
+    return json{{"preset", preset}};
   }
   if (cmd == "plugin.editor") {
     if (!plugins_) throw std::runtime_error("Plugins are not available in this engine.");

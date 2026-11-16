@@ -81,6 +81,7 @@ public:
   bool takeChanged() override { return host_.takeChanged(); }
   void releaseAll() override { host_.releaseAll(); }
   core::json parameters(const std::string& key) override { return host_.parameters(key); }
+  std::string vstPreset(const std::string& key) override { return host_.vstPreset(key); }
   void resetAll() override { host_.resetAll(); }
 private:
   core::plugins::JuceHost host_;
@@ -609,8 +610,16 @@ int main(int argc, char** argv) {
           std::string why;
           const std::string key = "params:" + p.value("id", std::string());
           json r = {{"id", p.value("id", "")}, {"name", p.value("name", "")}};
-          if (host.get(key, p, 48000, false, &why)) r["params"] = host.parameters(key);  // live: parameters() reads the live instances
-          else r["problem"] = why;
+          if (host.get(key, p, 48000, false, &why)) {
+            r["params"] = host.parameters(key);  // live: parameters() reads the live instances
+            // --preset-out <file.vstpreset>: the plugin's default sound as the Bitwig export writes it (a check of
+            // plugin.preset on a real plugin).
+            if (const std::string out = option(args, "--preset-out", ""); !out.empty()) {
+              r["presetBytes"] = (int64_t)host.saveVstPreset(key, out);
+            }
+          } else {
+            r["problem"] = why;
+          }
           results.push_back(std::move(r));
           host.releaseAll();
         }
@@ -707,7 +716,7 @@ int main(int argc, char** argv) {
       std::cout << report.dump(2) << '\n';
       return 0;
     }
-    std::cerr << "usage: core-engine serve | render <project.json> <out.wav> [--stems] [--mono] [--start-tick N --end-tick N --tail-ms MS] | measure [--out dir] [--realtime] | demo [bpm] | devices | scan <file.vst3> | qualify <file.vst3> | params <file.vst3> [--id <plugin id>] | matrix <file.vst3> | soak <project.json> [--minutes 120] | loopcheck <project.json> [--passes 4] [--bars 8] [--out wav]\n";
+    std::cerr << "usage: core-engine serve | render <project.json> <out.wav> [--stems] [--mono] [--start-tick N --end-tick N --tail-ms MS] | measure [--out dir] [--realtime] | demo [bpm] | devices | scan <file.vst3> | qualify <file.vst3> | params <file.vst3> [--id <plugin id>] [--preset-out <file.vstpreset>] | matrix <file.vst3> | soak <project.json> [--minutes 120] | loopcheck <project.json> [--passes 4] [--bars 8] [--out wav]\n";
     return mode == "help" ? 0 : 2;
   } catch (const std::exception& e) {
     std::cerr << "error: " << e.what() << '\n';

@@ -38,6 +38,12 @@ target_include_directories(bug_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(bug_tests PRIVATE core_domain core_engine_lib)
 add_test(NAME bug_tests COMMAND bug_tests)
 
+# The export for the Bitwig: the .mid and the .vstpreset of each plugin, and which goes on which track.
+add_executable(bitwig_tests bitwig_tests.cpp)
+target_include_directories(bitwig_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(bitwig_tests PRIVATE core_domain core_engine_lib)
+add_test(NAME bitwig_tests COMMAND bitwig_tests)
+
 # The bugs of the external audit (2026-11-16, RELATORIO-BUGS-MELHORIAS.md): each failed before its fix.
 add_executable(audit_tests audit_tests.cpp)
 target_include_directories(audit_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/engine/src)
@@ -55,7 +61,7 @@ add_test(NAME cli_measure COMMAND ${CMAKE_COMMAND} -DENGINE=$<TARGET_FILE:core-e
 add_test(NAME cli_unicode COMMAND ${CMAKE_COMMAND} -DENGINE=$<TARGET_FILE:core-engine> -DWORK=${CMAKE_CURRENT_BINARY_DIR}/cli
                                   -P ${CMAKE_CURRENT_SOURCE_DIR}/cli_unicode.cmake)
 
-set_tests_properties(engine_tests domain_tests role_tests midi_tests bug_tests audit_tests cli_version cli_demo_render cli_measure cli_unicode
+set_tests_properties(engine_tests domain_tests role_tests midi_tests bug_tests audit_tests bitwig_tests cli_version cli_demo_render cli_measure cli_unicode
                      PROPERTIES LABELS merge TIMEOUT 300)
 
 # The app's own end-to-end test (play, undo, save/reopen, export... on the null device, with its test plugins).

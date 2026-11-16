@@ -96,7 +96,12 @@ Corrigido, com testes (`tests/audit_tests.cpp`, `tests/cli_unicode.cmake`; cada 
 - R04: exportar pára a pré-escuta do Patterns, para exportar a música e não o slot.
 - R05: abrir a janela de um plugin (ou ler os parâmetros) envia antes a edição pendente.
 
-Por decidir (Diogo): D01, o `render` da linha de comandos aceita áudio em falta (exporta silêncio por cima do ficheiro anterior) e o da app recusa. A auditoria recomenda falhar por omissão e ter uma opção para tolerar.
+D01 (o `render` da linha de comandos aceita áudio em falta): fica como está, a linha de comandos não faz parte da ligação ao Bitwig (Diogo, 2026-11-16).
+
+### Export para o Bitwig (2026-11-16)
+
+File > Export for Bitwig: uma pasta "<música> (Bitwig)" com o .mid (uma pista MIDI por pista do Core, rolls expandidos, tempo), um .vstpreset por plugin (instrumento e efeitos de cada pista e do master) com o som atual, tirado do plugin vivo no motor (`plugin.preset`), e "Bitwig - read me.txt" a dizer que preset vai em que pista. No Bitwig: arrastar o .mid, depois largar cada .vstpreset na sua pista. Testes: `tests/bitwig_tests.cpp`; no Windows, `core-engine params <plugin.vst3> --preset-out x.vstpreset`.
+O D01 (render da linha de comandos tolera áudio em falta) fica como está: não faz parte da ligação ao Bitwig (Diogo).
 
 ## Falta fazer
 

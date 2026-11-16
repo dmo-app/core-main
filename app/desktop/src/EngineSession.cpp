@@ -130,6 +130,21 @@ json EngineSession::pluginParams(const std::string& key, int timeoutMs) {
   }
 }
 
+std::string EngineSession::pluginPreset(const std::string& key, int timeoutMs) {
+  Action a{Action::PluginPreset};
+  a.text = key;
+  a.reply = std::make_shared<std::promise<json>>();
+  std::future<json> answer = a.reply->get_future();
+  queue(a);
+  if (answer.wait_for(std::chrono::milliseconds(timeoutMs)) != std::future_status::ready) return {};
+  try {
+    const json r = answer.get();
+    return r.is_object() ? r.value("preset", std::string()) : std::string();
+  } catch (const std::exception&) {  // dropped (engine restarted)
+    return {};
+  }
+}
+
 void EngineSession::releasePlugins() { queue({Action::ReleasePlugins}); }
 
 void EngineSession::openPluginEditor(const std::string& key) {
@@ -279,7 +294,8 @@ void EngineSession::run() {
       // An export takes the document as it is now: send it first if an edit is still pending. So does opening a
       // plugin's window or reading its parameters: a plugin just added is only in the engine once its edit is sent
       // (audit R05: the editor was asked for a plugin the engine did not have yet).
-      const bool needsDocument = action.kind == Action::Export || action.kind == Action::PluginEditor || action.kind == Action::PluginParams;
+      const bool needsDocument = action.kind == Action::Export || action.kind == Action::PluginEditor || action.kind == Action::PluginParams ||
+                                 action.kind == Action::PluginPreset;
       if (needsDocument && wantedRevision_ > sentRevision_ && snap_.status != EngineStatus::Diverged) sync(lock);
       if (action.kind == Action::Export && (snap_.status == EngineStatus::Diverged || snap_.acceptedRevision != wantedRevision_)) {
         snap_.exportJob.state = "failed";
@@ -354,6 +370,9 @@ void EngineSession::run() {
             break;
           case Action::PluginParams:
             action.reply->set_value(client_->command("plugin.params", {{"key", action.text}}));
+            break;
+          case Action::PluginPreset:
+            action.reply->set_value(client_->command("plugin.preset", {{"key", action.text}}));
             break;
           case Action::PluginEditor:
             client_->command("plugin.editor", {{"key", action.text}, {"open", true}});

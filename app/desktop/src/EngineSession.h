@@ -137,6 +137,8 @@ public:
   // The parameters of a loaded plugin that can be automated ([{id, name, value, default, steps, text}]);
   // empty if it is not loaded or there is no answer in timeoutMs. UI thread.
   json pluginParams(const std::string& key, int timeoutMs);
+  // The loaded plugin's sound as a .vstpreset, in base64 ("" if no answer, not loaded or not VST3): Bitwig export.
+  std::string pluginPreset(const std::string& key, int timeoutMs);
   void openPluginEditor(const std::string& key);
   void releasePlugins();  // another song (open, new): the engine's plugins start again from its states
   // New engine session: same document, loop and position; stays stopped.
@@ -148,7 +150,7 @@ public:
 
 private:
   struct Action {
-    enum Kind { Play, Stop, Home, Seek, SetLoop, Export, CancelExport, SelectDevice, LiveNote, Panic, Cpu, ResetLoudness, Analysis, Listen, Watch, PluginStates, PluginParams, PluginEditor, ReleasePlugins } kind;
+    enum Kind { Play, Stop, Home, Seek, SetLoop, Export, CancelExport, SelectDevice, LiveNote, Panic, Cpu, ResetLoudness, Analysis, Listen, Watch, PluginStates, PluginParams, PluginPreset, PluginEditor, ReleasePlugins } kind;
     int64_t tick = 0;
     std::string text;
     int bits = 24;
