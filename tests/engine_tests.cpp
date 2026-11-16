@@ -10,6 +10,7 @@
 #include "core/graph.hpp"
 #include "core/project.hpp"
 #include "core/server.hpp"
+#include "dsp/clip_grains.hpp"
 #include "io/audio_file.hpp"
 #include "io/wav.hpp"
 
@@ -40,6 +41,14 @@ std::string writeSine(const std::string& name, double hz, double seconds, float 
   const std::string path = (tempDir() / name).string();
   writeWav(path, s, s, (int)kSr, 32);
   return path;
+}
+
+// Um ficheiro com o trecho congelado [offset, offset + span) a `inside` e o resto a 1 (esquerda) e 2 (direita): uma
+// saida que mostre o exterior nao pode vir so do trecho.
+std::pair<std::vector<float>, std::vector<float>> markedFile(int64_t frames, int64_t offset, int64_t span, float inside) {
+  std::vector<float> l((size_t)frames, 1.0f), r((size_t)frames, 2.0f);
+  for (int64_t i = offset; i < std::min(frames, offset + span); ++i) { l[(size_t)i] = inside; r[(size_t)i] = inside; }
+  return {l, r};
 }
 
 }  // namespace
@@ -215,6 +224,52 @@ TEST("loop: posto no tempo novo antes de o audio aplicar o grafo novo nao e conv
   e.setLoop(true, -500, -100);
   CHECK_EQ(e.loopStart(), (int64_t)0);
   CHECK(e.loopEnd() >= 1);
+}
+
+// --- Freeze (G17 / T25) -----------------------------------------------------------------------------------------
+// Um freeze guarda um trecho do ficheiro; a saida so pode ler esse trecho, mesmo quando o trecho e mais curto que o grao
+// (10 ms a 48 kHz: 480 amostras, grao de 40 ms = 1920). Antes da correcao a primeira amostra ja vinha de fora.
+
+TEST("freeze: um trecho curto nunca le fora de si (taxas, pitch, inicio e fim do ficheiro)") {
+  for (double sr : {44100.0, 48000.0, 96000.0})
+    for (double freeze : {0.010, 0.025, 0.050, 0.500})
+      for (double semis : {-24.0, -7.0, 0.0, 7.0, 24.0}) {
+        const int64_t frames = (int64_t)(2 * sr);
+        const int64_t span = (int64_t)std::llround(freeze * sr);
+        for (int64_t offset : {(int64_t)0, frames / 3, frames - span}) {
+          const auto [l, r] = markedFile(frames, offset, span, 0.0f);
+          const ClipGrains g = clipGrains(semis, freeze, sr, offset, frames);
+          int64_t firstOutside = -1;
+          for (int64_t k = 0; k < (int64_t)sr && firstOutside < 0; ++k) {
+            double ol, orr;
+            clipGrainFrame(g, offset, l.data(), r.data(), frames, k, ol, orr);
+            if (ol != 0 || orr != 0) firstOutside = k;
+          }
+          if (firstOutside >= 0) {
+            CHECK_EQ(firstOutside, (int64_t)-1);
+            std::fprintf(stderr, "    sr %.0f, freeze %.3f s, pitch %.0f, offset %lld: a amostra %lld le fora do trecho\n", sr, freeze,
+                         semis, (long long)offset, (long long)firstOutside);
+            return;
+          }
+        }
+      }
+}
+
+TEST("freeze: o trecho curto continua a soar, ao nivel do trecho") {
+  const double sr = 48000;
+  const int64_t frames = (int64_t)sr, offset = 4800, span = 480;
+  const auto [l, r] = markedFile(frames, offset, span, 0.5f);
+  const ClipGrains g = clipGrains(0, 0.010, sr, offset, frames);
+  double peak = 0, sum = 0;
+  for (int64_t k = 0; k < (int64_t)sr; ++k) {
+    double ol, orr;
+    clipGrainFrame(g, offset, l.data(), r.data(), frames, k, ol, orr);
+    CHECK(std::isfinite(ol) && std::isfinite(orr));
+    peak = std::max(peak, std::max(std::abs(ol), std::abs(orr)));
+    sum += ol;
+  }
+  CHECK(peak <= 0.5 + 1e-9);  // duas janelas de Hann a meio grao somam 1
+  CHECK_NEAR(sum / sr, 0.5, 0.05);  // e o nivel medio fica no do trecho
 }
 
 CORE_TEST_MAIN

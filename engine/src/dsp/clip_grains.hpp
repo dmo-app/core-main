@@ -28,6 +28,9 @@ inline ClipGrains clipGrains(double pitchSemitones, double freezeSeconds, double
     g.ratio = std::pow(2.0, std::clamp(pitchSemitones, -24.0, 24.0) / 12.0);
     if (!g.grain) g.grain = (int64_t)std::llround(0.030 * sampleRate);
   }
+  // A grain reads grain * ratio samples: in a freeze that must fit in the held piece, or it reads past it (G17: a
+  // 10 ms freeze at 48 kHz held 480 samples with a 1920 grain).
+  if (g.freezeSpan > 0) g.grain = std::max<int64_t>(2, std::min<int64_t>(g.grain, (int64_t)((double)g.freezeSpan / std::max(1.0, g.ratio))));
   return g;
 }
 
@@ -47,10 +50,14 @@ inline void clipGrainFrame(const ClipGrains& c, int64_t offset, const float* src
     } else {
       at = std::max(0.0, grainStart);
     }
+    // Reads stay in the file, and in a freeze in the held piece [offset, offset + freezeSpan), the neighbour of the
+    // interpolation too.
+    const int64_t lo = c.freezeSpan > 0 ? std::clamp<int64_t>(offset, 0, frames - 1) : 0;
+    const int64_t hi = c.freezeSpan > 0 ? std::clamp<int64_t>(offset + c.freezeSpan - 1, lo, frames - 1) : frames - 1;
     double src = (double)offset + at + phase * c.ratio;
-    src = std::clamp(src, 0.0, (double)(frames - 1));
+    src = std::clamp(src, (double)lo, (double)hi);
     const int64_t i0 = (int64_t)src;
-    const int64_t i1 = std::min<int64_t>(i0 + 1, frames - 1);
+    const int64_t i1 = std::min<int64_t>(i0 + 1, hi);
     const double f = src - (double)i0;
     const double w = std::sin(3.14159265358979323846 * phase / G);
     const double win = w * w;
