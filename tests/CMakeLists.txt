@@ -27,6 +27,13 @@ target_link_libraries(ai_tests PRIVATE core_ai)
 target_compile_definitions(ai_tests PRIVATE CORE_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 add_test(NAME ai_tests COMMAND ai_tests)
 
+# Rede de seguranca da AI (plano de testes T05-T08): modelo falso, um contrato por acao, undo unico, ambito.
+add_executable(ai_contract_tests ai_contract_tests.cpp)
+target_include_directories(ai_contract_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/engine/src)
+target_link_libraries(ai_contract_tests PRIVATE core_ai core_domain core_engine_lib)
+target_compile_definitions(ai_contract_tests PRIVATE CORE_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+add_test(NAME ai_contract_tests COMMAND ai_contract_tests)
+
 # Core AI Gate (app/aifx): the gate's sound, its role, toolGate and the AI's "gate" call.
 add_executable(aifx_tests aifx_tests.cpp)
 target_include_directories(aifx_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
@@ -94,13 +101,13 @@ add_test(NAME cli_measure COMMAND ${CMAKE_COMMAND} -DENGINE=$<TARGET_FILE:core-e
 add_test(NAME cli_unicode COMMAND ${CMAKE_COMMAND} -DENGINE=$<TARGET_FILE:core-engine> -DWORK=${CMAKE_CURRENT_BINARY_DIR}/cli
                                   -P ${CMAKE_CURRENT_SOURCE_DIR}/cli_unicode.cmake)
 
-set_tests_properties(engine_tests domain_tests ai_tests aifx_tests role_tests midi_tests bug_tests audit_tests audit2_tests hunt_tests round3_tests bitwig_tests cli_version cli_demo_render cli_measure cli_unicode
+set_tests_properties(engine_tests domain_tests ai_tests ai_contract_tests aifx_tests role_tests midi_tests bug_tests audit_tests audit2_tests hunt_tests round3_tests bitwig_tests cli_version cli_demo_render cli_measure cli_unicode
                      PROPERTIES LABELS merge TIMEOUT 300)
 # Labels por area (2026-11-16, plano de testes T03), alem do nivel. ci/testes.txt e a lista que o gate confere.
 #   ai      o que a AI chama (tools, catalogo, propostas)
 #   ui      a app com janela (eventos de rato e teclado)
 #   plugins plugins reais (Vital, sfizz); fora do gate, a mao (T19). Vazio ate la.
-set_tests_properties(ai_tests aifx_tests role_tests round3_tests PROPERTIES LABELS "merge;ai")
+set_tests_properties(ai_tests ai_contract_tests aifx_tests role_tests round3_tests PROPERTIES LABELS "merge;ai")
 
 # The app's own end-to-end test (play, undo, save/reopen, export... on the null device, with its test plugins).
 # It opens Core's window for ~20 s, so it has its own label.

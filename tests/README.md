@@ -28,6 +28,7 @@ Cada teste tem um nível (`merge` ou `desktop`) e, quando se aplica, uma área (
 | `engine_tests` | merge | WAV, tempo, JSON do projeto, render (blocos, determinismo, ficheiros em falta), loop |
 | `domain_tests` | merge | documento, templates, guardar/reabrir, undo/redo, "modificado" |
 | `ai_tests` | merge, ai | a AI dentro do Core: chamadas da música, chat (respostas fixas, sem rede), base de conhecimento, provedores |
+| `ai_contract_tests` | merge, ai | rede de segurança da AI (T05–T08): modelo falso sem rede, um contrato por ação do catálogo (meta-teste), undo único exato, âmbito de cada ação; cada verificador com um caso negativo |
 | `aifx_tests` | merge, ai | Core AI Gate: som, papel, toolGate e a chamada "gate" da AI |
 | `role_tests` | merge, ai | papéis, macros, SUCK, PUM, build-up, pistas mudas, bus partilhado, F-Core, ROLL, catálogo das tools |
 | `midi_tests` | merge | MIDI exportar e importar |
@@ -67,4 +68,5 @@ O `gate.ps1` usa sempre um JUCE 9.0.5 local e não vai à rede (`-Online` para d
 - Motor (projecto, render, WAV, tempo): `engine_tests.cpp`.
 - Documento da app (guardar, undo, templates, projecção): `domain_tests.cpp`.
 - Linha de comandos do `core-engine`: um `cli_*.cmake` e um `add_test` em `CMakeLists.txt`.
+- Uma ação nova da AI: o seu contrato em `ai_contract_tests.cpp` (chamada, âmbito); sem ele o meta-teste fica vermelho.
 - Sempre: uma linha em `ci/testes.txt`, no mesmo commit.

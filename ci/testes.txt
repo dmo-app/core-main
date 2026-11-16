@@ -5,6 +5,7 @@
 engine_tests        merge
 domain_tests        merge
 ai_tests            merge,ai
+ai_contract_tests   merge,ai
 aifx_tests          merge,ai
 role_tests          merge,ai
 midi_tests          merge
