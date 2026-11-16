@@ -26,7 +26,7 @@ std::string text(json& value, const char* key, size_t maxLength, bool required) 
   }
   if (!v.is_string()) throw DocumentError(key, "must be text");
   std::string s = v.get<std::string>();
-  if (s.size() > maxLength) throw DocumentError(key, "is longer than " + std::to_string(maxLength) + " characters");
+  if (s.size() > maxLength) throw DocumentError(key, "is longer than " + std::to_string(maxLength) + " bytes (an accented letter counts as 2)");
   return s;
 }
 

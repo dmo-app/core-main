@@ -44,8 +44,8 @@ Verificado: compila, self-test 53/53, e verificação à parte de D1, D2, D6, PL
 ### 5. Templates e músicas antigas abrem
 
 - Uma pista com instrumento próprio passa a `none` com uma nota, e mantém as notas à espera de um plugin. Os efeitos próprios ficam guardados e silenciosos.
-- A automação de um instrumento que saiu é largada com nota; a de mistura (`gainDb`, `pan`) e a dos efeitos (`fx:`) ficam (commit `131f1b5`).
-- Os 21 templates em `templates/` abrem e o motor toca-os (testado em `tests/domain_tests`).
+- A automação de um instrumento que saiu é largada com nota; a de mistura (`gainDb`, `pan`) e a dos efeitos (`fx:`) ficam guardadas na música (commit `131f1b5`). Só tocam a de mistura e a dos efeitos plugin (`fx:<id>:vst:...`); as dos efeitos próprios ficam caladas, como os efeitos.
+- Os 21 templates em `templates/` abrem e o motor toca-os (testado em `tests/domain_tests`). Tocam as notas e a mistura: os 1108 efeitos próprios (`builtin`) e os 24 moduladores dos templates ficam guardados no `.core` e fora do motor até haver um plugin no lugar deles (caça profunda P04, `tests/hunt_tests`).
 
 ### 6. Testes e CI (PR #3)
 

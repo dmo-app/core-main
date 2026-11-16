@@ -83,7 +83,8 @@ public:
     if (v.is_null()) return fallback;
     if (!v.is_string()) throw DocumentError(at(key), "must be text");
     std::string s = v.get<std::string>();
-    if (s.size() > maxLength) throw DocumentError(at(key), "is longer than " + std::to_string(maxLength) + " characters");
+    // Bytes of UTF-8, as the limit counts them: an accented letter takes 2 (deep hunt P01: it said "characters").
+    if (s.size() > maxLength) throw DocumentError(at(key), "is longer than " + std::to_string(maxLength) + " bytes (an accented letter counts as 2)");
     return s;
   }
   json object(const char* key) {
@@ -176,6 +177,53 @@ json envelopesJson(const std::vector<Automation>& list) {
     envelopes.push_back({{"param", a.param}, {"points", points}});
   }
   return envelopes;
+}
+
+// Effect ids the engine would rename (deep hunt P03): ':' (it splits "fx:<track>:<id>"), longer than 40 bytes, empty or
+// used twice in a chain. The engine renamed them on its side only, so the app's plugin keys and curves pointed at
+// nothing and the plugin's state was lost. They are renamed here as the engine does (the first of a pair keeps the id
+// and the curves; ':' becomes '_'; a number is added), with the curves and modulators that name them, so the engine
+// gets ids it keeps as they are.
+void cleanEffectIds(json& chain, std::vector<Automation>& curves, json* modulators) {
+  auto clean = [](const std::string& id) { return !id.empty() && id.size() <= 40 && id.find(':') == std::string::npos; };
+  std::vector<std::string> ids;
+  std::vector<bool> keep;
+  for (const auto& fx : chain) {
+    const std::string id = fx.contains("id") && fx["id"].is_string() ? fx["id"].get<std::string>() : std::string();
+    const bool k = clean(id) && std::find(ids.begin(), ids.end(), id) == ids.end();
+    if (k) ids.push_back(id);
+    keep.push_back(k);
+  }
+  for (size_t i = 0; i < chain.size(); ++i) {
+    if (keep[i]) continue;
+    json& fx = chain[i];
+    const std::string old = fx.contains("id") && fx["id"].is_string() ? fx["id"].get<std::string>() : std::string();
+    std::string base = old.empty() ? std::string("fx") : old.substr(0, 40);
+    while (!base.empty() && ((unsigned char)base.back() & 0xC0) == 0x80) base.pop_back();  // never half a character
+    std::replace(base.begin(), base.end(), ':', '_');
+    if (base.empty()) base = "fx";
+    std::string id = base;
+    for (int n = 2; std::find(ids.begin(), ids.end(), id) != ids.end(); ++n) {
+      std::string root = base.substr(0, 36);
+      while (!root.empty() && ((unsigned char)root.back() & 0xC0) == 0x80) root.pop_back();
+      id = root + "_" + std::to_string(n);
+    }
+    const bool owned = !old.empty() && std::find(ids.begin(), ids.end(), old) != ids.end();  // a twin before keeps them
+    ids.push_back(id);
+    fx["id"] = id;
+    if (owned || old.empty()) continue;
+    const std::string from = "fx:" + old + ":", to = "fx:" + id + ":";
+    for (auto& a : curves)
+      if (a.param.rfind(from, 0) == 0) {
+        const std::string renamed = to + a.param.substr(from.size());
+        if (std::none_of(curves.begin(), curves.end(), [&](const Automation& o) { return o.param == renamed; }) && renamed.size() <= 64)
+          a.param = renamed;
+      }
+    if (modulators)
+      for (auto& m : *modulators)
+        if (m.is_object() && m.contains("param") && m["param"].is_string() && m["param"].get<std::string>().rfind(from, 0) == 0)
+          m["param"] = to + m["param"].get<std::string>().substr(from.size());
+  }
 }
 
 Track parseTrack(const json& v, const std::string& path, const std::set<std::string>& assetIds) {
@@ -343,6 +391,7 @@ Track parseTrack(const json& v, const std::string& path, const std::set<std::str
     if (!modIds.insert(m["id"].get<std::string>()).second) throw DocumentError(where + ".id", "is used twice in this track");
     if (!m.contains("param") || !m["param"].is_string()) throw DocumentError(where + ".param", "is required");
   }
+  cleanEffectIds(t.effects, t.automation, &t.modulators);
   t.extra = r.rest();
   return t;
 }
@@ -546,6 +595,7 @@ Document parseDocument(const json& input, int* migratedFrom) {
   d.masterAutomation = readAutomation(mr, true);
   for (size_t i = 0; i < d.masterEffects.size(); ++i)
     if (!d.masterEffects[i].is_object()) throw DocumentError(item(mr.at("effects"), i), "must be an object");
+  cleanEffectIds(d.masterEffects, d.masterAutomation, nullptr);
   d.masterExtra = mr.rest();
   // Assets first: audio clips refer to them.
   const json assets = r.array("assets", 4096);

@@ -2,6 +2,7 @@
 // Pure functions on the document; the caller commits the result to the History (one step each).
 #pragma once
 #include <map>
+#include <set>
 #include <optional>
 #include <string>
 #include <utility>
@@ -58,6 +59,12 @@ std::string duplicateTrack(Document& doc, const std::string& trackId);
 void renameTrack(Document& doc, const std::string& trackId, const std::string& name);
 // Removing a bus sends what fed it to where the bus went, and drops the sends to it.
 void removeTrack(Document& doc, const std::string& trackId);
+// The shown track is gone (deleted, or undone away): which track is shown now (deep hunt P06). One of the other
+// selected tracks that are still there (the first in song order, taken out of alsoSelected), else the track that took
+// its place in orderBefore (the one after it, or before it at the end), else "". Never a track nobody picked added to
+// a multi-selection: Stage Core's Arrange acts on the selection. alsoSelected loses the tracks that are gone.
+std::string shownAfterRemoval(const Document& now, const std::vector<std::string>& orderBefore, const std::string& removed,
+                              std::set<std::string>& alsoSelected);
 
 // ---- routing (M7a): buses, outputs and sends. Every change is checked (only to a bus, no loops).
 std::string addBusTrack(Document& doc, const std::string& name = "");  // e.g. "Reverb" or "Drums"
