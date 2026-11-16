@@ -67,6 +67,15 @@ int doubleRackSlot(Document& doc, const std::string& slotId) {
   if (!slot) throw DocumentError("patternSlots", "no pattern '" + slotId + "'");
   if (slot->bars >= kRackMaxBars) throw DocumentError("bars", "the pattern is already " + std::to_string(kRackMaxBars) + " bars long");
   const int bars = slot->bars * 2;
+  // All or nothing: a pattern that would pass the notes limit stops the whole Double (it would stop half-filled).
+  for (const auto& [trackId, pid] : slot->tracks)
+    for (const auto& t : doc.tracks)
+      if (t.id == trackId)
+        if (const Pattern* p = t.findPattern(pid); p && p->lengthTicks > 0 && p->lengthTicks < (int64_t)bars * kBar) {
+          const size_t after = p->notes.size() * (size_t)(((int64_t)bars * kBar + p->lengthTicks - 1) / p->lengthTicks);
+          if (after > kMaxPatternNotes)
+            throw DocumentError("notes", "'" + t.name + "' would pass " + std::to_string(kMaxPatternNotes) + " notes: nothing doubled");
+        }
   setRackBars(doc, slotId, bars);  // the notes repeat into the new half
   return bars;
 }
@@ -94,13 +103,8 @@ int shiftRackRow(Document& doc, const std::string& slotId, const std::string& tr
   for (auto& tr : doc.tracks) if (tr.id == trackId) t = &tr;
   if (!t) throw DocumentError("tracks", "no track '" + trackId + "'");
   if (it == slot->tracks.end() || !t->findPattern(it->second)) return 0;  // an empty row
-  // With swing the odd 1/16s are played late: take the swing off, rotate on the straight grid, put it back, so a
-  // step that moves keeps the groove of the place it lands on (not the delay of the place it came from).
-  const double swing = slot->swing;
-  if (swing > 0) setRackSwing(doc, slotId, 0);
-  const int moved = rotatePatternNotes(patternById(trackById(doc, trackId), it->second), (int64_t)steps * kSixteenth);
-  if (swing > 0) setRackSwing(doc, slotId, swing);
-  return moved;
+  // Under swing: only this row moves, each swung step re-swung where it lands (pattern_rack.hpp: shiftPatternSteps).
+  return shiftPatternSteps(patternById(trackById(doc, trackId), it->second), steps, slot->swing);
 }
 
 // ---- nudge
@@ -182,6 +186,18 @@ Printed freezeTrack(Document& doc, const std::string& trackId, const std::filesy
   return out;
 }
 
+bool freezeStillMatches(const Document& start, const Document& now, const std::string& trackId) {
+  if (start.lengthTicks != now.lengthTicks || start.bpm != now.bpm || start.tempoMap.size() != now.tempoMap.size()) return false;
+  const Track* a = start.findTrack(trackId);
+  const Track* b = now.findTrack(trackId);
+  if (!a || !b) return false;
+  // What the render heard: the track's own saved form (notes, patterns, clips, instrument, effects, mix, automation).
+  Document one = start, two = now;
+  one.tracks = {*a};
+  two.tracks = {*b};
+  return toJson(one)["tracks"] == toJson(two)["tracks"];
+}
+
 void unfreezeTrack(Document& doc, const std::string& trackId) {
   Document next = doc;
   Track& source = trackById(next, trackId);
@@ -189,7 +205,8 @@ void unfreezeTrack(Document& doc, const std::string& trackId) {
   if (audio.empty()) throw DocumentError("tracks", "the track is not frozen");
   source.extra.erase(kFrozenKey);
   source.mix.mute = false;
-  if (next.findTrack(audio)) removeTrack(next, audio);  // the user may have deleted it already
+  // Only the audio this freeze made: the user may have deleted it, and its id may now be another track's freeze.
+  if (const Track* a = next.findTrack(audio); a && extraString(a->extra, kFrozenFromKey) == trackId) removeTrack(next, audio);
   doc = std::move(next);
 }
 

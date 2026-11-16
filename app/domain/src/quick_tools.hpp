@@ -62,6 +62,9 @@ std::string cannotFreeze(const Document& doc, const std::string& trackId);
 // unloaded. Its notes, plugins and their state stay in the song.
 Printed freezeTrack(Document& doc, const std::string& trackId, const std::filesystem::path& file,
                     const std::filesystem::path& projectDir);
+// The render started from `start` still fits `now` (a freeze finishing after an edit would put old audio in): the
+// track sounds the same (its notes, instrument, effects, mix) and the song is as long.
+bool freezeStillMatches(const Document& start, const Document& now, const std::string& trackId);
 // The frozen audio track goes (its file too when nothing else uses it, at the next save), the source plays again.
 void unfreezeTrack(Document& doc, const std::string& trackId);
 

@@ -4864,6 +4864,8 @@ void MainComponent::toggleFreeze(const std::string& trackId) {
                   .getNonexistentChildFile(juce::File::createLegalFileName(u8(t->name)) + " (frozen)", ".wav", false);
   job->path = job->file.getFullPathName().toStdString();
   job->since = juce::Time::getMillisecondCounter();
+  job->start = history_.current();
+  freezePath_ = job->path;
   session_->exportFiles({{job->path, trackId, true}}, 0, history_.current().lengthTicks, 32);
   snap_.exportJob = session_->snapshot().exportJob;
   notice_ = u8("Freezing ") + u8(t->name) + u8("...");
@@ -4895,6 +4897,9 @@ void MainComponent::pollFreeze() {
   doc::Printed printed;
   try {
     if (dir.empty()) throw doc::DocumentError("project", "the song has no folder any more: save it and try again");
+    // An edit while it rendered (notes, plugin, song length): the audio would be the old one.
+    if (!doc::freezeStillMatches(f->start, next, f->trackId))
+      throw doc::DocumentError("tracks", "the track or the song changed while it was freezing: freeze it again");
     printed = doc::freezeTrack(next, f->trackId, pathOf(f->file), dir);
   } catch (const std::exception& e) {
     f->file.deleteFile();
@@ -6936,7 +6941,10 @@ void MainComponent::timerCallback() {
   if (exportBar_.isVisible() != exporting) { exportBar_.setVisible(exporting); cancelExport_.setVisible(exporting); resized(); }
   cancelExport_.setEnabled(job.state == "running");
   const std::string jobKey = std::to_string(job.jobId) + job.state;
-  if (jobKey != jobSeen_) {
+  if (jobKey != jobSeen_ && !freezePath_.empty() && job.path == freezePath_) {
+    jobSeen_ = jobKey;  // a freeze render: pollFreeze tells how it ended (one notice, one error at most)
+    if (exporting) notice_ = u8("Freezing...");
+  } else if (jobKey != jobSeen_) {
     jobSeen_ = jobKey;
     const juce::String path = u8(job.path);
     if (job.state == "succeeded") notice_ = job.files > 1 ? u8("Exported ") + juce::String(job.files) + u8(" files to ") + juce::File(path).getParentDirectory().getFullPathName() : u8("Exported: ") + path;

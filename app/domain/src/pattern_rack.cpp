@@ -247,6 +247,28 @@ bool toggleRackStep(Pattern& p, int64_t start, int64_t length, int pitch, double
   return true;
 }
 
+int shiftPatternSteps(Pattern& p, int steps, double swing) {
+  const int64_t len = p.lengthTicks, delta = (int64_t)steps * kSixteenth;
+  if (len <= 0 || steps == 0 || p.notes.empty()) return 0;
+  const int64_t late = swingTicks(swing);
+  for (auto& n : p.notes) {
+    bool wasSwung = false;
+    if (n.extra.contains(kSwingBase) && n.extra[kSwingBase].is_object()) {  // back to its straight step
+      const auto& r = n.extra[kSwingBase];
+      const int64_t offset = r.value("renderedTick", n.tick) - r.value("tick", n.tick);
+      if (r.value("renderedLength", n.length) == n.length) n.length = r.value("length", n.length);
+      n.tick -= offset;
+      n.extra.erase(kSwingBase);
+      wasSwung = true;
+    }
+    n.tick = ((n.tick + delta) % len + len) % len;
+    // Swung again where it lands (only on an odd 1/16, exactly; a hand-placed note keeps its own timing).
+    if (late > 0 && (wasSwung || n.tick % kSixteenth == 0)) swingNote(n, len, 0, late);
+  }
+  std::stable_sort(p.notes.begin(), p.notes.end(), [](const Note& a, const Note& b) { return a.tick != b.tick ? a.tick < b.tick : a.pitch < b.pitch; });
+  return (int)p.notes.size();
+}
+
 void setRackSwing(Document& doc, const std::string& slotId, double swing) {
   if (!std::isfinite(swing)) throw DocumentError("swing", "a number");
   auto slots = rackSlots(doc);

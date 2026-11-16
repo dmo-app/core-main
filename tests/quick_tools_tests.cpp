@@ -354,4 +354,62 @@ TEST("duplicar uma pista congelada: a cópia não fica presa ao áudio da origin
   CHECK(!d.findTrack(audioCopy)->extra.contains("frozenFrom"));
 }
 
+// ---- revisão independente do diff (2026-11-16): cada caso falhava antes da correção
+
+TEST("shift de linha com swing: as outras linhas não mexem, nem as notas fora do swing") {
+  Document d = newEmptyDocument();
+  const std::string bass = bassTrack(d);
+  const std::string hats = addTrack(d, "", "Hats");
+  const std::string slot = addRackSlot(d, "Main Groove", 1);
+  rackPatternFor(d, slot, bass).notes = {Note{"b1", 0, kStep, 36, 0.8}};
+  setRackSwing(d, slot, 0.5);
+  // Um hat posto à mão num 1/16 ímpar, sem swing (arrastado no piano roll depois do swing).
+  rackPatternFor(d, slot, hats).notes = {Note{"h1", kStep, kStep / 2, 42, 0.8}};
+  CHECK_EQ(shiftRackRow(d, slot, bass, 1), 1);
+  const Pattern& h = *rackPattern(d, *findRackSlot(rackSlots(d), slot), hats);
+  CHECK_EQ(h.notes.size(), (size_t)1);
+  if (!h.notes.empty()) CHECK_EQ(h.notes[0].tick, kStep);  // continua onde estava
+}
+
+TEST("unfreeze só apaga o áudio que é desta pista (ids reaproveitados)") {
+  Document d = newEmptyDocument();
+  const std::string a = bassTrack(d);
+  const std::string b = bassTrack(d);  // outra "Bass"
+  const fs::path dir = freshDir("unfreeze-ids");
+  const Printed pa = freezeTrack(d, a, renderFile(dir), dir);
+  removeTrack(d, pa.trackId);  // o áudio do freeze de A apagado à mão
+  const Printed pb = freezeTrack(d, b, renderFile(dir), dir);  // pode reaproveitar o mesmo id
+  unfreezeTrack(d, a);
+  CHECK(d.findTrack(pb.trackId) != nullptr);  // o áudio de B fica
+  CHECK(isFrozen(*d.findTrack(b)));
+  CHECK(!isFrozen(*d.findTrack(a)));
+}
+
+TEST("Double recusa quando passaria o máximo de notas (não diz que duplicou a meio)") {
+  Document d = newEmptyDocument();
+  const std::string bass = bassTrack(d);
+  const std::string slot = addRackSlot(d, "Denso", 4);
+  Pattern& p = rackPatternFor(d, slot, bass);
+  p.notes.clear();
+  for (int i = 0; i < 3000; ++i) p.notes.push_back(Note{"n" + std::to_string(i + 1), (int64_t)i * 5, 4, 36, 0.8});
+  const std::string before = toJson(d).dump();
+  CHECK_THROWS(doubleRackSlot(d, slot));
+  CHECK_EQ(toJson(d).dump(), before);
+}
+
+TEST("freeze: o render só entra se a pista não mudou entretanto") {
+  Document d = newEmptyDocument();
+  const std::string bass = bassTrack(d);
+  const Document start = d;
+  CHECK(freezeStillMatches(start, d, bass));
+  trackById(d, bass).patterns.front().notes.front().pitch = 40;  // uma nota mexida durante o render
+  CHECK(!freezeStillMatches(start, d, bass));
+  Document longer = start;
+  longer.lengthTicks += kBar;  // a música cresceu: o render já não chega ao fim
+  CHECK(!freezeStillMatches(start, longer, bass));
+  Document other = start;
+  other.tracks.front().mix.gainDb = -3;  // outra pista: não interessa
+  if (other.tracks.front().id != bass) CHECK(freezeStillMatches(start, other, bass));
+}
+
 CORE_TEST_MAIN

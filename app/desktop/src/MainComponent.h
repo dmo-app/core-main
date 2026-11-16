@@ -246,8 +246,9 @@ private:
   // Freeze / Unfreeze (quick_tools.hpp): the track's plugins rendered to audio on a track below, unloaded until Unfreeze.
   void toggleFreeze(const std::string& trackId);
   void pollFreeze();  // the timer: the render finished, failed or never started
-  struct FreezeJob { std::string trackId; juce::File file; std::string path; juce::uint32 since = 0; };
+  struct FreezeJob { std::string trackId; juce::File file; std::string path; juce::uint32 since = 0; doc::Document start; };
   std::unique_ptr<FreezeJob> freeze_;
+  std::string freezePath_;  // the last freeze render: its end is told by pollFreeze, not as an export
   void showMainMenu(const std::string& trackId, int64_t tick);  // right click: Tools, Instruments, Import, MIDI, Sample, Music
   juce::PopupMenu legacyMenu(int index, const juce::String& name);  // the menus that were on the top bar, by their old place
   void showAddTrackMenu();
