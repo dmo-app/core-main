@@ -30,7 +30,10 @@ const char* kSystem =
     "- Quando não souberes como se faz algo num estilo (BPM, KBBB, energia, arranjo, mistura), consulta o manual "
     "(consultar_manual) com poucas palavras-chave, antes de propor.\n"
     "- Uma pista nova não tem som até o Diogo escolher o plugin (VST3); diz-lhe isso quando criares pistas.\n"
-    "- No fim, responde com uma ou duas frases: o que propuseste e o que ele deve ouvir. Esse texto é o título da proposta.";
+    "- Escreve pouco: entre chamadas não escrevas texto (as chamadas ficam registadas na proposta) e não repitas o que "
+    "as chamadas já dizem.\n"
+    "- No fim, responde com uma frase curta (até 25 palavras): o que propuseste e o que ele deve ouvir. Esse texto é o "
+    "título da proposta.";
 
 // The song as the model reads it: Core's song (control::songJson) plus, per track, its part, its pattern and where it
 // plays.
