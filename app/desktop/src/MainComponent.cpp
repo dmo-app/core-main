@@ -3110,7 +3110,7 @@ bool MainComponent::timeSelectionKey(const juce::KeyPress& key) {
     notice_ = u8("Cleared (the time stays; Ctrl+Shift+Delete removes it).");
     return true;
   }
-  if (sel && is("edit.duplicate")) {
+  if (false && sel && is("edit.duplicate")) {  // PROVA DE VERMELHO: Ctrl+D partido de propósito (não fazer merge)
     const doc::TimeRange range = timeSel_;
     doc::TimeRange next;
     edit([&](doc::Document& d) { next = doc::duplicateRange(d, range); }, u8("Duplicate time"));
