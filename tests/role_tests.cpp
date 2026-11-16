@@ -394,3 +394,21 @@ TEST("cartoes das tools: a lista esta certa, sem S-Core, e acha-se por id e pelo
     CHECK(findCorePlugin(card) != nullptr);
   }
 }
+
+TEST("Tools em modo AI: só os papéis tocados pelos plugins da AI (Vital, sfizz, Dragonfly, Airwindows, gate)") {
+  RoleMap all;
+  all.roles["bass"].plugin = json{{"name", "Serum 2"}, {"id", "Serum 2"}};
+  all.roles["lead"].plugin = json{{"name", "Vital"}, {"id", "Vital"}};
+  all.roles["drums"].plugin = json{{"name", "sfizz"}, {"id", "sfizz"}};
+  all.roles["reverb"].plugin = json{{"name", "Dragonfly Room Reverb"}, {"id", "Dragonfly Room Reverb"}};
+  all.roles["delay"].plugin = json{{"name", "Airwindows Consolidated"}, {"id", "Airwindows Consolidated"}};
+  all.roles["sidechain"].plugin = json{{"name", "Core AI Gate"}, {"id", "Core AI Gate"}};
+  all.roles["filter"].plugin = json{{"name", "FabFilter Pro-Q 3"}, {"id", "FabFilter Pro-Q 3"}};
+  const RoleMap ai = aiRoleSubset(all);
+  CHECK_EQ(ai.roles.size(), (size_t)5);
+  CHECK(ai.find("bass") == nullptr);
+  CHECK(ai.find("filter") == nullptr);
+  CHECK(ai.find("lead") != nullptr && ai.find("drums") != nullptr && ai.find("reverb") != nullptr);
+  CHECK(!isAiPlugin(json()));
+  CHECK(aiRoleSubset(RoleMap{}).roles.empty());
+}

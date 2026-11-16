@@ -5,6 +5,8 @@
 // Compact layout (2026-11-16): one line per tool (name and kind); what it does is in its tooltip.
 // One device (Diogo 2026-11-16: "isto deveria estar dentro de um plugin chamado tools"): the panel shows a single
 // "Tools" device; a click on it opens or folds it, and the tools are inside it. The ids the AI calls stay the same.
+// AI | Manual on the device: AI plays the roles with the AI's plugins and shows only the tools those plugins can
+// play; Manual plays them with the plugins of Settings > Roles and shows every tool.
 #pragma once
 #include <functional>
 #include <memory>
@@ -19,6 +21,8 @@ namespace core::app {
 class PluginCards final : public juce::Component {
 public:
   std::function<void(const doc::CorePluginInfo&, juce::Component&)> onOpen;
+  std::function<void(bool manual)> onMode;  // AI or Manual chosen on the device
+  void showManual(bool m) { manual_ = m; resized(); repaint(); if (device_) device_->repaint(); }  // no callback
 
   PluginCards() {
     for (const auto& p : doc::corePlugins()) {
@@ -36,6 +40,7 @@ public:
   // Which roles have a plugin on this computer (Settings > Roles): a card none of whose roles has one is grey.
   void setRoles(const doc::RoleMap& map) {
     for (auto& c : cards_) c->setMissing(map);
+    resized();
     repaint();
   }
 
@@ -53,8 +58,9 @@ public:
     device_->setBounds(0, y, w, kCardH);
     y += kCardH + 2;
     for (auto& c : cards_) {
-      c->setVisible(open_);
-      if (!open_) continue;
+      const bool shown = open_ && (manual_ || !c->grey());  // AI: only the tools whose plugins are installed
+      c->setVisible(shown);
+      if (!shown) continue;
       c->setBounds(10, y, w - 10, kCardH);  // inside the device: indented under it
       y += kCardH + 2;
     }
@@ -64,13 +70,25 @@ public:
 private:
   static constexpr int kHead = 28, kCardH = 28;
   bool open_ = false;  // folded: one device; a click shows the tools inside
+  bool manual_ = false;  // AI (default): only the tools with their plugins installed; Manual: all of them
   void toggleOpen() { open_ = !open_; resized(); repaint(); }
+  void setManual(bool m) {
+    if (m == manual_) { open_ = true; resized(); repaint(); return; }
+    manual_ = m;
+    open_ = true;
+    if (onMode) onMode(m);  // the window switches the role map and gives setRoles the new one
+    resized();
+    repaint();
+    device_->repaint();
+  }
+  int usable() const { int n = 0; for (auto& c : cards_) n += !c->grey(); return n; }
   // The device itself: its name, how many tools it holds, an arrow that says open or folded.
   class Device final : public juce::Component, public juce::SettableTooltipClient {
   public:
     explicit Device(PluginCards& o) : owner_(o) {
       setMouseCursor(juce::MouseCursor::PointingHandCursor);
-      setTooltip(juce::String::fromUTF8("Core's tools in one device (the AI calls the same ones). Click: open / fold."));
+      setTooltip(juce::String::fromUTF8("Core's tools in one device (the AI calls the same ones). Click: open / fold. "
+                                        "AI: only the tools whose plugins are installed. Manual: all of them."));
     }
     void paint(juce::Graphics& g) override {
       const auto r = getLocalBounds().toFloat();
@@ -84,17 +102,39 @@ private:
       else arrow.addTriangle(cx - 2, cy - 4, cx - 2, cy + 4, cx + 3, cy);
       g.setColour(theme::kMuted);
       g.fillPath(arrow);
-      const auto title = getLocalBounds().withTrimmedLeft(24).withTrimmedRight(10);
+      auto title = getLocalBounds().withTrimmedLeft(24).withTrimmedRight(4);
+      // AI | Manual, on the right: which tools the device shows.
+      const auto modes = title.removeFromRight(96).reduced(0, 5);
+      for (int i = 0; i < 2; ++i) {
+        const auto b = modeBox(modes, i).toFloat();
+        const bool on = (i == 1) == owner_.manual_;
+        g.setColour(on ? theme::kAccent.withAlpha(0.85f) : theme::kField);
+        g.fillRoundedRectangle(b, 3.0f);
+        g.setColour(on ? theme::kText : theme::kMuted);
+        g.setFont(juce::FontOptions(theme::kFontSmall, juce::Font::bold));
+        g.drawText(i == 0 ? "AI" : "Manual", b, juce::Justification::centred, false);
+      }
       g.setColour(theme::kText);
       g.setFont(juce::FontOptions(theme::kFontBody, juce::Font::bold));
       g.drawText("Tools", title, juce::Justification::centredLeft, false);
       g.setColour(theme::kDim);
       g.setFont(juce::FontOptions(theme::kFontSmall));
-      g.drawText(juce::String((int)owner_.cards_.size()) + " tools", title, juce::Justification::centredRight, false);
+      const int n = owner_.manual_ ? (int)owner_.cards_.size() : owner_.usable();
+      g.drawText(juce::String(n), title.withTrimmedRight(6), juce::Justification::centredRight, false);
     }
+    static juce::Rectangle<int> modeBox(juce::Rectangle<int> modes, int i) {
+      return i == 0 ? modes.withWidth(36) : modes.withTrimmedLeft(38);
+    }
+    juce::Rectangle<int> modesArea() const { return getLocalBounds().withTrimmedLeft(24).withTrimmedRight(4).removeFromRight(96).reduced(0, 5); }
     void mouseEnter(const juce::MouseEvent&) override { repaint(); }
     void mouseExit(const juce::MouseEvent&) override { repaint(); }
-    void mouseUp(const juce::MouseEvent& e) override { if (e.mouseWasClicked()) owner_.toggleOpen(); }
+    void mouseUp(const juce::MouseEvent& e) override {
+      if (!e.mouseWasClicked()) return;
+      const auto modes = modesArea();
+      if (modeBox(modes, 0).contains(e.getPosition())) owner_.setManual(false);
+      else if (modeBox(modes, 1).contains(e.getPosition())) owner_.setManual(true);
+      else owner_.toggleOpen();
+    }
 
   private:
     PluginCards& owner_;
@@ -135,6 +175,8 @@ private:
     void mouseUp(const juce::MouseEvent& e) override {
       if (e.mouseWasClicked() && owner_.onOpen) owner_.onOpen(info_, *this);
     }
+
+    bool grey() const { return grey_; }
 
   private:
     PluginCards& owner_;

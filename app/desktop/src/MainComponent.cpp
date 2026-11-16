@@ -2104,6 +2104,15 @@ MainComponent::MainComponent(EngineSession::Options options, doc::Document docum
   }
   addChildComponent(pluginCards_);
   pluginCards_.onOpen = [this](const doc::CorePluginInfo& p, juce::Component& card) { openCorePlugin(p, &card); };
+  pluginCards_.onMode = [this](bool manual) {
+    PluginCatalog::setManualTools(manual);
+    settings_.getUserSettings()->setValue("toolsManual", manual);
+    std::string problem;
+    pluginCards_.setRoles(PluginCatalog::roles(&problem));
+    notice_ = manual ? u8("Tools: Manual, the tools play the plugins of Settings > Roles.")
+                     : u8("Tools: AI, the tools play the AI's plugins (only the tools they can play are shown).");
+    repaint();
+  };
   mixerButton_.setButtonText("MIX");
   mixerButton_.setTooltip(u8("The mixer in the bottom panel (Ctrl+M)"));
   mixerButton_.setClickingTogglesState(false);
@@ -2166,6 +2175,8 @@ MainComponent::MainComponent(EngineSession::Options options, doc::Document docum
     mixerHeight_ = settings_.getUserSettings()->getIntValue("mixerHeight", 0);
     trackSize_ = juce::jlimit(0, 2, settings_.getUserSettings()->getIntValue("trackSize", 1));
     editorCollapsed_ = settings_.getUserSettings()->getBoolValue("editorCollapsed", false);
+    PluginCatalog::setManualTools(settings_.getUserSettings()->getBoolValue("toolsManual", false));
+    pluginCards_.showManual(PluginCatalog::manualTools());
     const juce::String saved = settings_.getUserSettings()->getValue("midiInput");
     for (const auto& input : juce::MidiInput::getAvailableDevices())
       if (input.identifier == saved) openMidiInput(saved);

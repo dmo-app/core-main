@@ -270,4 +270,20 @@ int giveSilentTracksRolePlugins(Document& doc, const RoleMap& map, std::vector<s
   return changed;
 }
 
+bool isAiPlugin(const json& plugin) {
+  if (!plugin.is_object()) return false;
+  std::string name = plugin.value("name", std::string());
+  for (auto& c : name) c = (char)std::tolower((unsigned char)c);
+  for (const char* p : {"vital", "sfizz", "dragonfly", "airwindows", "core ai"})
+    if (name.find(p) != std::string::npos) return true;
+  return false;
+}
+
+RoleMap aiRoleSubset(const RoleMap& map) {
+  RoleMap out;
+  for (const auto& [role, b] : map.roles)
+    if (isAiPlugin(b.plugin)) out.roles[role] = b;
+  return out;
+}
+
 }  // namespace core::doc
