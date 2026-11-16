@@ -1,5 +1,6 @@
 #include "song_calls.hpp"
 #include <array>
+#include <cstdio>
 #include "gate.hpp"
 #include "role_tools.hpp"
 #include <algorithm>
@@ -151,8 +152,12 @@ std::string groupKey(const Call& c) {
 
 }  // namespace
 
+void addSongTools(std::vector<CoreFunction>& out);
+const doc::SongToolInfo* songTool(const std::string& id);
+
 bool isSongFamily(const std::string& family) {
-  return family == "track" || family == "pcore" || family == "shape" || family == "arrange" || family == "plays" || family == "gate";
+  return family == "track" || family == "pcore" || family == "shape" || family == "arrange" || family == "plays" || family == "gate" ||
+         family == "songtool";
 }
 
 void addFunctions(std::vector<CoreFunction>& out, const doc::PCoreCatalog* pcore) {
@@ -247,6 +252,48 @@ void addFunctions(std::vector<CoreFunction>& out, const doc::PCoreCatalog* pcore
     for (const auto& pr : aifx::presets()) f.extra["presetInfo"][pr.id] = pr.what;
     out.push_back(std::move(f));
   }
+  addSongTools(out);
+}
+
+// The song tools of the cards (role_tools.hpp songToolCatalog: space, fx, roll, suck, pump, buildup), as the AI's
+// functions, one each, with their parameters: "track" is the call's "on", a "section" its section, a "choice" a
+// text option, a "number" a knob; "tracks" and "from" name other tracks (texts).
+void addSongTools(std::vector<CoreFunction>& out) {
+  for (const auto& t : doc::songToolCatalog()) {
+    CoreFunction f;
+    f.id = t.id;
+    f.family = "songtool";
+    f.name = t.id == "fx" ? "FX by intent" : t.id == "space" ? "Space (shared reverb / delay)" : t.id == "roll" ? "Roll" :
+             t.id == "suck" ? "SUCK" : t.id == "pump" ? "PUM" : t.id == "buildup" ? "Build-up FX" : t.id;
+    f.description = t.what + " (its plugins come from Settings > Roles: " + (t.roles.empty() ? std::string("none, notes only") : listOf(t.roles)) + ")";
+    f.tags = {t.id};
+    for (const auto& p : t.params) {
+      if (p.kind == "choice") {
+        std::vector<std::string> values;
+        for (size_t a = 0; a <= p.values.size();) {
+          const size_t bar = std::min(p.values.find('|', a), p.values.size());
+          if (bar > a) values.push_back(p.values.substr(a, bar - a));
+          a = bar + 1;
+        }
+        f.options[p.name] = values;
+      } else if (p.kind == "number") {
+        double lo = 0, hi = 1;
+        std::sscanf(p.values.c_str(), "%lf..%lf", &lo, &hi);
+        const double def = p.name == "amount" || p.name == "depth" ? 0.7 : 0;
+        f.args.push_back({p.name, p.name, p.what, "", lo, hi, def});
+      } else if (p.kind == "tracks" || (p.kind == "track" && p.name != "track")) {
+        f.options[p.name] = {};  // track names, checked against the song
+      }
+      f.tags.push_back(p.name);
+    }
+    out.push_back(std::move(f));
+  }
+}
+
+const doc::SongToolInfo* songTool(const std::string& id) {
+  for (const auto& t : doc::songToolCatalog())
+    if (t.id == id) return &t;
+  return nullptr;
 }
 
 // The gate a call asks for: its preset (or the plain gate), then its pattern, rate and knobs.
@@ -425,6 +472,62 @@ bool validate(const json& c, const CoreFunction& f, const doc::Document& song, c
     }
     return true;
   }
+  if (f.family == "songtool") {
+    const doc::SongToolInfo* t = songTool(f.id);
+    if (!t) return false;
+    // A track of the song, or one an earlier "track" call of this proposal makes.
+    auto known = [&](const std::string& name) {
+      return pending.newTrack(name) || std::any_of(song.tracks.begin(), song.tracks.end(), [&](const doc::Track& tr) { return same(tr.name, name) || tr.id == name; });
+    };
+    for (const auto& p : t->params) {
+      if (p.kind == "track" && p.name == "track") {
+        if (!needsTrack()) return false;
+      } else if (p.kind == "section") {
+        const bool required = f.id == "roll" || f.id == "suck" || f.id == "buildup";
+        if (required && call.sectionName.empty() && !call.zoneSection) {
+          problems.push_back(f.name + ": no \"section\" given: left out");
+          return false;
+        }
+      } else if (p.kind == "choice") {
+        if (!takeText(c, f, p.name, p.name == "kind" || p.name == "intent", call, problems)) return false;
+      } else if (p.kind == "track" || p.kind == "tracks") {
+        json v = textOf(c, p.name);
+        std::vector<std::string> names;
+        if (v.is_string()) {
+          const std::string all = v.get<std::string>();
+          for (size_t a = 0; a <= all.size();) {
+            size_t comma = std::min(all.find(',', a), all.size());
+            std::string one = all.substr(a, comma - a);
+            while (!one.empty() && one.front() == ' ') one.erase(0, 1);
+            while (!one.empty() && one.back() == ' ') one.pop_back();
+            if (!one.empty()) names.push_back(one);
+            a = comma + 1;
+          }
+        } else if (v.is_array()) {
+          for (const auto& n : v) if (n.is_string()) names.push_back(n.get<std::string>());
+        }
+        if (p.kind == "tracks" && !call.trackId.empty() && call.trackId != "song") names.insert(names.begin(), call.trackName);
+        if (names.empty()) {
+          problems.push_back(f.name + ": \"" + p.name + "\" is needed (" + p.what + "): left out");
+          return false;
+        }
+        std::string joined;
+        for (const auto& n : names) {
+          if (!known(n)) {
+            problems.push_back(f.name + ": no track called \"" + n + "\": left out");
+            return false;
+          }
+          joined += (joined.empty() ? "" : ",") + n;
+        }
+        call.texts[p.name] = joined;
+        if (p.kind == "tracks" && call.trackId.empty()) {
+          call.trackId = "song";
+          call.trackName = joined;
+        }
+      }
+    }
+    return true;
+  }
   problems.push_back(f.name + " is not a song function: left out");
   return false;
 }
@@ -522,6 +625,52 @@ std::vector<std::string> apply(doc::Document& song, const Proposal& p, size_t& i
     const auto r = doc::toolGate(song, resolveTrack(c.trackId, made), *env.roles, a, b, gateOf(c), text(c, "preset"));
     return {describe(c) + ": " + r.sentence};
   }
+  if (family == "songtool") {
+    ++i;
+    if (!env.roles) throw doc::DocumentError("calls", "the role map is not loaded (Settings > Roles)");
+    const doc::RoleMap& roles = *env.roles;
+    // The span: the selection, else the section, else the whole song.
+    int64_t a = c.startTick, b = c.endTick;
+    if (b <= a) {
+      const doc::SongSpan span = doc::sectionSpan(song, c.sectionName);
+      a = span.start;
+      b = span.end;
+    }
+    auto idOf = [&](const std::string& name) {
+      for (const auto& t : song.tracks)
+        if (same(t.name, name) || t.id == name) return t.id;
+      const auto it = made.find(name);
+      if (it != made.end()) return it->second;
+      throw doc::DocumentError("calls", "no track " + name);
+    };
+    const std::string id = c.fn->id;
+    const double amount = arg(c, "amount", 0.7);
+    std::string sentence;
+    if (id == "space") {
+      std::vector<std::string> ids;
+      const std::string all = text(c, "tracks");
+      for (size_t at = 0; at <= all.size();) {
+        const size_t comma = std::min(all.find(',', at), all.size());
+        if (comma > at) ids.push_back(idOf(all.substr(at, comma - at)));
+        at = comma + 1;
+      }
+      sentence = doc::toolSharedBus(song, ids, roles, text(c, "kind"), text(c, "preset")).sentence;
+    } else {
+      const std::string track = resolveTrack(c.trackId, made);
+      if (id == "fx") sentence = doc::toolIntentFx(song, track, roles, text(c, "intent"), a, b, amount).sentence;
+      else if (id == "roll")
+        sentence = doc::toolRoll(song, track, a, b, text(c, "style").empty() ? "steps" : text(c, "style"), -1, (int)arg(c, "rise", 0),
+                                 (int)arg(c, "gap", 0)).sentence;
+      else if (id == "suck") sentence = doc::toolSuck(song, track, roles, b, b - a, amount).sentence;
+      else if (id == "pump") sentence = doc::toolPump(song, track, idOf(text(c, "from")), roles, a, b, arg(c, "depth", 0.7)).sentence;
+      else if (id == "buildup") {
+        doc::BuildupFx fx;
+        fx.amount = amount;
+        sentence = doc::toolBuildupFx(song, track, roles, a, b, fx).sentence;
+      } else throw doc::DocumentError("calls", "Core cannot apply " + c.fn->name + " yet");
+    }
+    return {describe(c) + ": " + sentence};
+  }
   throw doc::DocumentError("calls", "Core cannot apply " + c.fn->name + " yet");
 }
 
@@ -536,6 +685,13 @@ std::string describe(const Call& c) {
   }
   if (family == "arrange") out = "Arrange " + where;
   else if (family == "plays") out = where + (text(c, "play") == "on" ? " plays in " : " rests in ") + c.sectionName;
+  else if (family == "songtool") {
+    out = c.fn->name + " on " + (c.fn->id == "space" ? text(c, "tracks") : where);
+    for (const char* k : {"kind", "preset", "intent", "style"})
+      if (!text(c, k).empty()) out += " · " + text(c, k);
+    if (!text(c, "from").empty()) out += " · from " + text(c, "from");
+    for (const auto& [k, v] : c.args) out += " · " + k + " " + num(v);
+  }
   else if (family == "gate") {
     out = "Gate " + (text(c, "preset").empty() ? std::string() : text(c, "preset") + " ") +
           (text(c, "pattern").empty() ? std::string() : "[" + text(c, "pattern") + "] ") + (text(c, "rate").empty() ? "" : text(c, "rate") + " ") + "on " + where;

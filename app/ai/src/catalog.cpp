@@ -1,4 +1,5 @@
 #include "catalog.hpp"
+#include "role_tools.hpp"
 #include <cctype>
 #include <cstdio>
 
@@ -46,6 +47,24 @@ Action editAction(const control::CoreFunction& f) {
   if (f.family == "shape") required.push_back("shape");
   if (f.family == "plays") required = {"on", "section", "play"};
   if (f.family == "pcore") required.push_back("on");
+  if (f.family == "songtool") {
+    for (const auto& t : doc::songToolCatalog()) {
+      if (t.id != f.id) continue;
+      for (const auto& p : t.params) {
+        if (p.kind == "section") props["section"] = {{"type", "string"}, {"description", p.what}};
+        else if (p.kind == "tracks") props[p.name] = {{"type", "array"}, {"items", {{"type", "string"}}}, {"description", p.what}};
+        else if (p.kind == "track" && p.name != "track") props[p.name] = {{"type", "string"}, {"description", p.what}};
+        else if (p.kind == "track") props["on"] = {{"type", "string"}, {"description", p.what}};
+        else if (p.kind == "choice") props[p.name]["description"] = p.what;
+        if (p.kind == "track" && p.name == "track") required.push_back("on");
+        if (p.kind == "choice" && (p.name == "kind" || p.name == "intent")) required.push_back(p.name);
+        if (p.kind == "track" && p.name != "track") required.push_back(p.name);
+        if (p.kind == "tracks") required.push_back(p.name);
+        if (p.kind == "section" && (f.id == "roll" || f.id == "suck" || f.id == "buildup")) required.push_back("section");
+      }
+    }
+    if (f.id == "space") props.erase("on");
+  }
   if (f.family == "gate") {
     required = {"on", "section"};
     props["pattern"]["description"] = "16 steps: x on, h half, . off (\"x.xx\" repeats); instead of or over the preset";

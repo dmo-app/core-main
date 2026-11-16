@@ -2,6 +2,7 @@
 // suavizacao, nada de NaN), o papel "gate", a tool toolGate e a chamada "gate" da AI. Sem JUCE: o plugin so embrulha
 // este codigo.
 #include <cmath>
+#include <iostream>
 #include <vector>
 #include "support/check.hpp"
 #include "calls.hpp"
@@ -197,6 +198,59 @@ TEST("gate: a chamada gate da AI com preset ou padrao, recusada sem nada") {
   const auto lines = control::applyProposal(d, p, "", env);
   CHECK_EQ(lines.size(), (size_t)2);
   CHECK(lines[1].find("duck 50%") != std::string::npos);
+}
+
+TEST("tools dos cartoes: a AI chama space, fx, roll, suck, pump e buildup") {
+  doc::Document d = doc::newTemplateDocument();
+  CHECK(d.tracks.size() >= 2 && d.lengthTicks >= 16 * 4 * kPpq);
+  if (d.tracks.size() < 2 || d.lengthTicks < 16 * 4 * kPpq) return;
+  d.sections.clear();
+  doc::Section build, drop;
+  build.id = "sec-build";
+  build.name = "Build-up";
+  build.startTick = 0;
+  build.lengthTicks = 8 * 4 * kPpq;
+  drop.id = "sec-drop";
+  drop.name = "Drop";
+  drop.startTick = 8 * 4 * kPpq;
+  drop.lengthTicks = 8 * 4 * kPpq;
+  d.sections = {build, drop};
+  const std::string a = d.tracks[0].name, b = d.tracks[1].name;
+  auto plugin = [](const std::string& name) {
+    return json{{"format", "vst3"}, {"id", "VST3-" + name}, {"name", name}, {"vendor", "Test"}, {"file", "C:/VST3/" + name + ".vst3"}};
+  };
+  doc::RoleMap m;
+  m.roles["reverb"] = doc::guessRoleBinding("reverb", plugin("Room"), json::array({{{"id", "0"}, {"name", "Mix"}}, {{"id", "2"}, {"name", "Decay"}}}));
+  m.roles["delay"] = doc::guessRoleBinding("delay", plugin("Delay"), json::array({{{"id", "3"}, {"name", "Dry/Wet"}}, {{"id", "4"}, {"name", "Feedback"}}}));
+  m.roles["filter"] = doc::guessRoleBinding("filter", plugin("Filter"), json::array({{{"id", "10"}, {"name", "Cutoff"}}, {{"id", "11"}, {"name", "Resonance"}}}));
+  m.roles["drive"] = doc::guessRoleBinding("drive", plugin("Drive"), json::array({{{"id", "5"}, {"name", "Drive"}}, {{"id", "6"}, {"name", "Mix"}}}));
+  m.roles["sidechain"] = doc::guessRoleBinding("sidechain", plugin("Shaper"), json::array({{{"id", "7"}, {"name", "Volume"}}}));
+  const auto fns = control::buildFunctions();
+  for (const char* id : {"space", "fx", "roll", "suck", "pump", "buildup"}) CHECK(control::findFunction(fns, id) != nullptr);
+  const json raw = {{"calls", json::array({
+      {{"fn", "space"}, {"tracks", json::array({a, b})}, {"kind", "reverb"}, {"preset", "hall"}},
+      {{"fn", "fx"}, {"on", b}, {"intent", "buildup"}, {"section", "Build-up"}, {"args", {{"amount", 0.5}}}},
+      {{"fn", "roll"}, {"on", a}, {"section", "Build-up"}, {"style", "gradual"}},
+      {{"fn", "suck"}, {"on", b}, {"section", "Build-up"}},
+      {{"fn", "pump"}, {"on", b}, {"from", a}, {"section", "Drop"}, {"args", {{"depth", 0.6}}}},
+      {{"fn", "buildup"}, {"on", b}, {"section", "Build-up"}},
+      {{"fn", "fx"}, {"on", b}, {"intent", "nada"}},             // intent errado
+      {{"fn", "roll"}, {"on", a}},                               // sem seccao
+      {{"fn", "pump"}, {"on", b}, {"from", "Ninguem"}}})}};       // pista que nao existe
+  const control::Proposal p = control::validateProposal(raw, fns, d, nullptr);
+  for (const auto& pr : p.problems) std::cerr << "problema: " << pr << "\n";
+  CHECK_EQ(p.calls.size(), (size_t)6);
+  CHECK_EQ(p.problems.size(), (size_t)3);
+  control::ApplyEnv env;
+  env.roles = &m;
+  std::vector<std::string> lines;
+  try {
+    lines = control::applyProposal(d, p, "", env);
+  } catch (const std::exception& e) {
+    std::cerr << "applyProposal: " << e.what() << "\n";
+  }
+  CHECK_EQ(lines.size(), (size_t)6);
+  for (const auto& l : lines) CHECK(l.find(": ") != std::string::npos);
 }
 
 CORE_TEST_MAIN
