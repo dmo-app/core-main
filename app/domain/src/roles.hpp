@@ -75,6 +75,9 @@ void setTrackRole(Document& doc, const std::string& trackId, const std::string& 
 // that one of the AI's plugins plays (Vital, sfizz, Dragonfly, Airwindows, the Core AI gate), by the plugin's name.
 bool isAiPlugin(const json& plugin);
 RoleMap aiRoleSubset(const RoleMap& map);
+// The kick role, when it has no plugin yet: the first instrument whose name says kick (Kick 3, Kick 2...). True when
+// the map changed. Never replaces a choice made in Settings > Roles.
+bool fillKickRole(RoleMap& map, const std::vector<json>& instruments);
 
 // ---- silent tracks (Diogo 2026-11-16, "não sai som"): a song or template from before 0.7.0 keeps its old Core
 // sounds ("builtin") or has none, and 0.7.0 plays neither. The instrument role a track plays, guessed from its old

@@ -210,7 +210,7 @@ CORE_TEST_MAIN
 TEST("pistas mudas: o papel adivinha-se pelo nome e pelo som antigo") {
   Track t;
   t.name = "Kick"; t.instrument.kind = "builtin"; t.instrument.name = "kick";
-  CHECK_EQ(guessInstrumentRole(t), std::string("drums"));
+  CHECK_EQ(guessInstrumentRole(t), std::string("kick"));  // o kick tem o seu proprio papel (Kick 3)
   t.name = "Hats 2"; CHECK_EQ(guessInstrumentRole(t), std::string("drums"));
   t.name = "Sub Bass"; t.instrument.name = "wave"; CHECK_EQ(guessInstrumentRole(t), std::string("bass"));
   t.name = "Big Pad"; CHECK_EQ(guessInstrumentRole(t), std::string("pad"));
@@ -411,4 +411,33 @@ TEST("Tools em modo AI: só os papéis tocados pelos plugins da AI (Vital, sfizz
   CHECK(ai.find("lead") != nullptr && ai.find("drums") != nullptr && ai.find("reverb") != nullptr);
   CHECK(!isAiPlugin(json()));
   CHECK(aiRoleSubset(RoleMap{}).roles.empty());
+}
+
+// "kick 3 sonic academy" (Diogo 2026-11-16): o som do kick vem do seu plugin (Kick 3); o Core so poe as batidas.
+TEST("kick: papel proprio, preenchido pelo plugin com kick no nome, com a bateria como recurso") {
+  CHECK(findRole("kick") != nullptr && findRole("kick")->instrument);
+  RoleMap m;
+  std::vector<json> instruments = {fakePlugin("Serum2"), fakePlugin("Kick 3")};
+  CHECK(fillKickRole(m, instruments));
+  CHECK(m.find("kick") != nullptr);
+  CHECK_EQ(m.find("kick")->plugin.value("name", std::string()), std::string("Kick 3"));
+  CHECK(!fillKickRole(m, {fakePlugin("Kick 2")}));  // uma escolha feita nao se troca
+  CHECK_EQ(m.find("kick")->plugin.value("name", std::string()), std::string("Kick 3"));
+  CHECK(!isAiPlugin(m.find("kick")->plugin));        // pago: so no modo Manual
+  CHECK(aiRoleSubset(m).find("kick") == nullptr);
+
+  // Uma pista Kick muda: toca o Kick 3 quando ha; sem ele, o plugin da bateria.
+  Document d = newTemplateDocument();
+  std::string kickId;
+  for (auto& t : d.tracks)
+    if (playsPatterns(t) && kickId.empty()) { t.instrument = Instrument{}; t.instrument.kind = "builtin"; t.instrument.name = "kick"; t.name = "Kick"; kickId = t.id; }
+  Document d2 = d;
+  RoleMap drumsOnly;
+  drumsOnly.roles["drums"] = {fakePlugin("sfizz"), {}, {}};
+  giveSilentTracksRolePlugins(d2, drumsOnly, nullptr);
+  CHECK_EQ(trackById(d2, kickId).instrument.plugin.value("name", std::string()), std::string("sfizz"));
+  m.roles["drums"] = {fakePlugin("sfizz"), {}, {}};
+  giveSilentTracksRolePlugins(d, m, nullptr);
+  CHECK_EQ(trackById(d, kickId).instrument.plugin.value("name", std::string()), std::string("Kick 3"));
+  CHECK_EQ(findKickTrack(d), kickId);
 }

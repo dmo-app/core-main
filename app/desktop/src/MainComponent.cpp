@@ -2414,7 +2414,7 @@ juce::PopupMenu MainComponent::coreToolMenu(const std::string& toolId, const std
   if (toolId == "pcore") {
     m.addItem(juce::PopupMenu::Item(u8("Open the Patterns window…")).setAction([safe] { if (safe) safe->openPatterns(); }));
   } else if (toolId == "wcore") {
-    for (const char* role : {"bass", "lead", "pad", "pluck", "drums"}) {
+    for (const char* role : {"kick", "bass", "lead", "pad", "pluck", "drums"}) {
       const juce::String label = u8(doc::findRole(role) ? doc::findRole(role)->label : role);
       if (notes)
         m.addItem(juce::PopupMenu::Item(label + on).setAction([safe, trackId, role = std::string(role), label] {
@@ -2427,7 +2427,7 @@ juce::PopupMenu MainComponent::coreToolMenu(const std::string& toolId, const std
         }));
     }
     juce::PopupMenu fresh;
-    for (const char* role : {"bass", "lead", "pad", "pluck", "drums"}) {
+    for (const char* role : {"kick", "bass", "lead", "pad", "pluck", "drums"}) {
       const juce::String label = u8(doc::findRole(role) ? doc::findRole(role)->label : role);
       fresh.addItem(juce::PopupMenu::Item(label).setAction([safe, role = std::string(role), label] {
         if (!safe) return;
@@ -3981,6 +3981,19 @@ void MainComponent::scanPlugins() {
     if (self == nullptr) return;
     notice_ = u8("Plugins: ") + juce::String(found) + u8(" found") +
               (failed ? u8(", ") + juce::String(failed) + u8(" with problems (set aside)") : juce::String()) + ".";
+    // The kick's own plugin (Diogo 2026-11-16: "kick 3 sonic academy"): an empty Kick role in Settings > Roles takes
+    // the plugin whose name says kick. A choice made there is never replaced.
+    {
+      std::string problem;
+      doc::RoleMap manual = PluginCatalog::manualRoles(&problem);
+      if (problem.empty() && doc::fillKickRole(manual, plugins_->instruments())) {
+        try {
+          doc::saveRoleMap(manual, std::filesystem::path(PluginCatalog::rolesFile().getFullPathName().toWideCharPointer()));
+          notice_ += u8(" Kick role: ") + u8(manual.find("kick")->plugin.value("name", std::string())) + u8(" (Settings > Roles).");
+          pluginCards_.setRoles(PluginCatalog::roles());
+        } catch (const std::exception&) {}
+      }
+    }
     menuItemsChanged();
     repaint();
   });

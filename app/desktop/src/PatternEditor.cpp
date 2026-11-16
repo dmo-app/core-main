@@ -329,7 +329,7 @@ namespace {
 std::string drumRole(const doc::Track& t) {
   for (const char* r : {"kick", "hats", "snare", "drums"})
     if (t.instrument.name == r) return r;
-  std::string words = t.id + " " + t.name;
+  std::string words = t.id + " " + t.name + " " + (t.instrument.kind == "plugin" ? t.instrument.plugin.value("name", std::string()) : std::string());
   for (auto& c : words) c = (char)std::tolower((unsigned char)c);
   if (words.find("kick") != std::string::npos) return "kick";
   if (words.find("hat") != std::string::npos) return "hats";

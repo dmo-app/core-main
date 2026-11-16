@@ -17,7 +17,7 @@ const std::vector<CorePluginInfo>& corePlugins() {
   static const std::vector<CorePluginInfo> list = {
       {"pcore", "P-Core", "Patterns", "writes rhythms and notes in layers: part, shape (KBB...), scale, grid, changes", {}, "window",
        {"patterns", "pattern core", "pattern maker", "channel rack"}},
-      {"wcore", "W-Core", "Instrument", "the track plays the plugin of a role: bass, lead, pad, pluck or drums", {"bass", "lead", "pad", "pluck", "drums"},
+      {"wcore", "W-Core", "Instrument", "the track plays the plugin of a role: kick, bass, lead, pad, pluck or drums", {"kick", "bass", "lead", "pad", "pluck", "drums"},
        "tool", {"instrument", "synth", "role instrument"}},
       {"fcore", "F-Core", "FX", "effects by intent over a section: build-up, suck, intro, outro, impact, break", {"filter", "reverb", "delay", "drive"},
        "tool", {"fx", "fx core", "intent"}},

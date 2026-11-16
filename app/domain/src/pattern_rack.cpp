@@ -204,7 +204,7 @@ int rackStepPitch(const Track& t, const Pattern* p) {
     return std::max_element(count.begin(), count.end(), [](const auto& a, const auto& b) { return a.second < b.second; })->first;
   }
   const std::string& n = t.instrument.name;
-  if (n == "kick" || n == "drums") return 36;
+  if (n == "kick" || n == "drums" || pcoreGuessPart(t) == "kick") return 36;  // a kick plugin (Kick 3) too: C1
   if (n == "snare") return 38;
   if (n == "hats") return lower(t.name).find("open") != std::string::npos ? 46 : 42;
   if (n == "sampler" && !t.instrument.samples.empty()) return t.instrument.samples.front().rootKey;
