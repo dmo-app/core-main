@@ -5981,7 +5981,7 @@ void MainComponent::autosaveTick() {
       if (!self) return;
       self->autosaveAsking_ = false;
       doc::Document document = self->history_.current();
-      if (states.empty()) self->logLine("Autosave: the engine did not give the plugins' settings; the copy has the last ones");
+      if (states.empty()) logLine("Autosave: the engine did not give the plugins' settings; the copy has the last ones");
       else doc::applyPluginStates(document, states);
       self->startAutosave(std::move(document));
     });
