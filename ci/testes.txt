@@ -4,6 +4,9 @@
 # Tirar uma linha ou uma label exige uma decisao numerada no ESTADO.md. Um teste novo entra aqui no mesmo commit.
 engine_tests        merge
 domain_tests        merge
+ai_tests            merge,ai
+ai_contract_tests   merge,ai
+aifx_tests          merge,ai
 role_tests          merge,ai
 midi_tests          merge
 bug_tests           merge

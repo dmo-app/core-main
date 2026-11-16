@@ -20,6 +20,26 @@ target_link_libraries(domain_tests PRIVATE core_domain core_engine_lib)
 target_compile_definitions(domain_tests PRIVATE CORE_TEMPLATES_DIR="${CMAKE_SOURCE_DIR}/templates")
 add_test(NAME domain_tests COMMAND domain_tests)
 
+# The AI inside Core: the song's calls, the chat (canned answers, no network), the knowledge base, the providers.
+add_executable(ai_tests ai_tests.cpp)
+target_include_directories(ai_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(ai_tests PRIVATE core_ai)
+target_compile_definitions(ai_tests PRIVATE CORE_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+add_test(NAME ai_tests COMMAND ai_tests)
+
+# Rede de seguranca da AI (plano de testes T05-T08): modelo falso, um contrato por acao, undo unico, ambito.
+add_executable(ai_contract_tests ai_contract_tests.cpp)
+target_include_directories(ai_contract_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/engine/src)
+target_link_libraries(ai_contract_tests PRIVATE core_ai core_domain core_engine_lib)
+target_compile_definitions(ai_contract_tests PRIVATE CORE_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+add_test(NAME ai_contract_tests COMMAND ai_contract_tests)
+
+# Core AI Gate (app/aifx): the gate's sound, its role, toolGate and the AI's "gate" call.
+add_executable(aifx_tests aifx_tests.cpp)
+target_include_directories(aifx_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(aifx_tests PRIVATE core_ai core_domain core_engine_lib)
+add_test(NAME aifx_tests COMMAND aifx_tests)
+
 # The role map (Settings > Roles) and the tools that play through it (SUCK, PUM, build-up effects).
 add_executable(role_tests role_tests.cpp)
 target_include_directories(role_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
@@ -105,13 +125,13 @@ add_test(NAME quick_tools_tests COMMAND quick_tools_tests)
 # O ci/gate.ps1 sem PowerShell: .bat com nome por corrida, nenhuma variavel com o nome de um parametro, JUCE_BUILDNUMBER.
 add_test(NAME gate_static COMMAND ${CMAKE_COMMAND} -DGATE=${CMAKE_SOURCE_DIR}/ci/gate.ps1 -P ${CMAKE_CURRENT_SOURCE_DIR}/gate_static.cmake)
 
-set_tests_properties(engine_tests domain_tests role_tests midi_tests bug_tests audit_tests audit2_tests hunt_tests round3_tests bitwig_tests time_range_tests pattern_rack_tests song_notes_tests quick_tools_tests cli_version cli_demo_render cli_measure cli_unicode gate_static
+set_tests_properties(engine_tests domain_tests ai_tests ai_contract_tests aifx_tests role_tests midi_tests bug_tests audit_tests audit2_tests hunt_tests round3_tests bitwig_tests time_range_tests pattern_rack_tests song_notes_tests quick_tools_tests cli_version cli_demo_render cli_measure cli_unicode gate_static
                      PROPERTIES LABELS merge TIMEOUT 300)
 # Labels por area (2026-11-16, plano de testes T03), alem do nivel. ci/testes.txt e a lista que o gate confere.
 #   ai      o que a AI chama (tools, catalogo, propostas)
 #   ui      a app com janela (eventos de rato e teclado)
 #   plugins plugins reais (Vital, sfizz); fora do gate, a mao (T19). Vazio ate la.
-set_tests_properties(role_tests round3_tests PROPERTIES LABELS "merge;ai")
+set_tests_properties(ai_tests ai_contract_tests aifx_tests role_tests round3_tests PROPERTIES LABELS "merge;ai")
 
 # The app's own end-to-end test (play, undo, save/reopen, export... on the null device, with its test plugins).
 # It opens Core's window for ~20 s, so it has its own label.

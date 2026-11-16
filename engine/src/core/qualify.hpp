@@ -9,7 +9,8 @@
 namespace core {
 
 // {verdict: "ok" | "unsafe", plugin, version, installed, instrument, problems: [..], warnings: [..],
-//  cpuPct (% of one core at this rate), peakDb, seconds}
+//  cpuPct (% of one core at this rate), peakDb, signalPeakDb (the ordinary stage alone), seconds}
+// An instrument whose ordinary chord peaks above +6 dBFS is unsafe ("too loud").
 json qualifyPlugin(PluginProvider& provider, const json& plugin, double sampleRate = 48000, double seconds = 4);
 
 // The plugin matrix (M10): how a plugin behaves in Core, measured offline with fresh instances at the

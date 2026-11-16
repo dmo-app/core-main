@@ -1,4 +1,5 @@
 #include "Plugins.h"
+#include <algorithm>
 #include <atomic>
 #include <juce_events/juce_events.h>
 #include <filesystem>
@@ -208,13 +209,22 @@ PluginCatalog::json PluginCatalog::qualifyFile(const juce::File& engine, const j
   }
 }
 
-void PluginCatalog::scan(std::function<void(int, int)> onDone) {
+void PluginCatalog::scan(std::function<void(int, int)> onDone) { scanFiles({}, true, std::move(onDone)); }
+
+void PluginCatalog::scanOnly(const juce::Array<juce::File>& files, std::function<void(int, int)> onDone) {
+  scanFiles(files, false, std::move(onDone));
+}
+
+// all: every plugin in the folders, and the list becomes what was found. Otherwise only `files`: their plugins are
+// replaced in the list (or added), the others stay.
+void PluginCatalog::scanFiles(juce::Array<juce::File> only, bool all, std::function<void(int, int)> onDone) {
   if (scanning_) return;
   if (worker_.joinable()) worker_.join();
   scanning_ = true;
-  worker_ = std::thread([this, onDone] {
-    juce::Array<juce::File> files;
-    for (const auto& folder : folders()) if (juce::File(folder).isDirectory()) findPlugins(juce::File(folder), files);
+  worker_ = std::thread([this, onDone, only, all] {
+    juce::Array<juce::File> files = only;
+    if (all)
+      for (const auto& folder : folders()) if (juce::File(folder).isDirectory()) findPlugins(juce::File(folder), files);
     std::vector<json> found;
     std::vector<juce::String> failed;
     std::map<juce::String, juce::String> why;
@@ -264,9 +274,23 @@ void PluginCatalog::scan(std::function<void(int, int)> onDone) {
     if (stop_) { scanning_ = false; return; }  // the app is closing: the list from before stays
     {
       std::lock_guard<std::mutex> g(mutex_);
-      plugins_ = found;
-      quarantine_ = failed;
-      problems_.clear();
+      if (all) {
+        plugins_ = found;
+        quarantine_ = failed;
+        problems_.clear();
+      } else {  // only these files: what the list had from them goes, what was found now comes in
+        auto scanned = [&](const juce::String& path) {
+          for (const auto& f : files) if (f.getFullPathName().equalsIgnoreCase(path)) return true;
+          return false;
+        };
+        plugins_.erase(std::remove_if(plugins_.begin(), plugins_.end(),
+                                      [&](const json& p) { return scanned(juce::String::fromUTF8(p.value("file", std::string()).c_str())); }),
+                       plugins_.end());
+        for (const auto& p : found) plugins_.push_back(p);
+        quarantine_.erase(std::remove_if(quarantine_.begin(), quarantine_.end(), scanned), quarantine_.end());
+        for (const auto& f : failed) quarantine_.push_back(f);
+        for (const auto& f : files) problems_.erase(f.getFullPathName());
+      }
       for (const auto& f : failed) if (why.count(f)) problems_[f] = why[f];
       progress_.clear();
     }

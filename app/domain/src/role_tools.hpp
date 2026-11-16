@@ -13,6 +13,7 @@
 #pragma once
 #include <string>
 #include <vector>
+#include "gate.hpp"
 #include "roles.hpp"
 
 namespace core::doc {
@@ -49,6 +50,11 @@ struct BuildupFx {
 RoleToolResult toolBuildupFx(Document& doc, const std::string& trackId, const RoleMap& map, int64_t start, int64_t dropTick,
                              const BuildupFx& fx);
 
+// The gate (Core AI Gate) on trackId over [start, end): each of its knobs as a flat line of automation, back at
+// its rest (the gate off, depth 0) at `end`. Only the steps that are not on and the knobs that differ from the
+// gate's own rest are written. Needs the gate role with every macro it writes mapped.
+RoleToolResult toolGate(Document& doc, const std::string& trackId, const RoleMap& map, int64_t start, int64_t end,
+                        const aifx::Settings& gate, const std::string& name = "");
 // ================================================================================================================
 // The song tools the AI uses to reach the plugins (Diogo 2026-11-16: "têm de ser feitos a pensar na AI como caminho
 // para usar os plugins"). Diogo plays the plugins by hand; these are for the AI first, so each one has few
