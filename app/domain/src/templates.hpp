@@ -53,6 +53,16 @@ SongTemplate templateFromDocument(const Document& song, TemplateInfo info);
 // Throws DocumentError if the passage is empty or outside the song (Diogo 2026-11-09: examples for the AI).
 SongTemplate templateFromRange(const Document& song, TemplateInfo info, int64_t startTick, int64_t endTick);
 
+// Only the MIDI of a song (Diogo 2026-11-16: "pegar num dos antigos, deixar apenas o midi e aplicar o resto"): the
+// tempo, the sections, every track's patterns, notes and clips, its mix (gain, pan, output, sends to the buses) stay;
+// the old sounds (builtin W-Core, kick, hats...) become "none" (notes, no instrument yet), every effect chain (tracks
+// and master) and LFO goes, and so does the automation of sounds and effects (gainDb and pan stay). "(W-Core)" leaves
+// the track names. Buses stay, empty: their reverb and delay come back from the roles (giveSongRolePlugins).
+Document keepOnlyMidi(const Document& song);
+// A template whose sounds come from the roles (source {"roles": true}): a song made from it gets each track's role
+// plugin and the buses' reverb and delay from Settings > Roles (giveSongRolePlugins) as it is made.
+bool usesRolePlugins(const SongTemplate& t);
+
 // A readable id from a name: lower-case letters, digits and '-'.
 std::string templateIdFromName(const std::string& name);
 

@@ -2548,7 +2548,7 @@ void MainComponent::openCorePlugin(const doc::CorePluginInfo& info, juce::Compon
   m.showMenuAsync(options);
 }
 
-void MainComponent::giveSilentTracksPlugins() {
+void MainComponent::giveSilentTracksPlugins(bool withBuses) {
   std::string problem;
   const doc::RoleMap roles = PluginCatalog::roles(&problem);
   if (roles.roles.empty()) {
@@ -2560,7 +2560,9 @@ void MainComponent::giveSilentTracksPlugins() {
   int changed = 0;
   std::vector<std::string> left;
   try {
-    edit([&](doc::Document& d) { changed = doc::giveSilentTracksRolePlugins(d, roles, &left); }, u8("Plugins for the silent tracks"));
+    edit([&](doc::Document& d) {
+      changed = withBuses ? doc::giveSongRolePlugins(d, roles, &left) : doc::giveSilentTracksRolePlugins(d, roles, &left);
+    }, u8("Plugins for the silent tracks"));
   } catch (const std::exception& e) {
     showError(u8("Plugins for the silent tracks"), u8(e.what()));
     return;
@@ -4381,7 +4383,14 @@ void MainComponent::newFromTemplate(const std::string& templateId) {
   // Its samples found in the library where it is now (a template written when the library was D:\Samples).
   doc::Document song = doc::documentFromTemplate(entry->tmpl);
   if (hasSampleIndex_) doc::relinkMovedSamples(song, sampleIndex_);
-  newFromDocument(std::move(song), [this] {
+  // A template of only MIDI (hitech-plugins): its sounds and the buses' reverb and delay come from Settings > Roles,
+  // as one undo step (Ctrl+Z leaves the notes without plugins).
+  const bool roles = doc::usesRolePlugins(entry->tmpl);
+  newFromDocument(std::move(song), [this, roles] {
+    if (roles) {  // no roles chosen yet: the template's own plugins play, the rest stays silent (no error box)
+      if (!PluginCatalog::roles().roles.empty()) giveSilentTracksPlugins(true);
+      return;
+    }
     if (hasSampleIndex_ && settings_.getUserSettings()->getBoolValue("suggestSamples", true)) useSuggestedSamples(true, true);
   });
 }

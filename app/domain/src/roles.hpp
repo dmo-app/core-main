@@ -87,10 +87,19 @@ bool fillKickRole(RoleMap& map, const std::vector<json>& instruments);
 
 // ---- silent tracks (Diogo 2026-11-16, "não sai som"): a song or template from before 0.7.0 keeps its old Core
 // sounds ("builtin") or has none, and 0.7.0 plays neither. The instrument role a track plays, guessed from its old
-// sound and its name (kick, hats, snare, drums -> drums; bass; pad; pluck/arp; lead): "" when nothing fits.
+// sound and its name (kick, hats, snare, drums -> drums; bass; pad; pluck/arp; lead): "" when nothing fits. A track's
+// own {"role": "<instrument role>"} (keepOnlyMidi keeps the old sound's) is taken first.
 std::string guessInstrumentRole(const Track& t);
 // Each silent track (kind "builtin" or "none", not audio or a bus) whose guessed role has a plugin in the map plays
 // that plugin; its notes stay. Returns how many changed; `left` gets the names of the silent tracks that stayed so.
 int giveSilentTracksRolePlugins(Document& doc, const RoleMap& map, std::vector<std::string>* left = nullptr);
+
+// The effect role a bus plays, from its name: space, reverb, room, hall, huge -> "reverb"; echo, delay -> "delay";
+// "" otherwise.
+std::string guessBusRole(const Track& t);
+// A whole song through the roles (a template made of only its MIDI, keepOnlyMidi): the silent tracks get their role's
+// plugin (giveSilentTracksRolePlugins) and each bus whose guessed role is mapped and missing gets it on its chain.
+// Returns how many tracks changed; doing it again changes nothing. `left` as giveSilentTracksRolePlugins.
+int giveSongRolePlugins(Document& doc, const RoleMap& map, std::vector<std::string>* left = nullptr);
 
 }  // namespace core::doc

@@ -140,3 +140,11 @@ if(TARGET CoreApp)
   set_tests_properties(desktop_self_test PROPERTIES LABELS "desktop;ui" TIMEOUT 600)
 endif()
 
+
+# O template hitech com os plugins novos (2026-11-16): so o MIDI do hitech-ref, os sons e os efeitos pelos papeis.
+add_executable(template_midi_tests template_midi_tests.cpp)
+target_include_directories(template_midi_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(template_midi_tests PRIVATE core_domain core_engine_lib)
+target_compile_definitions(template_midi_tests PRIVATE CORE_TEMPLATES_DIR="${CMAKE_SOURCE_DIR}/templates")
+add_test(NAME template_midi_tests COMMAND template_midi_tests)
+set_tests_properties(template_midi_tests PROPERTIES LABELS merge TIMEOUT 300)
