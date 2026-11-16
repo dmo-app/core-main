@@ -7518,10 +7518,113 @@ void MainComponent::selfTestStep() {
         // M6: this session's logs are there, with the engine's life in them.
         if (!engineLogFile().existsAsFile() || !appLogFile().loadFileAsString().contains("Engine: Ready"))
           return finish(false, "diagnostics: no log in " + logsFolder().getFullPathName());
-        return finish(true, "M1c + M2 path, live notes, audio clips, mixer, save with audio");
+        if (const juce::String why = selfTestCompactUi(); why.isNotEmpty()) return finish(false, "compact UI: " + why);
+        t.log << "compact UI and time selection by keys; ";
+        return finish(true, "M1c + M2 path, live notes, audio clips, mixer, save with audio, compact UI, time selection");
       }
       break;
   }
+}
+
+// What the person tries by hand after a build (the panels, the tracks' height, the time selection's keys), done through
+// keyPressed with the keymap's default keys, so a key that stops working fails the gate. Every edit is undone.
+juce::String MainComponent::selfTestCompactUi() {
+  using MK = juce::ModifierKeys;
+  const int ctrl = MK::ctrlModifier, shift = MK::shiftModifier;
+  auto press = [&](int code, int mods = 0) { return keyPressed(juce::KeyPress(code, MK(mods), 0)); };
+  auto json = [&] { return doc::toJson(history_.current()).dump(); };
+  if (mixerOpen_) setMixerOpen(false);
+  clearTimeSelection();
+  showPlugins_ = false;  // from the Tools, Ctrl+1 goes back to the Library instead of hiding it
+
+  // Ctrl+1 / Ctrl+3 / Ctrl+4: one panel each, and again: back.
+  struct Panel { int key; const char* name; std::function<bool()> state; };
+  const Panel panels[] = {{'1', "Library", [&] { return showLibrary_; }},
+                          {'3', "Inspector", [&] { return showInspector_; }},
+                          {'4', "Editor", [&] { return editorCollapsed_; }}};
+  for (const Panel& panel : panels) {
+    const bool was = panel.state();
+    if (!press(panel.key, ctrl) || panel.state() == was) return juce::String("Ctrl+") + (char)panel.key + " does not toggle the " + panel.name;
+    if (!press(panel.key, ctrl) || panel.state() != was) return juce::String("Ctrl+") + (char)panel.key + " twice does not bring the " + panel.name + " back";
+  }
+  // Ctrl+P: the Patterns window (channel rack) opens; it is hidden again for the rest of the test.
+  if (!press('P', ctrl) || !patternsWindow_ || !patternsWindow_->isVisible()) return "Ctrl+P does not open the Patterns window";
+  patternsWindow_->setVisible(false);
+  // Ctrl+B: every panel away and the editor folded; again: as they were.
+  if (!showLibrary_) press('1', ctrl);
+  if (!showInspector_) press('3', ctrl);
+  const PanelState before{showLibrary_, showPlugins_, showInspector_, editorCollapsed_};
+  if (!press('B', ctrl) || showLibrary_ || showPlugins_ || showInspector_ || !editorCollapsed_) return "Ctrl+B does not take the panels away";
+  if (!press('B', ctrl) || showLibrary_ != before.library || showPlugins_ != before.plugins || showInspector_ != before.inspector ||
+      editorCollapsed_ != before.editorCollapsed)
+    return "Ctrl+B twice does not bring the panels back";
+
+  // Ctrl+Up / Ctrl+Down: Compact, Normal, Large, never past the ends; the rows follow.
+  const int size = trackSize_;
+  setTrackSize(1);
+  const int normal = trackRow();
+  if (!press(juce::KeyPress::upKey, ctrl) || trackSize_ != 2 || trackRow() <= normal) return "Ctrl+Up: no Large tracks";
+  press(juce::KeyPress::upKey, ctrl);
+  if (trackSize_ != 2) return "Ctrl+Up past Large";
+  press(juce::KeyPress::downKey, ctrl);
+  press(juce::KeyPress::downKey, ctrl);
+  if (trackSize_ != 0 || trackRow() >= normal) return "Ctrl+Down: no Compact tracks";
+  press(juce::KeyPress::downKey, ctrl);
+  if (trackSize_ != 0) return "Ctrl+Down past Compact";
+  setTrackSize(size);
+
+  // The time selection: bars 2-3 of the first two tracks with clips.
+  const doc::Document& d = history_.current();
+  std::vector<std::string> ids;
+  for (const auto& tr : d.tracks)
+    if (ids.size() < 2 && (!tr.clips.empty() || !tr.audioClips.empty())) ids.push_back(tr.id);
+  if (ids.size() < 2) return "the song has no two tracks with clips";
+  const doc::TimeRange range{kBar, 3 * kBar, ids};
+  const std::string start = json();
+  const int64_t length = d.lengthTicks;
+  auto select = [&] { timeSel_ = range; };
+  auto back = [&](const char* what) -> juce::String {
+    undo();
+    clearTimeSelection();
+    return json() == start ? juce::String() : juce::String(what) + ": Ctrl+Z does not bring the song back";
+  };
+
+  select();  // Delete: the clips inside go, the time stays
+  if (!press(juce::KeyPress::deleteKey) || history_.undoLabel() != "Clear time" || json() == start || history_.current().lengthTicks != length)
+    return "Delete on the time selection";
+  if (auto why = back("Delete"); why.isNotEmpty()) return why;
+
+  select();  // Ctrl+D: the same bars right after, and the selection moves onto the copy
+  if (!press('D', ctrl) || history_.undoLabel() != "Duplicate time" || timeSel_.fromTick != range.toTick || timeSel_.length() != range.length())
+    return "Ctrl+D on the time selection";
+  if (auto why = back("Ctrl+D"); why.isNotEmpty()) return why;
+
+  select();  // Ctrl+L: the loop around it
+  if (!press('L', ctrl) || !history_.current().loop.enabled || history_.current().loop.startTick != range.fromTick || history_.current().loop.endTick != range.toTick)
+    return "Ctrl+L on the time selection";
+  if (auto why = back("Ctrl+L"); why.isNotEmpty()) return why;
+
+  select();  // Ctrl+Shift+I: empty time as long as the selection; Ctrl+Shift+Delete: that time away
+  if (!press('I', ctrl | shift) || history_.current().lengthTicks != length + range.length()) return "Ctrl+Shift+I: no time inserted";
+  if (auto why = back("Ctrl+Shift+I"); why.isNotEmpty()) return why;
+  select();
+  if (!press(juce::KeyPress::deleteKey, ctrl | shift) || history_.current().lengthTicks != length - range.length()) return "Ctrl+Shift+Delete: no time removed";
+  if (auto why = back("Ctrl+Shift+Delete"); why.isNotEmpty()) return why;
+
+  select();  // Ctrl+9: the view on the selection
+  if (!press('9', ctrl) || viewStart() > (double)range.fromTick || viewStart() + viewLength() < (double)range.toTick ||
+      viewLength() > 2.0 * (double)range.length())
+    return "Ctrl+9 does not zoom to the time selection";
+
+  select();  // Ctrl+C, then Ctrl+V on the first track at the start: the copy lands there, in one undo step
+  if (!press('C', ctrl) || json() != start) return "Ctrl+C changed the song";
+  clearTimeSelection();
+  selectTrack(ids[0]);
+  session_->home();
+  if (!press('V', ctrl) || history_.undoLabel() != "Paste time") return "Ctrl+V of the copied time";
+  if (auto why = back("Ctrl+V"); why.isNotEmpty()) return why;
+  setView(0, viewSpan());
+  return {};
 }
 
 float MainComponent::uiScaleFor(int windowWidth, float chosen) {
