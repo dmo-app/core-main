@@ -525,7 +525,7 @@ void fitZone(Proposal& p, const doc::Document& song) {
       kept.push_back(call);
       continue;
     }
-    if (call.fn->rises || fam == "pcore") {
+    if (call.fn->rises || fam == "pcore" || fam == "gate") {
       int64_t a = z.startTick, b = z.endTick;
       if (section) {
         a = std::max(a, section->startTick);

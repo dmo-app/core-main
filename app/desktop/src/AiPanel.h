@@ -38,6 +38,8 @@ public:
     // The plugins Core knows (its scanned list), and a scan of only some plugin files (the AI's: Settings).
     std::function<std::vector<nlohmann::json>()> instruments;
     std::function<void(const juce::Array<juce::File>&, std::function<void(int found, int failed)>)> scanPlugins;
+    // Renders two tracks with their plugins (ler_kick_bass: ai::Config::listen); not set = the tool is not offered.
+    decltype(ai::Config::listen) listen;
   };
   enum class Dock { Side, Bottom };
 

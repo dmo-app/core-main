@@ -5,8 +5,26 @@
 #include <fstream>
 #include <sstream>
 #include "edit.hpp"
+#include "gate.hpp"
 
 namespace core::doc {
+
+namespace {
+// The gate (Core AI Gate, our own plugin: gate.hpp): every parameter the AI's "gate" call writes is a macro, named
+// as the plugin names it. Where no tool moves it the gate does nothing (depth 0) and its steps are on.
+RoleInfo gateRole() {
+  RoleInfo r{"gate", "Gate", false, "Trance gate and duck in time (Core AI Gate): the AI's gate patterns per section", {}};
+  for (int p = 0; p < aifx::kAutoGain; ++p) {
+    if (p == aifx::kOutput) continue;
+    const aifx::ParamInfo& i = aifx::params()[(size_t)p];
+    std::string word = i.name;
+    for (auto& c : word) c = (char)std::tolower((unsigned char)c);
+    const double rest = p == aifx::kDepth || p == aifx::kDuck ? 0.0 : aifx::toNormalized(p, i.def);
+    r.macros.push_back({i.id, i.name, rest, {word}});
+  }
+  return r;
+}
+}  // namespace
 
 const std::vector<RoleInfo>& roleCatalog() {
   // Words: what the parameter is usually called (Valhalla, FabFilter, Serum's FX, TAL, Airwindows, Dragonfly...).
@@ -31,6 +49,7 @@ const std::vector<RoleInfo>& roleCatalog() {
       {"pad", "Pad", true, "Pads and atmospheres", {}},
       {"pluck", "Pluck", true, "Short plucked notes, arps", {}},
       {"drums", "Drums", true, "Kick, snare, hats: a drum plugin played by notes", {}},
+      gateRole(),
   };
   return roles;
 }

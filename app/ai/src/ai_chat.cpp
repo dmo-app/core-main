@@ -1,4 +1,5 @@
 #include "ai_chat.hpp"
+#include "kick_bass.hpp"
 #include <cstdio>
 #include <algorithm>
 #include <cctype>
@@ -32,6 +33,8 @@ const char* kSystem =
     "- Quando não souberes como se faz algo num estilo (BPM, KBBB, energia, arranjo, mistura), consulta o manual "
     "(consultar_manual) com poucas palavras-chave, antes de propor.\n"
     "- Uma pista nova não tem som até o Diogo escolher o plugin (VST3); diz-lhe isso quando criares pistas.\n"
+    "- Para cortar ou bombear uma pista no tempo (trance gate, o bass a deixar espaço ao kick), usa gate com um preset; "
+    "antes de cortar o bass, ouve o kick e o bass (ler_kick_bass) se a ferramenta existir.\n"
     "- Escreve pouco: entre chamadas não escrevas texto (as chamadas ficam registadas na proposta) e não repitas o que "
     "as chamadas já dizem.\n"
     "- No fim, responde com uma frase curta (até 25 palavras): o que propuseste e o que ele deve ouvir. Esse texto é o "
@@ -139,7 +142,7 @@ json systemFor(const doc::Document& song, const doc::PCoreCatalog* pcore, const 
 Chat::Chat(Config config, std::vector<control::CoreFunction> functions, const doc::PCoreCatalog* pcore, const Knowledge* knowledge,
            const Memory* memory)
     : config_(std::move(config)), functions_(std::move(functions)), pcore_(pcore), knowledge_(knowledge), memory_(memory),
-      actions_(catalog(functions_, knowledge != nullptr, memory != nullptr)) {
+      actions_(catalog(functions_, knowledge != nullptr, memory != nullptr, (bool)config_.listen)) {
   for (const auto& a : actions_)
     if (decide(config_.permissions, a) != Verdict::deny) offered_.push_back(a);
   tools_ = anthropicTools(config_.gateway ? gateway(offered_) : offered_);
@@ -296,6 +299,40 @@ json Chat::runTool(const std::string& name, const json& input, const doc::Docume
     }
     if (hits.empty()) return {{"result", "nothing found: try other words"}};
     return {{"excerpts", hits}};
+  }
+  if (name == "ler_kick_bass") {
+    if (!config_.listen) return {{"error", "Core cannot listen here"}};
+    auto same = [](std::string a, std::string b) {
+      for (auto& c : a) c = (char)std::tolower((unsigned char)c);
+      for (auto& c : b) c = (char)std::tolower((unsigned char)c);
+      return !a.empty() && a == b;
+    };
+    std::string sec = input.value("secção", std::string());
+    if (sec.empty()) sec = input.value("secao", std::string());
+    const doc::Section* section = nullptr;
+    for (const auto& s : song.sections)
+      if (same(s.name, sec) || s.id == sec) section = &s;
+    if (!section) return {{"error", "no section called \"" + sec + "\""}};
+    // The tracks: by the names given, else the first kick and the first bass by their type.
+    auto find = [&](const std::string& given, const char* type) -> const doc::Track* {
+      for (const auto& t : song.tracks)
+        if (!given.empty() ? same(t.name, given) : control::trackType(t) == type) return &t;
+      return nullptr;
+    };
+    const doc::Track* kick = find(input.value("kick", std::string()), "kick");
+    const doc::Track* bass = find(input.value("bass", std::string()), "bass");
+    if (!kick || !bass) return {{"error", std::string("no ") + (!kick ? "kick" : "bass") + " track: name it (\"kick\" / \"bass\")"}};
+    const int64_t start = section->startTick;
+    const int64_t end = std::min({section->startTick + section->lengthTicks, start + 8 * 4 * doc::kPpq, song.lengthTicks});
+    std::vector<float> k, b;
+    double sr = 48000;
+    const std::string why = config_.listen(kick->id, bass->id, start, end, k, b, sr);
+    if (!why.empty()) return {{"error", "could not listen: " + why}};
+    json out = analyzeKickBass(k, b, sr, song.bpm).toJson();
+    out["kick"] = kick->name;
+    out["bass"] = bass->name;
+    out["compassos"] = (double)(end - start) / (4.0 * doc::kPpq);
+    return out;
   }
   if (name == "formas_pcore") {
     std::string style = input.value("style", std::string());

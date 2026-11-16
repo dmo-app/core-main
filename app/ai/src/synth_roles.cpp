@@ -3,6 +3,8 @@
 #include <cctype>
 #include "synth.hpp"
 
+#include "gate.hpp"
+
 namespace core::ai {
 namespace {
 std::string lower(std::string s) {
@@ -55,6 +57,8 @@ nlohmann::json withAiRoles(nlohmann::json roles, const nlohmann::json& scanned) 
     if (b.is_object() && b.contains("plugin") && !b["plugin"].is_null()) continue;  // the user's choice stays
     b = {{"plugin", plugin}, {"params", nlohmann::json::object()}};
     if (*r.effect) b["effect"] = r.effect;
+    if (std::string(r.role) == "gate")  // our own plugin: its ParamIDs are its parameters' indexes (gate.hpp)
+      for (int p = 0; p < aifx::kParamCount; ++p) b["params"][aifx::params()[(size_t)p].id] = std::to_string(p);
   }
   return roles;
 }

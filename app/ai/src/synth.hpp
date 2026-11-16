@@ -62,14 +62,16 @@ inline const std::vector<AiRole>& aiRoles() {
                                         {"delay", "airwindows consolidated", "TapeDelay2"},
                                         {"filter", "airwindows consolidated", "Capacitor2"},
                                         {"drive", "airwindows consolidated", "Drive"},
-                                        {"sidechain", "airwindows consolidated", "PurestGain"}};
+                                        {"sidechain", "airwindows consolidated", "PurestGain"},
+                                        {"gate", "core ai gate", ""}};
   return r;
 }
 inline std::vector<AiPlugin> aiPlugins() {
   return {{synth().name, synth().file, synth().download, "GPL-3"},
           {"sfizz", "sfizz.vst3", "https://sfz.tools/sfizz/downloads", "BSD-2"},
           {"Dragonfly Room Reverb", "DragonflyRoomReverb.vst3", "https://michaelwillis.github.io/dragonfly-reverb/", "GPL-3"},
-          {"Airwindows Consolidated", "Airwindows Consolidated.vst3", "https://github.com/baconpaul/airwin2rack/releases", "MIT"}};
+          {"Airwindows Consolidated", "Airwindows Consolidated.vst3", "https://github.com/baconpaul/airwin2rack/releases", "MIT"},
+          {"Core AI Gate", "Core AI Gate.vst3", "", "Core"}};  // ours: Core's installer puts it in the VST3 folder
 }
 // Where a plugin of the AI is on this computer, or none.
 inline std::optional<std::filesystem::path> findAiPlugin(const AiPlugin& p, const std::vector<std::filesystem::path>& folders = vst3Folders()) {

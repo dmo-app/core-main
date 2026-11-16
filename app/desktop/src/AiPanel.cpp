@@ -138,12 +138,12 @@ public:
         bool listed = false;
         for (const auto& k : known)
           listed |= juce::String::fromUTF8(k.value("file", std::string()).c_str()).endsWithIgnoreCase(u8(p.file));
-        if (!ai::findAiPlugin(p) && !listed) juce::URL(u8(p.download)).launchInDefaultBrowser();
+        if (!ai::findAiPlugin(p) && !listed && !p.download.empty()) juce::URL(u8(p.download)).launchInDefaultBrowser();
       }
     };
     addChildComponent(getPlugin_);
     refreshPlugins();
-    setSize(440, 580);
+    setSize(440, 600);
   }
 
   void paint(juce::Graphics& g) override { g.fillAll(kPanel); }
@@ -185,7 +185,7 @@ public:
     folder_.setBounds(last);
     r.removeFromTop(10);
     row(pluginsLabel_, 18);
-    row(pluginStatus_, 72);
+    row(pluginStatus_, 88);
     auto pb = r.removeFromTop(kSpaceButton);
     scanAi_.setBounds(pb.removeFromLeft(190));
     pb.removeFromLeft(6);
@@ -208,7 +208,7 @@ private:
       const bool file = ai::findAiPlugin(p).has_value() || listed;  // in a VST3 folder, or where Core's list found it
       missing |= !file;
       lines.add(u8(p.name) + u8(" (") + u8(p.licence) + u8("): ") +
-                (!file ? u8("not installed (free at ") + u8(p.download) + ")"
+                (!file ? (p.download.empty() ? u8("not installed (comes with Core's installer)") : u8("not installed (free at ") + u8(p.download) + ")")
                        : listed ? u8("installed and in Core's list") : u8("installed, not scanned yet")));
     }
     pluginStatus_.setText(lines.joinIntoString("\n"), juce::dontSendNotification);
@@ -405,6 +405,7 @@ ai::Config AiPanel::configNow() const {
   c.maxUsdPerMessage = prefs_.maxUsd;
   c.stream = true;  // the answer shows as it comes (Anthropic; other providers are not streamed)
   c.permissions = permissions_;
+  c.listen = host_.listen;
   for (const auto& m : ai::permissionModes())
     if (u8(m) == prefs_.mode) c.permissions.mode = m;
   return c;

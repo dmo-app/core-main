@@ -7,6 +7,7 @@
 // hands back each response. So the whole conversation is testable without a key.
 #pragma once
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 #include "calls.hpp"
@@ -44,6 +45,10 @@ struct Config {
   Permissions permissions;        // what the model may do (catalog.hpp): ask, readonly, trusted
   bool gateway = false;           // "ajuda" + "fazer" in place of every edit tool (catalog.hpp: smaller requests)
   bool stream = false;            // Anthropic only: the answer comes as events (stream.hpp); the panel sets it
+  // How Core hears two tracks (ler_kick_bass): renders kickId and bassId (their plugins and effects) over the song
+  // ticks [start, end) as mono buffers at sampleRate. Returns "" or why not. Not set: ler_kick_bass is not offered.
+  std::function<std::string(const std::string& kickId, const std::string& bassId, int64_t start, int64_t end,
+                            std::vector<float>& kick, std::vector<float>& bass, double& sampleRate)> listen;
 };
 
 // Claude's tool definitions: the catalog's Anthropic view (catalog.hpp), every action offered. The chat itself offers

@@ -27,6 +27,8 @@
 #include "storage.hpp"
 #include "midi.hpp"
 #include "bitwig.hpp"
+#include "roles.hpp"
+#include "synth_roles.hpp"
 
 namespace core::app {
 
@@ -3283,17 +3285,87 @@ void MainComponent::openAiChat() {
     h.keyFolder = bridgeFolder();
     h.apply = [this](const json& proposal) { return applyAiProposal(proposal); };
     h.zone = [this] { return aiZoneNow(); };
-    h.instruments = [this] { return plugins_->instruments(); };
+    h.instruments = [this] {  // the AI's plugins are instruments (Vital, sfizz) and effects (Dragonfly, Airwindows, the gate)
+      auto all = plugins_->instruments();
+      for (auto& e : plugins_->effects()) all.push_back(std::move(e));
+      return all;
+    };
     h.scanPlugins = [this](const juce::Array<juce::File>& files, std::function<void(int, int)> done) {
       juce::Component::SafePointer<MainComponent> self(this);
       notice_ = u8("Scanning the AI's plugins...");
       plugins_->scanOnly(files, [this, self, done](int found, int failed) {
         if (self == nullptr) return;
         notice_ = u8("AI plugins: ") + juce::String(found) + u8(" found") + (failed ? u8(", ") + juce::String(failed) + u8(" with problems") : juce::String()) + ".";
+        // The roles the AI's plugins play (synth.hpp aiRoles), in Settings > Roles' file: only the empty ones.
+        std::string problem;
+        nlohmann::json all = nlohmann::json::array();
+        for (auto& p : plugins_->instruments()) all.push_back(std::move(p));
+        for (auto& p : plugins_->effects()) all.push_back(std::move(p));
+        try {
+          const auto map = doc::roleMapFromJson(ai::withAiRoles(doc::roleMapToJson(PluginCatalog::roles(&problem)), all));
+          doc::saveRoleMap(map, std::filesystem::path(PluginCatalog::rolesFile().getFullPathName().toWideCharPointer()));
+        } catch (const std::exception& e) {
+          logLine("AI: the roles were not saved: " + juce::String::fromUTF8(e.what()));
+        }
         menuItemsChanged();
         repaint();
         if (done) done(found, failed);
       });
+    };
+    // ler_kick_bass: the kick and the bass alone, with their plugins, rendered by core-engine (a separate process,
+    // as the export does) into a temp folder; the other tracks are muted, the two are 12 dB down so their sum never
+    // stops the render at 0 dBFS (given back when read).
+    h.listen = [this](const std::string& kickId, const std::string& bassId, int64_t start, int64_t end, std::vector<float>& kick,
+                      std::vector<float>& bass, double& sampleRate) -> std::string {
+      constexpr double kDown = -12.0;
+      doc::Document d = history_.current();
+      for (auto& t : d.tracks) {
+        const bool heard = t.id == kickId || t.id == bassId;
+        t.mix.solo = false;
+        if (heard) {
+          t.mix.mute = false;
+          t.mix.gainDb += kDown;
+        } else if (t.instrument.kind != "bus") {
+          t.mix.mute = true;
+        }
+      }
+      const juce::File engine = juce::File::getSpecialLocation(juce::File::currentExecutableFile).getSiblingFile("core-engine.exe");
+      if (!engine.existsAsFile()) return "core-engine.exe is not beside Core";
+      const juce::File dir = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("Core-ai-listen");
+      dir.deleteRecursively();
+      dir.createDirectory();
+      const juce::File project = dir.getChildFile("listen.json"), out = dir.getChildFile("listen.wav");
+      if (!project.replaceWithText(juce::String::fromUTF8(doc::toProjection(d, projectDir()).dump().c_str()))) return "the temp folder cannot be written";
+      juce::ChildProcess child;
+      const juce::StringArray args{engine.getFullPathName(), "render", project.getFullPathName(), out.getFullPathName(), "--stems", "--mono",
+                                   "--bits", "32", "--sr", "48000", "--start-tick", juce::String((juce::int64)start), "--end-tick",
+                                   juce::String((juce::int64)end), "--tail-ms", "0"};
+      if (!child.start(args, juce::ChildProcess::wantStdOut | juce::ChildProcess::wantStdErr)) return "the engine could not be started";
+      juce::String said;
+      std::thread reader([&] { said = child.readAllProcessOutput(); });
+      const bool finished = child.waitForProcessToFinish(60000);
+      if (!finished) child.kill();
+      reader.join();
+      if (!finished) return "the render took more than 60 s";
+      juce::AudioFormatManager formats;
+      formats.registerBasicFormats();
+      auto read = [&](const std::string& id, std::vector<float>& into) -> bool {
+        const juce::File f = dir.getChildFile("listen-" + juce::String::fromUTF8(id.c_str()) + ".wav");
+        std::unique_ptr<juce::AudioFormatReader> r(formats.createReaderFor(f));
+        if (!r || r->lengthInSamples <= 0) return false;
+        juce::AudioBuffer<float> buf((int)r->numChannels, (int)r->lengthInSamples);
+        r->read(&buf, 0, (int)r->lengthInSamples, 0, true, true);
+        const float back = juce::Decibels::decibelsToGain((float)-kDown);
+        into.assign((size_t)buf.getNumSamples(), 0.0f);
+        for (int c = 0; c < buf.getNumChannels(); ++c)
+          for (int i = 0; i < buf.getNumSamples(); ++i) into[(size_t)i] += buf.getSample(c, i) * back / (float)buf.getNumChannels();
+        sampleRate = r->sampleRate;
+        return true;
+      };
+      const bool ok = read(kickId, kick) && read(bassId, bass);
+      if (!ok) logLine("AI: ler_kick_bass render: " + said.trim().getLastCharacters(400));
+      dir.deleteRecursively();
+      return ok ? std::string() : std::string("the render failed (") + said.trim().getLastCharacters(160).toStdString() + ")";
     };
     aiPanel_ = std::make_unique<AiPanel>(std::move(h));
     aiPanel_->onLayoutChange = [this] { resized(); repaint(); };
@@ -3342,7 +3414,8 @@ std::vector<std::string> MainComponent::applyAiProposal(const json& proposal) {
   if (const std::string why = ai::changedSince(proposal, p); !why.empty()) throw doc::DocumentError("calls", why);
   const std::string target = selectedTrack_.empty() ? editor_.track() : selectedTrack_;  // calls without a track
   if (p.needsTrack() && !history_.current().findTrack(target)) throw doc::DocumentError("calls", "select a track first: some calls name none");
-  control::ApplyEnv env{samples, pcoreCatalog_ ? &*pcoreCatalog_ : nullptr};
+  const doc::RoleMap roles = PluginCatalog::roles();  // the gate's plugin (Settings > Roles)
+  control::ApplyEnv env{samples, pcoreCatalog_ ? &*pcoreCatalog_ : nullptr, &roles};
   doc::Document probe = history_.current();  // refused here, before any undo step
   const std::vector<std::string> lines = control::applyProposal(probe, p, target, env);
   std::string label = control::kAiLabelPrefix + (p.summary.empty() ? lines.front() : p.summary);
@@ -3446,7 +3519,8 @@ void MainComponent::applyProposal(int index, juce::Component* button) {
   if (p.calls.empty()) return;
   auto run = [this, item, fns, samples](const std::string& target) {
     const control::Proposal again = control::validateProposal(item.proposal, fns, history_.current(), samples);
-    control::ApplyEnv env{samples, pcoreCatalog_ ? &*pcoreCatalog_ : nullptr};
+    const doc::RoleMap roles = PluginCatalog::roles();
+    control::ApplyEnv env{samples, pcoreCatalog_ ? &*pcoreCatalog_ : nullptr, &roles};
     std::vector<std::string> lines;
     try {
       doc::Document probe = history_.current();  // refused here, before any undo step
