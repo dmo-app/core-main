@@ -289,4 +289,13 @@ TEST("caca 2, P08: um clip so de NaN e um ficheiro estragado, nao silencio") {
   CHECK(!core::sampling::hasBrokenSamples(silent));  // o silencio continua silencio
 }
 
+TEST("caca 2, seccao 4: um ppq que nao e 960 tem uma mensagem que se entende") {
+  json j = core::doc::toJson(core::doc::newEmptyDocument());
+  j["transport"]["ppq"] = 480;
+  std::string message;
+  try { (void)core::doc::parseDocument(j); } catch (const core::doc::DocumentError& e) { message = e.what(); }
+  CHECK(message.find("must be 960") != std::string::npos);
+  CHECK(message.find("between") == std::string::npos);
+}
+
 CORE_TEST_MAIN

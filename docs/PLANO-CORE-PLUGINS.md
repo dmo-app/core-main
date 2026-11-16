@@ -107,6 +107,23 @@ Verificado e corrigido, com testes em `tests/audit2_tests.cpp`:
 - Ponto 4 (versão aprofundada, confirmado): uma resposta do motor sem `id` válido ficava só no registo e o comando à espera só falhava no timeout (10 s). Agora a sessão do motor termina logo, com o motivo, e o motor reinicia (o cliente manda sempre ids inteiros, por isso uma resposta assim é um protocolo partido).
 - Observação do autosave: não era bug (quem chama apanha o erro e o autosave estragado nem aparece na lista), mas a mensagem passou a dizer "The autosave is damaged" em vez do erro do JSON.
 
+### Caça profunda (2026-11-16, `development\bug\audit-profunda\RELATORIO-CAÇA-PROFUNDA.md`)
+
+Corrigido, com testes em `tests/hunt_tests.cpp` (PR #7 e PR #8):
+- P01: o bounce corta o nome antes de " (bounce)" sem partir acentos; as mensagens de limite dizem "bytes".
+- P02: `render` (CLI) e `render.start` (app) usam a mesma cauda por omissão, 2000 ms. **Atenção:** um `render` da CLI sem `--tail-ms` passou a dar ficheiros 0,5 s mais compridos do que antes de `e9b1707` (era 1500 ms). Comparar WAVs antigos com novos mostra essa diferença, que é só cauda.
+- P03: ids de efeito repetidos ou com `:` são limpos ao abrir, como o motor faz; o estado do plugin já não se perde.
+- P04: não é bug (o som vem só de plugins); o texto do plano acima foi corrigido.
+- P05: a conversão de taxa dá o número certo de frames (44,1 kHz para 48 kHz: 48000, não 48001). O pico ligeiramente acima de 1,0 depois do resample fica: é o filtro, e o export recusa o que passa de 0 dBFS (B04).
+- P06: apagar a pista mostrada mostra outra selecionada ou a vizinha, nunca a primeira acrescentada à seleção.
+- P08: um clip só de NaN/Inf diz "ficheiro estragado" no Cut silence, em vez de "silêncio".
+- P10: 2 textos traduzidos e "Save as template" com uma só grafia.
+- IPC: uma resposta com um campo `event` continua a ser resposta (antes esperava o timeout).
+- §4: `transport.ppq` diferente de 960 diz "must be 960", e não "between 960 and 960".
+- Logs: ficam 20 de cada tipo contando com o da sessão (eram 21). Os 14 .dmp de 4 a 10/11 ficam porque são menos de 20 (como desenhado).
+
+Não mudado: P07 (o autosave tem um slot por sessão e é apagado quando a música fica guardada ou descartada: serve para recuperar de um crash, não para guardar versões) e a versão do esquema escrita conforme o conteúdo (2 sem mudanças de tempo, 3 com elas: de propósito, para os ficheiros antigos continuarem a abrir em versões anteriores).
+
 ### Export para o Bitwig (2026-11-16)
 
 File > Export for Bitwig: uma pasta "<música> (Bitwig)" com o .mid (uma pista MIDI por pista do Core, rolls expandidos, tempo), um .vstpreset por plugin (instrumento e efeitos de cada pista e do master) com o som atual, tirado do plugin vivo no motor (`plugin.preset`), e "Bitwig - read me.txt" a dizer que preset vai em que pista. No Bitwig: arrastar o .mid, depois largar cada .vstpreset na sua pista. Testes: `tests/bitwig_tests.cpp`; no Windows, `core-engine params <plugin.vst3> --preset-out x.vstpreset`.
