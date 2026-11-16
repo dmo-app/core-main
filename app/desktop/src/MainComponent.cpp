@@ -3535,8 +3535,7 @@ bool MainComponent::fetchPluginStates() {
 
 MainComponent::SaveResult MainComponent::writeTo(const juce::File& target) {
   // The plugins' sound goes into the file first (the engine's copy is never the only one).
-  if (!fetchPluginStates())
-    showError(u8("Plugins"), u8("The engine did not give the plugins' settings in time: the file keeps the ones from the last save."));
+  const bool pluginsOk = fetchPluginStates();
   const std::filesystem::path before = projectDir();
   try {
     if (!before.empty() && !history_.current().assets.empty())
@@ -3549,11 +3548,18 @@ MainComponent::SaveResult MainComponent::writeTo(const juce::File& target) {
   file_ = target;
   imported_ = false;
   history_.markSaved();
-  pluginsDirty_ = false;
-  logLine("Saved " + target.getFullPathName());
+  // Without the plugins' answer the file has their settings from the last save: what they hold now is still
+  // unsaved, so the song stays modified and closing asks again (audit R01: it was marked saved and closed).
+  pluginsDirty_ = !pluginsOk;
+  logLine("Saved " + target.getFullPathName() + (pluginsOk ? "" : " (without the plugins' current settings)"));
   recovered_ = false;
   if (!unsaved()) removeOwnAutosave();  // saved: the autosave is not needed any more
   if (projectDir() != before) projectFolderChanged();
+  if (!pluginsOk) {
+    showError(u8("Plugins"), u8("The song was saved, but the engine did not give the plugins' current settings in time: "
+                                "the file keeps the ones from the last save. Save again before closing."));
+    return SaveResult::SavedWithoutPlugins;
+  }
   return SaveResult::Saved;
 }
 
@@ -4071,6 +4077,9 @@ void MainComponent::saveAsTemplate() {
     for (const auto& e : templates_.templates)  // same name as an existing one: replace that one (keeps its id)
       if (juce::String(u8(e.tmpl.info.name)).equalsIgnoreCase(u8(info.name))) info.id = e.tmpl.info.id;
     auto write = [this, info, part, wav] {
+      // The plugins as they sound now, not as last saved (audit R03); no answer: nothing is written.
+      if (!fetchPluginStates())
+        return showError("Template not saved", "The engine did not give the plugins' current settings in time. Try again.");
       try {
         const doc::Document& song = history_.current();
         const doc::SongTemplate made = part.end < 0 ? doc::templateFromDocument(song, info)
@@ -4081,7 +4090,10 @@ void MainComponent::saveAsTemplate() {
         const std::string base = savedFile.getFullPathName().toStdString();
         if (wav) {
           if (snap_.exportJob.active()) showError("WAV not exported", "Another export is running; the template is saved.");
-          else session_->exportFiles({{doc::templateCompanionPath(base, ".wav"), "", false, true}}, part.end < 0 ? 0 : part.start, part.end, 24);
+          else {
+            stopPatternSlot();  // the engine plays the song again, not the Patterns preview (audit R04)
+            session_->exportFiles({{doc::templateCompanionPath(base, ".wav"), "", false, true}}, part.end < 0 ? 0 : part.start, part.end, 24);
+          }
         }
         reloadTemplates();
         library_.templatesChanged();
@@ -4339,6 +4351,9 @@ void MainComponent::exportWav(int bits, bool mono) {
                           const juce::File f = fc.getResult();
                           if (f == juce::File()) return;
                           const std::string path = f.withFileExtension(".wav").getFullPathName().toStdString();
+                          // The export takes the engine's document: while Patterns plays a slot that is the slot's
+                          // preview, not the song (audit R04). Stopping it gives the engine the song back first.
+                          stopPatternSlot();
                           if (mono) session_->exportFiles({{path, "", false, true}}, 0, -1, bits);
                           else session_->exportWav(path, bits);
                         });
@@ -5956,12 +5971,33 @@ void MainComponent::autosaveTick() {
   if (test_ || now - lastAutosaveCheck_ < 60000 || autosave_.writing()) return;  // (the self-test leaves none)
   lastAutosaveCheck_ = now;
   if (!unsaved()) { removeOwnAutosave(); return; }
-  std::string text = doc::toJson(history_.current()).dump();
+  // Changes made in a plugin's own window are only in the engine: they are asked for first, so the copy has them
+  // (audit R02: it held the plugins as last saved). Asked without waiting; the copy is written when they come.
+  if (pluginsDirty_ && doc::hasPlugins(history_.current())) {
+    if (autosaveAsking_) return;
+    autosaveAsking_ = true;
+    juce::Component::SafePointer<MainComponent> self(this);
+    session_->pluginStatesAsync(5000, [self](json states) {
+      if (!self) return;
+      self->autosaveAsking_ = false;
+      doc::Document document = self->history_.current();
+      if (states.empty()) self->logLine("Autosave: the engine did not give the plugins' settings; the copy has the last ones");
+      else doc::applyPluginStates(document, states);
+      self->startAutosave(std::move(document));
+    });
+    return;
+  }
+  startAutosave(history_.current());
+}
+
+void MainComponent::startAutosave(doc::Document document) {
+  if (autosave_.writing()) return;
+  std::string text = doc::toJson(document).dump();
   if (!autosave_.due(text)) return;  // this song is already on disk (a failed write stays due)
   autosave_.started(std::move(text));
   // Written on a thread of its own (a song with plugin states can be a few MB); the copy is taken here.
   autosaveJob_ = std::make_shared<AutosaveJob>();
-  juce::Thread::launch([job = autosaveJob_, folder = autosaveFolder(), session = autosaveSession_, document = history_.current(),
+  juce::Thread::launch([job = autosaveJob_, folder = autosaveFolder(), session = autosaveSession_, document = std::move(document),
                         song = file_ != juce::File() ? file_.getFullPathName().toStdString() : std::string()] {
     try {
       doc::writeAutosave(pathOf(folder), session, currentProcessId(), document, song, juce::Time::currentTimeMillis());

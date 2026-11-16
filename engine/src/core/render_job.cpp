@@ -164,6 +164,14 @@ void ExportLevel::add(const float* x, int n) {
   }
 }
 
+void ExportLevel::addMono(const float* L, const float* R, int n) {
+  for (int i = 0; i < n; ++i) {
+    if (!finiteBits(L[i]) || !finiteBits(R[i])) { broken = true; continue; }
+    const float a = std::fabs(0.5f * (L[i] + R[i]));
+    if (a > peak) peak = a;
+  }
+}
+
 void checkExportLevel(const ExportLevel& level, const RenderOutput& output) {
   const std::string full = output.path;
   const size_t slash = full.find_last_of("/\\");
@@ -267,8 +275,7 @@ void RenderJobs::run(std::shared_ptr<Job> job) {
         std::fill(R.begin(), R.begin() + n, 0.0f);
         graph.process(L.data(), R.data(), n, pos, false);
         if (pos >= job->skip) {
-          level.add(L.data(), n);
-          level.add(R.data(), n);
+          level.addFrames(L.data(), R.data(), n, r.outputs[f].mono);
           job->peak = std::max(job->peak, level.peak);
           wav.write(L.data(), R.data(), n);
         }

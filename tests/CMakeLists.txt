@@ -38,6 +38,12 @@ target_include_directories(bug_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(bug_tests PRIVATE core_domain core_engine_lib)
 add_test(NAME bug_tests COMMAND bug_tests)
 
+# The bugs of the external audit (2026-11-16, RELATORIO-BUGS-MELHORIAS.md): each failed before its fix.
+add_executable(audit_tests audit_tests.cpp)
+target_include_directories(audit_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/engine/src)
+target_link_libraries(audit_tests PRIVATE core_domain core_engine_lib)
+add_test(NAME audit_tests COMMAND audit_tests)
+
 # The command line: what the app and the scripts call.
 add_test(NAME cli_version COMMAND core-engine --version)
 set_tests_properties(cli_version PROPERTIES PASS_REGULAR_EXPRESSION "core-engine ${CORE_VERSION}")
@@ -46,7 +52,11 @@ add_test(NAME cli_demo_render COMMAND ${CMAKE_COMMAND} -DENGINE=$<TARGET_FILE:co
 add_test(NAME cli_measure COMMAND ${CMAKE_COMMAND} -DENGINE=$<TARGET_FILE:core-engine> -DWORK=${CMAKE_CURRENT_BINARY_DIR}/cli
                                   -P ${CMAKE_CURRENT_SOURCE_DIR}/cli_measure.cmake)
 
-set_tests_properties(engine_tests domain_tests role_tests midi_tests bug_tests cli_version cli_demo_render cli_measure PROPERTIES LABELS merge TIMEOUT 300)
+add_test(NAME cli_unicode COMMAND ${CMAKE_COMMAND} -DENGINE=$<TARGET_FILE:core-engine> -DWORK=${CMAKE_CURRENT_BINARY_DIR}/cli
+                                  -P ${CMAKE_CURRENT_SOURCE_DIR}/cli_unicode.cmake)
+
+set_tests_properties(engine_tests domain_tests role_tests midi_tests bug_tests audit_tests cli_version cli_demo_render cli_measure cli_unicode
+                     PROPERTIES LABELS merge TIMEOUT 300)
 
 # The app's own end-to-end test (play, undo, save/reopen, export... on the null device, with its test plugins).
 # It opens Core's window for ~20 s, so it has its own label.

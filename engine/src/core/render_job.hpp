@@ -37,6 +37,13 @@ struct ExportLevel {
   float peak = 0;
   bool broken = false;  // a NaN or an Inf
   void add(const float* x, int n);
+  // What a mono file holds: (L + R) / 2, as WavWriter writes it (audit B04: a stereo peak is not a mono clip).
+  // A NaN or Inf on either side still counts.
+  void addMono(const float* L, const float* R, int n);
+  void addFrames(const float* L, const float* R, int n, bool mono) {
+    if (mono) addMono(L, R, n);
+    else { add(L, n); add(R, n); }
+  }
 };
 void checkExportLevel(const ExportLevel& level, const RenderOutput& output);
 void publishRenderOutputs(const std::vector<RenderOutput>& outputs, int& published,

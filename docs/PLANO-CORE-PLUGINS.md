@@ -81,6 +81,23 @@ O `.core` guarda as pistas, os clips, as secções, o tempo, a automação e o e
 Da lista revista do sweep (`sweep-qwen-revisto.md`, 45 por corrigir). Corrigidos, com teste em `tests/bug_tests.cpp` ou `tests/engine_tests.cpp`:
 `engine.start` recusado já não pára o som; loop convertido duas vezes numa mudança de tempo; `setLoop` com início negativo; `measure` "filter" media silêncio; `readWav` com chunk 0xFFFFFFFF; `isolateRegion` apagava `extra` e cortava o nome a meio de um carácter; STUTTER ignorava as repetições de um clip em loop; FOLLOW não gravava o corte; `addPattern` com comprimento 0; ids enormes (`strtol` + 1); `schemaVersion` 2^32+1; `nextSlotId` com `stoi`; `approval` dos padrões; id de padrão com sufixo > 80; casts do P-Core; `noteTool("random")` sem pista; colar áudio no fim não fazia crescer a música; `copyClips` com o BPM inicial.
 
+### Auditoria externa (2026-11-16, `development\bug\RELATORIO-BUGS-MELHORIAS.md`)
+
+Corrigido, com testes (`tests/audit_tests.cpp`, `tests/cli_unicode.cmake`; cada um falhava antes):
+- B01: importar `take..1.wav` já não impede guardar nem o autosave (o nome gerado não leva `..`; a validação recusa só uma parte `..` do caminho).
+- B02: uma pista nunca fica com o id `master`; ficheiros antigos com essa pista abrem com ela renomeada (os estados de plugin já não se misturam com os do master).
+- B03: recortar um template, ou apagar compassos, a meio de uma rampa de tempo guarda a rampa.
+- B04: exportar em mono mede o sinal mono (já não recusa um clipping que só existe em estéreo; o pico devolvido é o do ficheiro).
+- B05: a linha de comandos lê e escreve caminhos Unicode no Windows (argumentos em UTF-8).
+- B06: `render --end-tick 0` é recusado como região vazia, como no `render.start`.
+- R01: se o motor não der os estados dos plugins a tempo, Guardar avisa, a música continua por guardar e Fechar não avança.
+- R02: o autosave pede primeiro os estados dos plugins mexidos na janela do plugin (sem bloquear).
+- R03: guardar como template captura antes os estados dos plugins.
+- R04: exportar pára a pré-escuta do Patterns, para exportar a música e não o slot.
+- R05: abrir a janela de um plugin (ou ler os parâmetros) envia antes a edição pendente.
+
+Por decidir (Diogo): D01, o `render` da linha de comandos aceita áudio em falta (exporta silêncio por cima do ficheiro anterior) e o da app recusa. A auditoria recomenda falhar por omissão e ter uma opção para tolerar.
+
 ## Falta fazer
 
 - **Bugs ainda abertos da lista do sweep:** gesto de undo aberto quando as linhas se refazem a meio de um arrasto; Reverse / Normalize / Cut silence no thread da UI; Align dos hats não idempotente; `swingNote` em notas pares; `setModulator` perde `source`; `sliceAudioClip` e `insertTime` com cortes < 1 ms; `scoreArrange` com secções não alinhadas; `importProjectV2` com pistas de áudio; `placeBounce` parcial; `readFolder` fora do try; nomes `.saving-N`; `applySuggestedSamples`; `bassFollow` no kick seguinte; `stretchPreset`; `humanizeNotes` entre compiladores; motion "random" em leads; duplo clique no Patterns window; estado "a tocar" falso; autosave no fecho; fecho lento; `boxClips_`; `adoptFile`; `liveFallback` (por decidir).

@@ -23,6 +23,19 @@ bool validId(const std::string& id) {
   return std::regex_match(id, pattern);
 }
 
+// True when a part of the path (between '/' or '\\') is "..": that would leave the project folder.
+bool hasDotDotPart(const std::string& path) {
+  size_t start = 0;
+  while (true) {
+    const size_t end = path.find_first_of("/\\", start);
+    if (path.compare(start, (end == std::string::npos ? path.size() : end) - start, "..") == 0 &&
+        (end == std::string::npos ? path.size() : end) - start == 2)
+      return true;
+    if (end == std::string::npos) return false;
+    start = end + 1;
+  }
+}
+
 // Reads the known keys of one object and keeps the others for writing back.
 class Reader {
   json rest_;
@@ -455,6 +468,24 @@ const Track* Document::findTrack(const std::string& id) const {
 // A song saved between 2026-11-08 and 2026-11-16 turned its VST tracks into W-Core and marked them: the mark goes
 // (the plugin is not known any more; the track keeps its notes). Plugin effects and their curves stay: Core plays
 // plugins again (Diogo 2026-11-16).
+// "master" names the master in plugin keys ("fx:master:<fx>") and routing: a track with that id (an import of
+// master.wav made one, audit B02) would share the master's plugin states. It is renamed, with what points at it.
+static void renameMasterTrack(Document& d) {
+  Track* bad = nullptr;
+  std::set<std::string> ids;
+  for (auto& t : d.tracks) { ids.insert(t.id); if (t.id == "master") bad = &t; }
+  if (!bad) return;
+  std::string id = "master-track";
+  for (int n = 2; ids.count(id); ++n) id = "master-track-" + std::to_string(n);
+  bad->id = id;
+  for (auto& t : d.tracks) {
+    if (t.mix.output == "master") t.mix.output = id;
+    for (auto& sd : t.mix.sends) if (sd.to == "master") sd.to = id;
+    for (auto& fx : t.effects)
+      if (fx.is_object() && fx.contains("sidechain") && fx["sidechain"] == "master") fx["sidechain"] = id;
+  }
+}
+
 static void dropVst(Document& d) {
   for (auto& t : d.tracks)
     if (t.instrument.extra.is_object()) t.instrument.extra.erase("fromVst");
@@ -527,9 +558,9 @@ Document parseDocument(const json& input, int* migratedFrom) {
     if (!assetIds.insert(a.id).second) throw DocumentError(ar.at("id"), "is used twice");
     a.name = ar.string("name", a.id, 200);
     a.path = ar.string("path", "", 400);
-    // Inside the project folder: relative, no "..", no drive or root.
+    // Inside the project folder: relative, no ".." part, no drive or root ("take..1.wav" is a valid name).
     if (a.path.empty() || a.path[0] == '/' || a.path[0] == '\\' || a.path.find(':') != std::string::npos ||
-        a.path.find("..") != std::string::npos)
+        hasDotDotPart(a.path))
       throw DocumentError(ar.at("path"), "must be a path inside the project folder");
     a.sha256 = ar.string("sha256", "", 64);
     a.sampleRate = ar.number("sampleRate", 48000, 8000, 384000);
@@ -547,6 +578,7 @@ Document parseDocument(const json& input, int* migratedFrom) {
     if (!ids.insert(t.id).second) throw DocumentError(item("tracks", i) + ".id", "is used by another track");
     d.tracks.push_back(std::move(t));
   }
+  renameMasterTrack(d);
   checkRouting(d);
   const json sections = r.array("sections", kMaxSections);
   std::set<std::string> sectionIds;

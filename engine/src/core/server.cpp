@@ -615,7 +615,8 @@ json Server::render(const json& args) {
   if (region) {
     const int64_t endTick = integerArg(args, "endTick", project.lengthTicks, -1, project.lengthTicks);
     const int64_t startTick = integerArg(args, "startTick", 0, 0, project.lengthTicks);
-    if (endTick > 0) project.lengthTicks = std::min(project.lengthTicks, endTick);
+    // As render.start: an explicit end of 0 is an empty region and is refused (audit B06: it exported the whole song).
+    if (endTick >= 0) project.lengthTicks = std::min(project.lengthTicks, endTick);
     if (!(startTick >= 0 && startTick < project.lengthTicks)) throw std::runtime_error("The region must start at 0 or later and before its end.");
     skip = TempoMap(project.bpm, project.tempoMap, sr).sampleOfTick(startTick);
   }
@@ -640,14 +641,12 @@ json Server::render(const json& args) {
   }
   {  // C2: checked before anything is written
     ExportLevel mix;
-    mix.add(r.L.data(), (int)r.L.size());
-    mix.add(r.R.data(), (int)r.R.size());
+    mix.addFrames(r.L.data(), r.R.data(), (int)std::min(r.L.size(), r.R.size()), channels == 1);  // what the file holds
     checkExportLevel(mix, outputs[0]);
     r.peak = mix.peak;
     for (size_t i = 0; i < r.stemL.size(); ++i) {
       ExportLevel stem;
-      stem.add(r.stemL[i].data(), (int)r.stemL[i].size());
-      stem.add(r.stemR[i].data(), (int)r.stemR[i].size());
+      stem.addFrames(r.stemL[i].data(), r.stemR[i].data(), (int)std::min(r.stemL[i].size(), r.stemR[i].size()), channels == 1);
       checkExportLevel(stem, outputs[i + 1]);
     }
   }

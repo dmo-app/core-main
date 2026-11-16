@@ -274,8 +274,11 @@ void EngineSession::run() {
       // In ticks: the sample counts depend on the device rate, the song length in ticks does not.
       const int64_t songTicks = wantedProjection_.value("lengthTicks", (int64_t)0);
       const bool fromTheEnd = action.kind == Action::Play && songTicks > 0 && snap_.positionTick >= (double)songTicks;
-      // An export takes the document as it is now: send it first if an edit is still pending.
-      if (action.kind == Action::Export && wantedRevision_ > sentRevision_ && snap_.status != EngineStatus::Diverged) sync(lock);
+      // An export takes the document as it is now: send it first if an edit is still pending. So does opening a
+      // plugin's window or reading its parameters: a plugin just added is only in the engine once its edit is sent
+      // (audit R05: the editor was asked for a plugin the engine did not have yet).
+      const bool needsDocument = action.kind == Action::Export || action.kind == Action::PluginEditor || action.kind == Action::PluginParams;
+      if (needsDocument && wantedRevision_ > sentRevision_ && snap_.status != EngineStatus::Diverged) sync(lock);
       if (action.kind == Action::Export && (snap_.status == EngineStatus::Diverged || snap_.acceptedRevision != wantedRevision_)) {
         snap_.exportJob.state = "failed";
         snap_.exportJob.error = "The engine did not accept the current document; nothing was exported.";

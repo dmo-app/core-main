@@ -301,7 +301,8 @@ bool instrumentAtDefaults(const Track& track) {
 std::string uniqueTrackId(const Document& doc, const std::string& base) {
   const std::string root = slug(base);
   std::string id = root;
-  for (int n = 2; doc.findTrack(id); ++n) id = root + "-" + std::to_string(n);
+  // "master" is the master's name in plugin keys and routing (audit B02): a track never takes it.
+  for (int n = 2; doc.findTrack(id) || id == "master"; ++n) id = root + "-" + std::to_string(n);
   return id;
 }
 
@@ -866,17 +867,57 @@ void deleteTime(Document& doc, int64_t from, int64_t ticks) {
     kept.push_back(sec);
   }
   doc.sections = kept;
-  // Tempo: the tempo at `to` carries on from `from` (the changes inside the cut collapse onto it).
-  std::vector<TempoPoint> tempo;
-  for (auto p : doc.tempoMap) {
-    p.tick = map(p.tick);
-    if (!tempo.empty() && tempo.back().tick == p.tick) tempo.back() = p;
-    else tempo.push_back(p);
+  // Tempo: the song plays as before up to `from`, and from there on as it played from `to` (audit B03: a glide
+  // that crosses either edge keeps its shape, rather than the cut dropping its end point).
+  if (!doc.tempoMap.empty()) {
+    const int64_t oldLength = doc.lengthTicks;
+    const double atTo = bpmAt(doc, to);
+    const TempoPoint* firstAfter = nullptr;
+    for (const auto& p : doc.tempoMap) if (p.tick > to) { firstAfter = &p; break; }
+    const TempoPoint* crossing = nullptr;  // the point the song is heading for at `from`
+    for (const auto& p : doc.tempoMap) if (p.tick > from) { crossing = &p; break; }
+    std::vector<TempoPoint> tempo;
+    for (const auto& p : doc.tempoMap) if (p.tick <= from) tempo.push_back(p);
+    if (from == 0) {
+      doc.bpm = atTo;
+    } else {
+      const bool step = to < oldLength && (std::abs(bpmAt(doc, from) - atTo) > 1e-9 || (firstAfter && firstAfter->ramp));
+      if (crossing && crossing->ramp) {  // still gliding at `from`: arrive where the glide was
+        const int64_t at = step || to >= oldLength ? from - 1 : from;
+        if (at >= 1 && (tempo.empty() || at > tempo.back().tick)) {
+          TempoPoint p = *crossing;
+          p.tick = at;
+          p.bpm = bpmAt(doc, at);
+          tempo.push_back(p);
+        }
+      }
+      // A point already at `from` arriving by a glide moves one tick back, so the step can take its place (or, at
+      // the new end of the song, so it stays inside it).
+      if ((step || to >= oldLength) && !tempo.empty() && tempo.back().tick == from) {
+        TempoPoint arrive = tempo.back();
+        tempo.pop_back();
+        if (arrive.ramp && from - 1 >= 1 && (tempo.empty() || from - 1 > tempo.back().tick)) {
+          arrive.tick = from - 1;
+          arrive.bpm = bpmAt(doc, from - 1);
+          tempo.push_back(arrive);
+        }
+      }
+      if (step) {
+        TempoPoint p;
+        p.tick = from;
+        p.bpm = atTo;
+        tempo.push_back(p);
+      }
+    }
+    for (auto p : doc.tempoMap)
+      if (p.tick > to) { p.tick -= ticks; tempo.push_back(p); }
+    doc.lengthTicks -= ticks;
+    tempo.erase(std::remove_if(tempo.begin(), tempo.end(), [&](const TempoPoint& p) { return p.tick < 1 || p.tick >= doc.lengthTicks; }),
+                tempo.end());
+    doc.tempoMap = tempo;
+  } else {
+    doc.lengthTicks -= ticks;
   }
-  if (!tempo.empty() && tempo.front().tick == 0) { doc.bpm = tempo.front().bpm; tempo.erase(tempo.begin()); }
-  doc.lengthTicks -= ticks;
-  tempo.erase(std::remove_if(tempo.begin(), tempo.end(), [&](const TempoPoint& p) { return p.tick >= doc.lengthTicks; }), tempo.end());
-  doc.tempoMap = tempo;
   const int64_t ls = map(doc.loop.startTick), le = map(doc.loop.endTick);
   doc.loop.startTick = ls;
   doc.loop.endTick = le;
