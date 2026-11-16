@@ -47,3 +47,10 @@ if(CORE_BUILD_APP AND WIN32)
   add_subdirectory(app/desktop)
   add_subdirectory(app/installer)  # Core Setup.exe (M6)
 endif()
+
+# Tests (ctest -L merge before every merge; see tests/CMakeLists.txt and ci/).
+option(CORE_BUILD_TESTS "Build Core's tests" ON)
+if(CORE_BUILD_TESTS)
+  enable_testing()
+  add_subdirectory(tests)
+endif()
