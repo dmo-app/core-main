@@ -1,6 +1,6 @@
 # Core Setup.exe (M6): one file that installs Core for the current user (no administrator rights).
 # The package (Core.exe, core-engine.exe, the demo, the templates, the languages, the patterns, PCore's styles, the AI's
-# knowledge base in ai/) is built here and carried inside it.
+# knowledge base in ai/, the AI's Vital presets) is built here and carried inside it.
 #   cmake --build build --target CoreSetup   ->  build/app/installer/CoreSetup_artefacts/Release/Core Setup.exe
 set(CORE_STAGE ${CMAKE_CURRENT_BINARY_DIR}/stage)
 set(CORE_PACKAGE_ZIP ${CMAKE_CURRENT_BINARY_DIR}/CorePackage.zip)
@@ -16,8 +16,9 @@ add_custom_command(OUTPUT ${CORE_PACKAGE_ZIP}
   COMMAND ${CMAKE_COMMAND} -E copy ${CORE_AI_KNOWLEDGE_DB} ${CORE_STAGE}/ai/core-ai-knowledge.sqlite
   # Core's own plugins (app/aifx): the installer copies vst3/*.vst3 into the user's VST3 folder.
   COMMAND ${CMAKE_COMMAND} -E copy_directory "$<TARGET_FILE_DIR:CoreAIGate_VST3>/../.." "${CORE_STAGE}/vst3/Core AI Gate.vst3"
+  COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/presets ${CORE_STAGE}/presets
   COMMAND ${CMAKE_COMMAND} -E chdir ${CORE_STAGE} ${CMAKE_COMMAND} -E tar cf ${CORE_PACKAGE_ZIP} --format=zip
-          Core.exe core-engine.exe demo.core-document.json templates lang patterns pcore ai vst3
+          Core.exe core-engine.exe demo.core-document.json templates lang patterns pcore ai vst3 presets
   DEPENDS CoreApp core-engine core_ai_knowledge CoreAIGate_VST3 ${CORE_AI_KNOWLEDGE_DB} ${CMAKE_SOURCE_DIR}/app/desktop/demo.core-document.json
   COMMENT "Packing the Core package for the installer"
   VERBATIM)
