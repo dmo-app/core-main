@@ -241,8 +241,10 @@ const SpacePreset* findSpacePreset(const std::string& kind, const std::string& i
   return nullptr;
 }
 
-SharedBusResult toolSharedBus(Document& doc, const std::vector<std::string>& trackIds, const RoleMap& map, const std::string& kind,
+SharedBusResult toolSharedBus(Document& doc, const std::vector<std::string>& trackIds, const RoleMap& map, const std::string& kindIn,
                               const std::string& preset) {
+  // Case does not matter, as for preset / intent / section (R3-F).
+  const std::string kind = lowerText(kindIn);
   if (kind != "reverb" && kind != "delay") throw DocumentError("bus", "kind is reverb or delay");
   const SpacePreset* p = findSpacePreset(kind, preset);
   if (!p) throw DocumentError("bus", "no " + kind + " preset '" + preset + "'");
@@ -266,16 +268,32 @@ SharedBusResult toolSharedBus(Document& doc, const std::vector<std::string>& tra
   // The plugin fully wet on the bus (only the tail: the dry sound stays on each track), its size / feedback set.
   writeRoleSweep(doc, r.busId, map, kind, "mix", 0, doc.lengthTicks, 1.0, 1.0);
   const char* sizeMacro = kind == "reverb" ? "size" : "feedback";
-  if (hasMacro(map, kind, sizeMacro)) writeRoleSweep(doc, r.busId, map, kind, sizeMacro, 0, doc.lengthTicks, p->size, p->size);
+  r.sizeSet = hasMacro(map, kind, sizeMacro);
+  if (r.sizeSet) writeRoleSweep(doc, r.busId, map, kind, sizeMacro, 0, doc.lengthTicks, p->size, p->size);
   // One place of a kind per track: a send to another R-Core (D-Core) bus moves here; a bus nobody feeds goes.
+  // Round 3 (R3-E): each track changes on its own and only if it works. Before, the old send went first and a
+  // full track (8 sends) or a routing loop then lost both, in silence. Now the track keeps what it had and is named.
   std::set<std::string> left;
   for (const auto& id : tracks) {
-    std::vector<std::string> drop;
-    for (const auto& snd : trackById(doc, id).mix.sends) {
+    Track& t = trackById(doc, id);
+    const Mix before = t.mix;
+    std::vector<std::string> drop, from;
+    std::string sendId;
+    for (const auto& snd : t.mix.sends) {
       const Track* to = doc.findTrack(snd.to);
-      if (snd.to != r.busId && to && isPlaceBus(*to, kind)) { drop.push_back(snd.id); left.insert(snd.to); }
+      if (snd.to == r.busId) sendId = snd.id;
+      else if (to && isPlaceBus(*to, kind)) { drop.push_back(snd.id); from.push_back(snd.to); }
     }
-    for (const auto& sid : drop) removeSend(doc, id, sid);
+    try {
+      for (const auto& sid : drop) removeSend(doc, id, sid);
+      if (sendId.empty()) addSend(doc, id, r.busId, p->sendDb, false);
+      else setSend(doc, id, sendId, p->sendDb, false);
+      ++r.sends;
+      left.insert(from.begin(), from.end());
+    } catch (const DocumentError& e) {
+      trackById(doc, id).mix = before;
+      r.skipped.push_back(trackById(doc, id).name + " (" + e.what() + ")");
+    }
   }
   for (const auto& bus : left) {
     bool used = false;
@@ -285,17 +303,9 @@ SharedBusResult toolSharedBus(Document& doc, const std::vector<std::string>& tra
     }
     if (!used && doc.findTrack(bus)) removeTrack(doc, bus);
   }
-  for (const auto& id : tracks) {
-    try {
-      std::string sendId;
-      for (const auto& snd : trackById(doc, id).mix.sends) if (snd.to == r.busId) sendId = snd.id;
-      if (sendId.empty()) addSend(doc, id, r.busId, p->sendDb, false);
-      else setSend(doc, id, sendId, p->sendDb, false);
-      ++r.sends;
-    } catch (const DocumentError&) {
-      // A track that cannot feed this bus (routed through it, no free send): left as it was.
-    }
-  }
+  // The bus level follows the sections. Every section gets its points (a 0 dB section brings the level back after
+  // a drop), but only the ones that move count for the sentence (R3-G: it said "quieter in the drops" with all at 0).
+  int drier = 0, opener = 0;
   if (p->dropDb != 0 || p->openDb != 0)
     for (const auto& s : doc.sections) {
       const std::string mood = sectionMood(s.name);
@@ -304,11 +314,22 @@ SharedBusResult toolSharedBus(Document& doc, const std::vector<std::string>& tra
       if (end <= s.startTick) continue;
       setAutomationPoint(doc, r.busId, "gainDb", s.startTick, db);
       setAutomationPoint(doc, r.busId, "gainDb", end, db);
-      ++r.sections;
+      if (db < 0) ++drier;
+      if (db > 0) ++opener;
     }
+  r.sections = drier + opener;
   r.sentence = std::string(kind == "reverb" ? "R-Core" : "D-Core") + " " + p->id + ": " + std::to_string(r.sends) +
-               " tracks share one " + kind + " on " + trackById(doc, r.busId).name +
-               (r.sections > 0 ? ", quieter in the drops" : "");
+               (r.sends == 1 ? " track shares one " : " tracks share one ") + kind + " on " + trackById(doc, r.busId).name;
+  if (drier > 0) r.sentence += ", quieter in the drops";
+  if (opener > 0) r.sentence += ", louder in the breaks";
+  // R3-D: huge / tight are mostly the size. A plugin with no size (feedback) control plays its own, and says so.
+  if (!r.sizeSet)
+    r.sentence += std::string(". The ") + kind + " has no " + sizeMacro + " control mapped, so its " + sizeMacro +
+                  " is the plugin's own, not " + p->id + "'s";
+  if (!r.skipped.empty()) {
+    r.sentence += ". Left as they were: ";
+    for (size_t i = 0; i < r.skipped.size(); ++i) r.sentence += (i ? ", " : "") + r.skipped[i];
+  }
   return r;
 }
 
@@ -330,21 +351,27 @@ RoleToolResult toolIntentFx(Document& doc, const std::string& trackId, const Rol
   if (what == "suck") return toolSuck(doc, trackId, map, end, end - start, a);
   checkSpan(doc, start, end);
   trackById(doc, trackId);
-  struct Move { const char *role, *macro; double from, to, curve; bool fromRest, toRest; };
+  // Each move carries its own words, so the sentence says only what was written (R3-B: with no drive, "impact"
+  // still promised grit).
+  struct Move { const char *role, *macro; double from, to, curve; bool fromRest, toRest; const char* words; };
   std::vector<Move> moves;
-  std::string sentence;
+  std::string head;
   if (what == "intro") {  // dark and wet to bright and dry
-    moves = {{"filter", "cutoff", 1.0 - 0.8 * a, 0, 1.5, false, true}, {"reverb", "mix", 0.45 * a, 0, 1.0, false, true}};
-    sentence = "Intro: the sound comes out of the dark, from wet to dry";
+    moves = {{"filter", "cutoff", 1.0 - 0.8 * a, 0, 1.5, false, true, "the sound comes out of the dark"},
+             {"reverb", "mix", 0.45 * a, 0, 1.0, false, true, "from wet to dry"}};
+    head = "Intro";
   } else if (what == "outro") {  // bright to dark, the reverb grows
-    moves = {{"filter", "cutoff", 0, 1.0 - 0.7 * a, 1.0, true, false}, {"reverb", "mix", 0, 0.55 * a, 1.5, true, false}};
-    sentence = "Outro: the sound darkens and goes far away";
+    moves = {{"filter", "cutoff", 0, 1.0 - 0.7 * a, 1.0, true, false, "the sound darkens"},
+             {"reverb", "mix", 0, 0.55 * a, 1.5, true, false, "goes far away"}};
+    head = "Outro";
   } else if (what == "impact") {  // a burst that dies away fast
-    moves = {{"reverb", "mix", 0.3 + 0.6 * a, 0, 0.35, false, true}, {"drive", "amount", 0.8 * a, 0, 0.35, false, true}};
-    sentence = "Impact: a burst of space and grit that dies away";
+    moves = {{"reverb", "mix", 0.3 + 0.6 * a, 0, 0.35, false, true, "a burst of space that dies away"},
+             {"drive", "amount", 0.8 * a, 0, 0.35, false, true, "a burst of grit that dies away"}};
+    head = "Impact";
   } else if (what == "break") {  // steady: darker and wider
-    moves = {{"filter", "cutoff", 1.0 - 0.4 * a, 1.0 - 0.4 * a, 1.0, false, false}, {"reverb", "mix", 0.4 * a, 0.4 * a, 1.0, false, false}};
-    sentence = "Break: darker and wider while it lasts";
+    moves = {{"filter", "cutoff", 1.0 - 0.4 * a, 1.0 - 0.4 * a, 1.0, false, false, "darker"},
+             {"reverb", "mix", 0.4 * a, 0.4 * a, 1.0, false, false, "wider"}};
+    head = "Break";
   } else {
     throw DocumentError("fx", "no intent '" + intent + "' (buildup, suck, intro, outro, impact, break)");
   }
@@ -355,25 +382,33 @@ RoleToolResult toolIntentFx(Document& doc, const std::string& trackId, const Rol
     else r.skipped.push_back(whyNot(map, m.role, m.macro));
   }
   if (todo.empty()) throw DocumentError("fx", r.skipped.front());
-  for (const Move* m : todo) {
+  std::string sentence = head + ": ";
+  for (size_t i = 0; i < todo.size(); ++i) {
+    const Move* m = todo[i];
     const double rest = roleRest(*map.find(m->role), m->role, m->macro);
     r.keys.push_back(writeRoleSweep(doc, trackId, map, m->role, m->macro, start, end, m->fromRest ? rest : m->from,
                                     m->toRest ? rest : m->to, m->curve));
     r.roles.push_back(m->role);
+    sentence += std::string(i ? " and " : "") + m->words;
   }
+  if (what == "break") sentence += " while it lasts";
   r.sentence = sentence + " (" + bars(end - start) + ")";
   return r;
 }
 
-RollResult toolRoll(Document& doc, const std::string& trackId, int64_t start, int64_t dropTick, const std::string& style, int pitch,
+RollResult toolRoll(Document& doc, const std::string& trackId, int64_t start, int64_t dropTick, const std::string& styleIn, int pitch,
                     int rise, int gapBeats) {
   checkSpan(doc, start, dropTick);
   if (dropTick - start < kPpq) throw DocumentError("roll", "a roll is at least one beat long");
+  const std::string style = lowerText(styleIn);  // R3-F: case does not matter
   if (style != "steps" && style != "gradual") throw DocumentError("roll", "style is steps or gradual");
   if (rise < 0 || rise > 12) throw DocumentError("roll", "rise is 0-12 semitones");
   if (gapBeats < 0 || gapBeats > 4) throw DocumentError("roll", "gap is 0-4 beats");
-  Track& t = trackById(doc, trackId);
-  if (!playsPatterns(t)) throw DocumentError("roll", "'" + t.name + "' plays no notes (audio or a bus)");
+  Track& target = trackById(doc, trackId);
+  if (!playsPatterns(target)) throw DocumentError("roll", "'" + target.name + "' plays no notes (audio or a bus)");
+  // All or nothing (round 3, R3-A): the clips were cut before addPattern, which throws on a full track (64
+  // patterns), and the song was left with a hole. The work is done on a copy that replaces the track at the end.
+  Track t = target;
   if (pitch < 0) {
     const int key = trackRoot(t, t.patterns.empty() ? nullptr : &t.patterns.front());
     pitch = key >= 0 ? key : 38;
@@ -410,7 +445,9 @@ RollResult toolRoll(Document& doc, const std::string& trackId, int64_t start, in
   pat.name = "Roll";
   r.notes = makeBuildup(pat, o);
   addClip(t, r.patternId, start, length);
-  r.sentence = "ROLL on " + t.name + ": " + std::to_string(r.notes) + " notes speeding up over " + bars(length) +
+  target = std::move(t);
+  const Track& done = target;
+  r.sentence = "ROLL on " + done.name + ": " + std::to_string(r.notes) + " notes speeding up over " + bars(length) +
                (rise > 0 ? ", climbing " + std::to_string(rise) + " semitones" : "") + " into the drop";
   return r;
 }

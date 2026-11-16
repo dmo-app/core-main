@@ -12,6 +12,7 @@
 #include <memory>
 #include <vector>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include "Language.h"
 #include "Theme.h"
 #include "core_plugins.hpp"
 #include "roles.hpp"
@@ -23,6 +24,8 @@ public:
   std::function<void(const doc::CorePluginInfo&, juce::Component&)> onOpen;
   std::function<void(bool manual)> onMode;  // AI or Manual chosen on the device
   void showManual(bool m) { manual_ = m; resized(); repaint(); if (device_) device_->repaint(); }  // no callback
+  // A click on a grey card: no tool runs (round 3, R3-B: it used to open the tool anyway); the text says what is missing.
+  std::function<void(const juce::String& missingRoles)> onGrey;
 
   PluginCards() {
     for (const auto& p : doc::corePlugins()) {
@@ -49,7 +52,7 @@ public:
     g.fillRoundedRectangle(getLocalBounds().toFloat(), theme::kCorner);
     g.setColour(theme::kTitle);
     g.setFont(juce::FontOptions(theme::kFontBody, juce::Font::bold));
-    g.drawText("TOOLS", getLocalBounds().removeFromTop(kHead).reduced(10, 0), juce::Justification::centredLeft, false);
+    g.drawText(lang::tr("TOOLS"), getLocalBounds().removeFromTop(kHead).reduced(10, 0), juce::Justification::centredLeft, false);
   }
   void resized() override {
     view_.setBounds(getLocalBounds().withTrimmedTop(kHead).reduced(4, 0).withTrimmedBottom(4));
@@ -154,7 +157,7 @@ private:
       }
       grey_ = !any;
       setTooltip(juce::String::fromUTF8(info_.about.c_str()) +
-                 (missing_.isEmpty() ? juce::String() : juce::String::fromUTF8("\nSettings > Roles: choose the plugin of ") + missing_));
+                 (missing_.isEmpty() ? juce::String() : juce::String("\n") + lang::tr("Settings > Roles: choose the plugin of " + missing_)));
     }
     void paint(juce::Graphics& g) override {
       const auto r = getLocalBounds().toFloat();
@@ -168,12 +171,14 @@ private:
       g.drawText(juce::String::fromUTF8(info_.shortName.c_str()), title, juce::Justification::centredLeft, true);
       g.setColour(theme::kDim);
       g.setFont(juce::FontOptions(theme::kFontSmall));
-      g.drawText(juce::String::fromUTF8(grey_ ? "no plugin" : info_.word.c_str()), title, juce::Justification::centredRight, false);
+      g.drawText(grey_ ? lang::tr("no plugin") : juce::String::fromUTF8(info_.word.c_str()), title, juce::Justification::centredRight, false);
     }
     void mouseEnter(const juce::MouseEvent&) override { repaint(); }
     void mouseExit(const juce::MouseEvent&) override { repaint(); }
     void mouseUp(const juce::MouseEvent& e) override {
-      if (e.mouseWasClicked() && owner_.onOpen) owner_.onOpen(info_, *this);
+      if (!e.mouseWasClicked()) return;
+      if (grey_) { if (owner_.onGrey) owner_.onGrey(missing_); return; }
+      if (owner_.onOpen) owner_.onOpen(info_, *this);
     }
 
     bool grey() const { return grey_; }
