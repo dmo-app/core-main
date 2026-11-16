@@ -230,8 +230,29 @@ static int knobcheck(const std::vector<std::string>& args) {
     std::cout << json({{"check", "repeatable"}, {"maxDifference", worst}, {"songRmsDb", 20 * std::log10(std::max(1e-12, refRms))}}).dump() << std::endl;
     if (worst > 0) return 2;
   }
+  // The same song loaded again, nothing changed (what every edit does to the tracks it does not touch): it must
+  // go on exactly as before. If not, which track carries it: each one alone (the others muted, buses kept).
+  auto reloadDb = [&](const json& p) {
+    const std::vector<float> a = knobRun(p, nullptr, sr, total, at, back), b = knobRun(p, &p, sr, total, at, back);
+    double e = 0, ea = 0;
+    for (size_t i = (size_t)at * 2; i < a.size(); ++i) { const double d = (double)b[i] - a[i]; e += d * d; ea += (double)a[i] * a[i]; }
+    return e > 0 ? 10 * std::log10(e / std::max(1e-24, ea)) : -999.0;
+  };
+  if (const double db = reloadDb(project); db > limitDb) {
+    std::cout << json({{"check", "reload"}, {"differenceDb", db}}).dump() << std::endl;
+    for (size_t ti = 0; ti < project["tracks"].size(); ++ti) {
+      if (project["tracks"][ti].value("instrument", std::string()) == "bus") continue;
+      json alone = project;
+      for (size_t k = 0; k < alone["tracks"].size(); ++k)
+        if (k != ti && alone["tracks"][k].value("instrument", std::string()) != "bus") alone["tracks"][k]["mute"] = true;
+      alone["tracks"][ti]["mute"] = false;
+      std::cout << json({{"check", "reload, one track"}, {"track", project["tracks"][ti].value("id", std::string())},
+                         {"instrument", project["tracks"][ti].value("instrument", std::string())}, {"differenceDb", reloadDb(alone)}}).dump() << std::endl;
+    }
+    if (!flag(args, "--all")) return 1;
+  }
   int bad = 0, tried = 0;
-  auto tryKnob = [&](const std::string& track, const std::string& what, const std::string& param, double was, double to, const json& edited) {
+  auto tryKnob =[&](const std::string& track, const std::string& what, const std::string& param, double was, double to, const json& edited) {
     const std::vector<float> got = knobRun(project, &edited, sr, total, at, back);
     double worst = 0, energy = 0;
     for (size_t i = (size_t)from * 2; i < ref.size(); ++i) {
