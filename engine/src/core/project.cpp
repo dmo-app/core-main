@@ -520,10 +520,12 @@ Track trackFromJson(const json& input) {
   t.instrument = str(tv, "instrument", "");
   // Core's own instruments left the engine (2026-11-16): an older project's kick, W-Core, sampler... is a track with
   // its notes and no sound until a plugin plays it.
+  bool ownInstrumentLeft = false;
   if (instrumentParams(t.instrument).empty()) {
     if (t.instrument.empty()) throw std::runtime_error("instrument is required.");
     t.loadNotes.push_back("Core's own '" + t.instrument + "' is not played any more: the track waits for a plugin");
     t.instrument = "none";
+    ownInstrumentLeft = true;
   }
   const auto& specs = instrumentParams(t.instrument);
   {  // past int: newer than this engine (checked below), never wrapped
@@ -695,7 +697,19 @@ Track trackFromJson(const json& input) {
       t.modulators.push_back(std::move(m));
     }
   }
-  t.envelopes = envelopesFromJson(tv.value("envelopes", json::array()), [&](const std::string& param) {
+  json envelopeList = tv.value("envelopes", json::array());
+  // The automation of an instrument that left (a W-Core "tone", a kick "ampDecay"...) has nothing to move any more:
+  // it is left out with a note, so the song still opens (before, "envelope on unknown parameter" refused the song).
+  if (ownInstrumentLeft && envelopeList.is_array()) {
+    json kept = json::array();
+    for (const auto& ev : envelopeList) {
+      const std::string param = ev.is_object() ? str(ev, "param", "") : std::string();
+      if (isMixParam(param) || param.rfind("fx:", 0) == 0) kept.push_back(ev);
+      else t.loadNotes.push_back("the automation of '" + param + "' left with Core's own instrument");
+    }
+    envelopeList = std::move(kept);
+  }
+  t.envelopes = envelopesFromJson(envelopeList, [&](const std::string& param) {
     return isMixParam(param) || std::any_of(specs.begin(), specs.end(), [&](const ParamSpec& s) { return param == s.name; }) ||
            (t.instrument == "plugin" && param.rfind("vst:", 0) == 0 && param.size() > 4);  // the plugin's own parameter, 0..1
   });

@@ -306,7 +306,7 @@ std::string uniqueTrackId(const Document& doc, const std::string& base) {
 }
 
 // A track for notes with no instrument yet (Diogo 2026-11-16: the sound comes from plugins): its notes play once a
-// plugin is chosen for it. ole names it ("kick", "bass"...) when no name is given.
+// plugin is chosen for it. The role names it ("kick", "bass"...) when no name is given.
 std::string addTrack(Document& doc, const std::string& role, const std::string& name) {
   if (doc.tracks.size() >= 128) throw DocumentError("tracks", "has the maximum of 128 tracks");
   Track t;
