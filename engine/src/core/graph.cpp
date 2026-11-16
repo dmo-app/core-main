@@ -10,30 +10,13 @@
 #include <cstring>
 #include <functional>
 #include <map>
-#include "../dsp/sampler.hpp"
-#include "../dsp/wave_mod.hpp"
-#include "../dsp/sample_path.hpp"
 
 namespace core {
 
 namespace {
-// An instrument parameter the instrument reads as a switch or a choice (rounded, or compared to 0.5): it jumps to
-// its new value. Gliding there played the values between (filter types 0 -> 19 went through every type, a wavetable
-// through every table, unison 1 -> 16 through every voice count) for the ~15 ms of the glide (audit dbbc592).
-bool steppedInstrumentParam(std::string_view n) {
-  if (n.size() > 3 && n[0] == 'l' && n[1] >= '2' && n[1] <= '9' && n[2] == '_') n.remove_prefix(3);  // W-Core layers 2-4
-  if (n.rfind("sec_", 0) == 0) return true;  // a W-Core section on or off
-  static constexpr std::string_view kNames[] = {
-      // W-Core
-      "on", "mode", "octave", "subOct", "subShape", "unison", "polyVoices", "legato", "glideAlways", "osc1Semi",
-      "osc1Table", "osc2Table", "osc1Warp", "osc2Warp", "filterMode", "filter2Mode", "filterSerial",
-      // Sampler
-      "pitched", "retrigger", "reverse", "filterType",
-      // Sample Path
-      "limiter"};
-  for (auto k : kNames) if (n == k) return true;
-  return false;
-}
+// An instrument parameter that jumps instead of gliding. Core's own instruments left (2026-11-16): a plugin's
+// parameters are its own, so none here.
+bool steppedInstrumentParam(std::string_view) { return false; }
 }  // namespace
 
 double Automation::valueAt(double tick) const {
@@ -358,55 +341,6 @@ Graph::Graph(const Project& p, double sampleRate, AssetStore* assets, PluginProv
         rt.plugin = processor;
         rt.instrument = std::make_unique<PluginInstrument>(sampleRate, std::move(processor));
       }
-    if (t.instrument == "sampler") {
-      // The files at the engine's rate, kept alive by the track (the voices only read them).
-      std::vector<SamplerZone> zones;
-      for (const auto& z : t.samples) {
-        std::string why;
-        std::shared_ptr<const AudioData> data = assets ? assets->get(z.path, sampleRate, &why) : nullptr;
-        if (!data) { missingAssets_.push_back(assets ? why : z.path + ": no audio store"); continue; }
-        // The loop in frames at the engine's rate, inside the file (a loop past its end is cut to it; too short: none).
-        const int64_t frames = data->frames();
-        int64_t loopStart = 0, loopEnd = 0;
-        if (z.loopEnd > 0) {
-          loopEnd = std::min<int64_t>(frames - 1, (int64_t)std::llround(z.loopEnd * sampleRate));
-          loopStart = std::clamp<int64_t>((int64_t)std::llround(z.loopStart * sampleRate), 0, std::max<int64_t>(0, loopEnd - 1));
-          if (loopEnd - loopStart < (int64_t)(kMinLoopSeconds * sampleRate)) loopStart = loopEnd = 0;
-        }
-        zones.push_back({std::move(data), z.rootKey, z.loKey, z.hiKey, loopStart, loopEnd});
-      }
-      auto sampler = std::make_unique<Sampler>(sampleRate);
-      sampler->setZones(std::move(zones));
-      rt.instrument = std::move(sampler);
-    }
-    if (t.instrument == "wave" && rt.instrument && !t.synth.is_null())
-      rt.instrument->setWavePatch(wmod::parsePatch(t.synth, wmod::targets()));  // checked when the track was read
-    if (auto* path = t.instrument == "samplepath" ? dynamic_cast<SamplePath*>(rt.instrument.get()) : nullptr) {
-      // Core Glitch · Sample Path: its map, and one sound per sampler (the zone's lowest key names it, 0..3).
-      path->setPatch(spath::parsePatch(t.synth));  // checked when the track was read
-      bool taken[spath::kLayers] = {};
-      for (const auto& z : t.samples) {
-        const int layer = std::clamp(z.loKey, 0, spath::kLayers - 1);
-        if (taken[layer]) continue;
-        taken[layer] = true;
-        std::string why;
-        if (auto data = assets ? assets->get(z.path, sampleRate, &why) : nullptr) path->setLayerSource(layer, std::move(data));
-        else missingAssets_.push_back(assets ? why : z.path + ": no audio store");
-      }
-    }
-    if (t.instrument == "wave" && !t.samples.empty() && rt.instrument) {
-      // W-Core Grain reads its grains from a sound, at the engine's rate: one per layer at most, the zone's lowest
-      // key naming its layer (0 = layer 1, as every older song; 1..3 = layers 2..4).
-      bool taken[4] = {};
-      for (const auto& z : t.samples) {
-        const int layer = std::clamp(z.loKey, 0, 3);
-        if (taken[layer]) continue;
-        taken[layer] = true;
-        std::string why;
-        if (auto data = assets ? assets->get(z.path, sampleRate, &why) : nullptr) rt.instrument->setLayerSource(layer, std::move(data));
-        else missingAssets_.push_back(assets ? why : z.path + ": no audio store");
-      }
-    }
     const auto& specs = instrumentParams(t.instrument);
     rt.paramCount = hasNoInstrumentParams(t.instrument) ? 0 : (int)specs.size();
     for (int i = 0; i < rt.paramCount; ++i) {

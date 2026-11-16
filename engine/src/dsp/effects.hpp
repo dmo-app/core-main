@@ -1,4 +1,4 @@
-// Built-in insert effects (M4): stereo, in place, per track and on the master.
+// Insert effects: stereo, in place, per track and on the master. Plugins only since 2026-11-16 (graph.cpp PluginEffect).
 // Real-time safe like the instruments: buffers are allocated in the constructor, never in process().
 // Each effect has a version: a change that alters the sound gets a new number, old songs keep theirs.
 #pragma once
@@ -16,7 +16,7 @@
 
 namespace core {
 
-constexpr int kMaxEffectParams = 98;  // CORE FX: 5 + 5 modules x 18 + Wash and Dry
+constexpr int kMaxEffectParams = 8;  // no built-in effect has parameters any more (a plugin's are its own)
 constexpr int kMaxEffects = 16;  // per chain
 
 class Effect {

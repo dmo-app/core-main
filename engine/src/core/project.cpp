@@ -1,10 +1,6 @@
 #include "project.hpp"
 #include "../dsp/finite.hpp"
 #include "../dsp/registry.hpp"
-#include "../dsp/bcore_legacy.hpp"
-#include "../dsp/sample_path_patch.hpp"
-#include "../dsp/wave_legacy.hpp"
-#include "../dsp/wave_mod.hpp"
 #include <algorithm>
 #include <functional>
 #include <map>
@@ -18,79 +14,6 @@ namespace core {
 namespace {
 std::vector<Envelope> envelopesFromJson(const json& list, const std::function<bool(const std::string&)>& known);
 json envelopesJson(const std::vector<Envelope>& list);
-}  // namespace
-
-namespace {
-// B-Core ("elastic") and the older "bass" synth -> W-Core (dsp/bcore_legacy.hpp): the closest B-Core preset's W-Core
-// copy, Octave and Volume kept; automation and modulators of the knobs W-Core has not are said in loadNotes.
-json legacyBCoreToWave(json tv, std::vector<std::string>& notes) {
-  const bool oldBass = tv.value("instrument", std::string()) == "bass";
-  const json old = tv.contains("params") && tv["params"].is_object() ? tv["params"] : json::object();
-  const auto c = blegacy::convert(oldBass ? blegacy::oldBassToBCore(old) : old);
-  tv["instrument"] = "wave";
-  tv["instrumentVersion"] = 2;
-  tv["params"] = c.params;
-  tv["synth"] = c.synth;
-  notes.push_back(std::string(oldBass ? "the old bass synth" : "B-Core") + " is W-Core now (its copy of B-Core's " + c.from + ")");
-  auto rename = [&](const char* list, const char* valueKey, bool points) {
-    if (!tv.contains(list) || !tv[list].is_array()) return;
-    json kept = json::array();
-    for (auto e : tv[list]) {
-      if (!e.is_object() || !e.contains("param") || !e["param"].is_string()) { kept.push_back(e); continue; }
-      std::string from = e["param"].get<std::string>();
-      if (from == "gainDb" || from == "pan" || from.rfind("fx:", 0) == 0) { kept.push_back(e); continue; }
-      if (oldBass) from = blegacy::oldBassName(from);
-      const auto [to, scale] = blegacy::renameParam(from, c);
-      if (to.empty()) { notes.push_back(std::string(points ? "automation" : "modulator") + " on B-Core's '" + from + "' (W-Core has no such knob)"); continue; }
-      e["param"] = to;
-      if (scale != 1) {
-        if (points && e.contains("points") && e["points"].is_array())
-          for (auto& pt : e["points"]) if (pt.is_object() && pt.contains(valueKey) && pt[valueKey].is_number()) pt[valueKey] = pt[valueKey].get<double>() * scale;
-        if (!points && e.contains(valueKey) && e[valueKey].is_number()) e[valueKey] = e[valueKey].get<double>() * scale;
-      }
-      kept.push_back(e);
-    }
-    tv[list] = kept;
-  };
-  rename("envelopes", "value", true);
-  rename("modulators", "depth", false);
-  return tv;
-}
-
-// W-Core version 1 -> 2 (dsp/wave_legacy.hpp): the fixed movements become links of its modulation ("synth"), the
-// knobs that only changed name keep their automation and modulators; the rest is said in loadNotes.
-json legacyWaveToV2(json tv, std::vector<std::string>& notes) {
-  const auto c = wlegacy::convertV1(tv.contains("params") && tv["params"].is_object() ? tv["params"] : json::object());
-  tv["params"] = c.params;
-  tv["instrumentVersion"] = 2;
-  if (!c.synth.is_null()) tv["synth"] = c.synth;
-  auto rename = [&](const char* list, const char* valueKey, bool points) {
-    if (!tv.contains(list) || !tv[list].is_array()) return;
-    json kept = json::array();
-    for (auto e : tv[list]) {
-      if (!e.is_object() || !e.contains("param") || !e["param"].is_string()) { kept.push_back(e); continue; }
-      const std::string from = e["param"].get<std::string>();
-      const auto to = wlegacy::renameParamV1(from);
-      if (to.empty()) { notes.push_back(std::string(points ? "automation" : "modulator") + " on '" + from + "' (now a link of the synth)"); continue; }
-      for (size_t k = 0; k < to.size(); ++k) {
-        json r = e;
-        r["param"] = to[k].first;
-        const double scale = to[k].second;
-        if (k > 0 && r.contains("id") && r["id"].is_string()) r["id"] = r["id"].get<std::string>() + "-" + std::to_string(k + 1);
-        if (scale != 1) {
-          if (points && r.contains("points") && r["points"].is_array())
-            for (auto& pt : r["points"]) if (pt.is_object() && pt.contains(valueKey) && pt[valueKey].is_number()) pt[valueKey] = pt[valueKey].get<double>() * scale;
-          if (!points && r.contains(valueKey) && r[valueKey].is_number()) r[valueKey] = r[valueKey].get<double>() * scale;
-        }
-        kept.push_back(r);
-      }
-    }
-    tv[list] = kept;
-  };
-  rename("envelopes", "value", true);
-  rename("modulators", "depth", false);
-  return tv;
-}
 }  // namespace
 
 namespace {
@@ -142,14 +65,11 @@ json trackFromV1Impl(const json& t) {
   double gate = pattern.value("gate", 0.5);
   double accent = pattern.value("accent", 0.3);
   json track = {{"id", t.value("id", "t1")}, {"name", t.value("name", "Track")},
-                {"instrument", kind == "synth" ? "bass" : "drums"},  // "bass": played by W-Core (trackFromJson)
+                {"instrument", "none"},  // Core's own sound left (2026-11-16): the notes wait for a plugin
                 {"gainDb", t.value("volumeDb", 0.0)}, {"pan", t.value("pan", 0.0)},
                 {"mute", t.value("mute", false)}, {"solo", t.value("solo", false)}, {"patternTicks", steps * stepTicks},
                 {"lengthTicks", v1Int(t, "bars", 16, 1, 100000) * 4 * kPpq},
                 {"notes", json::array()}, {"params", json::object()}};
-  if (kind == "synth" && t.contains("params") && t["params"].is_object())
-    for (const auto& p : blegacy::oldBassParams())
-      if (t["params"].contains(p.from) && t["params"][p.from].is_number()) track["params"][p.from] = t["params"][p.from];
   for (const auto& n : pattern.value("notes", json::array())) {
     int64_t len = v1Int(n, "length", 1, 1, 65536);
     int pitch = (int)v1Int(n, "pitch", 36, -1, 128);  // out of 0..127 stays out (refused when read)
@@ -279,7 +199,6 @@ json toJson(const Project& p) {
                   {"instrumentVersion", t.instrumentVersion}, {"params", t.params}, {"gainDb", t.gainDb}, {"pan", t.pan}, {"mute", t.mute}, {"solo", t.solo},
                   {"patternTicks", t.patternTicks}, {"lengthTicks", t.lengthTicks}, {"notes", json::array()}, {"envelopes", json::array()},
                   {"effects", t.effects}};
-    if ((t.instrument == "wave" || t.instrument == "samplepath") && !t.synth.is_null()) track["synth"] = t.synth;
     if (t.instrument == "plugin") { track["plugin"] = t.plugin; track.erase("params"); track.erase("instrumentVersion"); }
     for (const auto& n : t.notes) {
       json note = {{"tick", n.tick}, {"length", n.length}, {"pitch", n.pitch}, {"velocity", n.velocity}};
@@ -311,17 +230,6 @@ json toJson(const Project& p) {
                                        {"fadeOutSeconds", a.fadeOutSeconds}, {"mute", a.mute}});
         if (a.pitchSemitones != 0) track["audioClips"].back()["pitchSemitones"] = a.pitchSemitones;
         if (a.freezeSeconds > 0) track["audioClips"].back()["freezeSeconds"] = a.freezeSeconds;
-      }
-    }
-    // A W-Core's Grain sounds too, one per layer (audit 2026-11-07 #7: fromJson(toJson(p)) lost them, and so did
-    // project.get and the next track.set, which rebuild the track from this).
-    if (t.instrument == "sampler" || ((t.instrument == "wave" || t.instrument == "samplepath") && !t.samples.empty())) {
-      track["samples"] = json::array();
-      for (const auto& z : t.samples)
-      {
-        json zone = {{"path", z.path}, {"rootKey", z.rootKey}, {"loKey", z.loKey}, {"hiKey", z.hiKey}};
-        if (z.loopEnd > 0) { zone["loopStart"] = z.loopStart; zone["loopEnd"] = z.loopEnd; }  // older songs stay as they were
-        track["samples"].push_back(zone);
       }
     }
     if (t.instrument == "bus") { track.erase("params"); track.erase("instrumentVersion"); track.erase("notes"); }
@@ -602,24 +510,6 @@ json effectsFromJson(const json& list) {
 }
 
 Track trackFromJson(const json& input) {
-  if (input.is_object() && (input.value("instrument", json()) == "bass" || input.value("instrument", json()) == "elastic")) {
-    std::vector<std::string> notes;
-    Track t = trackFromJson(legacyBCoreToWave(input, notes));
-    t.loadNotes.insert(t.loadNotes.begin(), notes.begin(), notes.end());
-    return t;
-  }
-  if (input.is_object() && input.value("instrument", json()) == "wave" && input.contains("instrumentVersion") == false) {
-    json copy = input;
-    copy["instrumentVersion"] = 1;
-    return trackFromJson(copy);
-  }
-  if (input.is_object() && input.value("instrument", json()) == "wave" && input["instrumentVersion"].is_number() &&
-      input["instrumentVersion"].get<double>() == 1) {
-    std::vector<std::string> notes;
-    Track t = trackFromJson(legacyWaveToV2(input, notes));
-    t.loadNotes = std::move(notes);
-    return t;
-  }
   const json& tv = input;
   static const std::regex idPattern("^[A-Za-z0-9_-]{1," + std::to_string(kMaxTrackIdLength) + "}$");
   if (!tv.is_object()) throw std::runtime_error("not an object.");
@@ -628,8 +518,14 @@ Track trackFromJson(const json& input) {
   if (!std::regex_match(t.id, idPattern)) throw std::runtime_error("invalid id.");
   t.name = str(tv, "name", t.id).substr(0, 80);
   t.instrument = str(tv, "instrument", "");
+  // Core's own instruments left the engine (2026-11-16): an older project's kick, W-Core, sampler... is a track with
+  // its notes and no sound until a plugin plays it.
+  if (instrumentParams(t.instrument).empty()) {
+    if (t.instrument.empty()) throw std::runtime_error("instrument is required.");
+    t.loadNotes.push_back("Core's own '" + t.instrument + "' is not played any more: the track waits for a plugin");
+    t.instrument = "none";
+  }
   const auto& specs = instrumentParams(t.instrument);
-  if (specs.empty()) throw std::runtime_error("unknown instrument '" + t.instrument + "'.");
   {  // past int: newer than this engine (checked below), never wrapped
     const double iv = num(tv, "instrumentVersion", 1);
     t.instrumentVersion = iv >= 1e6 ? 1000000 : iv <= -1e6 ? -1000000 : (int)iv;
@@ -642,28 +538,6 @@ Track trackFromJson(const json& input) {
     for (const auto& s : specs) t.params[s.name] = s.def;
   }
   if (tv.contains("effects") && !tv["effects"].is_null()) t.effects = effectsFromJson(tv["effects"]);
-  if (tv.contains("params") && !hasNoInstrumentParams(t.instrument)) {
-    if (!tv["params"].is_object()) throw std::runtime_error("params must be an object.");
-    const bool oldKick = t.instrument == "kick" && t.instrumentVersion < 2 &&
-                         !(tv["params"].contains("engine") && tv["params"]["engine"].is_number() && tv["params"]["engine"].get<double>() >= 0.5);
-    for (auto it = tv["params"].begin(); it != tv["params"].end(); ++it) {
-      auto spec = std::find_if(specs.begin(), specs.end(), [&](const ParamSpec& s) { return it.key() == s.name; });
-      // A version 1 kick (2026-11-07: one kick only): the old kick's knobs play this kick's own sound; a kick that was
-      // on the shaped engine keeps its knobs, without the ones that went away.
-      if (oldKick) break;
-      if (spec == specs.end() && t.instrument == "kick")
-        if (const std::string& k = it.key(); k == "punch" || k == "engine" || k == "attack" || k == "release" || k == "clickLength" ||
-                                             k == "clip" || k == "phase") continue;
-      if (spec == specs.end()) throw std::runtime_error("unknown parameter '" + it.key() + "'.");
-      if (!it.value().is_number()) throw std::runtime_error("parameter '" + it.key() + "' must be a number.");
-      t.params[it.key()] = clampd(it.value().get<double>(), spec->min, spec->max);
-    }
-  }
-  if (t.instrument == "wave" && tv.contains("synth") && !tv["synth"].is_null())
-    t.synth = wmod::patchToJson(wmod::parsePatch(tv["synth"], wmod::targets()));  // throws on what it cannot read
-  // Core Glitch · Sample Path: its map (slices, nodes, links, patterns), checked and clamped (sample_path_patch.hpp).
-  if (t.instrument == "samplepath")
-    t.synth = spath::patchToJson(spath::parsePatch(tv.contains("synth") ? tv["synth"] : json()));
   // One version of each instrument (2026-11-09): what an older version needed was migrated above; it plays the current sound.
   if (!hasNoInstrumentParams(t.instrument) && t.instrumentVersion >= 1 && t.instrumentVersion < currentInstrumentVersion(t.instrument))
     t.instrumentVersion = currentInstrumentVersion(t.instrument);
@@ -731,35 +605,8 @@ Track trackFromJson(const json& input) {
       }
     }
   }
-  if (tv.contains("samples") && !tv["samples"].is_null()) {
-    if (t.instrument != "sampler" && t.instrument != "wave" && t.instrument != "samplepath")
-      throw std::runtime_error("samples belong to a sampler track (or a W-Core's Grain sounds, or Core Glitch's samplers).");
-    if (t.instrument == "wave" && tv["samples"].is_array() && tv["samples"].size() > 4) throw std::runtime_error("a W-Core track takes one sound per layer (4 at most).");
-    if (t.instrument == "samplepath" && tv["samples"].is_array() && tv["samples"].size() > 4) throw std::runtime_error("Core Glitch takes one sound per sampler (4 at most).");
-    if (!tv["samples"].is_array() || tv["samples"].size() > 128) throw std::runtime_error("samples must be a list (max 128).");
-    int index = 0;
-    for (const auto& zv : tv["samples"]) {
-      ++index;
-      try {
-        if (!zv.is_object()) throw std::runtime_error("not an object.");
-        SampleZone z;
-        z.path = str(zv, "path", "");
-        z.rootKey = whole(zv, "rootKey", 60, 0, 127, "invalid keys.");
-        z.loKey = whole(zv, "loKey", 0, 0, 127, "invalid keys.");
-        z.hiKey = whole(zv, "hiKey", 127, 0, 127, "invalid keys.");
-        z.loopStart = num(zv, "loopStart", 0);
-        z.loopEnd = num(zv, "loopEnd", 0);
-        if (!finiteBits(z.loopStart) || !finiteBits(z.loopEnd) || z.loopStart < 0 || z.loopEnd < 0 ||
-            (z.loopEnd > 0 && z.loopEnd < z.loopStart + kMinLoopSeconds) || (z.loopEnd == 0 && z.loopStart > 0))
-          throw std::runtime_error("loopEnd must be 0 (no loop) or at least 2 ms after loopStart.");
-        if (z.path.empty()) throw std::runtime_error("path is required.");
-        if (z.rootKey < 0 || z.rootKey > 127 || z.loKey < 0 || z.hiKey > 127 || z.loKey > z.hiKey) throw std::runtime_error("invalid keys.");
-        t.samples.push_back(std::move(z));
-      } catch (const std::exception& e) {
-        throw std::runtime_error("sample " + std::to_string(index) + ": " + e.what());
-      }
-    }
-  }
+  if (tv.contains("samples") && tv["samples"].is_array() && !tv["samples"].empty())
+    t.loadNotes.push_back("the sampler's sounds are not played any more (Core's sound comes from plugins)");
   if (t.instrument == "audio" && (!t.notes.empty() || !t.clips.empty())) throw std::runtime_error("an audio track has audio clips, not notes.");
   if (t.instrument == "bus" && (!t.notes.empty() || !t.clips.empty() || !t.audioClips.empty() || !t.samples.empty()))
     throw std::runtime_error("a bus plays what is routed to it: no notes, clips or samples.");
@@ -808,11 +655,11 @@ Track trackFromJson(const json& input) {
           if (fx.value("id", std::string()) == fxId && fx.value("type", std::string("builtin")) == "builtin" && !fx.value("unsupported", false))
             for (const auto& sp : effectParams(fx.value("name", std::string())))
               if (fxParam == sp.name) fxSpec = &sp;
-        if (!fxSpec) throw std::runtime_error("modulator '" + m.id + "': no built-in effect parameter '" + m.param + "' on the track.");
+        if (!fxSpec) { t.loadNotes.push_back("modulator '" + m.id + "' on '" + m.param + "' is not played (Core's own effects left)"); continue; }
       }
       const auto spec = std::find_if(specs.begin(), specs.end(), [&](const ParamSpec& s) { return m.param == s.name; });
       const bool known = fxSpec || isMixParam(m.param) || (!hasNoInstrumentParams(t.instrument) && spec != specs.end());
-      if (!known) throw std::runtime_error("modulator '" + m.id + "': unknown parameter '" + m.param + "'.");
+      if (!known) { t.loadNotes.push_back("modulator '" + m.id + "' on '" + m.param + "' is not played (Core's own instruments left)"); continue; }
       m.rateBeats = clampd(num(mv, "rateBeats", 1), 1.0 / 64, m.shape == "rise" ? 256 : 64);
       const char* unit = fxSpec ? fxSpec->unit : (spec != specs.end() && !isMixParam(m.param) ? spec->unit : "");
       const bool hz = std::string(unit) == "Hz";

@@ -13,7 +13,6 @@
 #include <stdexcept>
 #include <chrono>
 #include <thread>
-#include "../dsp/oversample_simd.hpp"
 #include "../io/wav.hpp"
 #include "tempo_map.hpp"
 
@@ -175,7 +174,7 @@ json Server::hello() const {
           {"limits", {{"maxMessageBytes", kMaxMessageBytes}, {"maxTracks", Engine::kMaxTracks}, {"maxNotesPerTrack", 4096},
                       {"liveNoteQueue", 255}, {"timedNoteOffs", 32}}},
           {"capabilities", {"revisions", "renderJobs", "clips", "tempoMap"}},  // what this engine understands
-          {"dsp", dspPathName(dspPath())},  // saturation 2's up-sampler: "avx" or "scalar" (CORE_DSP_SIMD=scalar)
+          {"dsp", "plugins"},  // Core's own DSP left (2026-11-16): the sound comes from plugins
           {"commands", commandList()}};
 }
 

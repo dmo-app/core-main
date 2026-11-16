@@ -1,4 +1,5 @@
-// Built-in instruments: kick, W-Core (bass, leads, pads), hats, snare and the sampler.
+// The instrument of a track: a plugin (graph.cpp PluginInstrument), or a silent stand-in (instruments.cpp). Core's own
+// instruments left on 2026-11-16 (the sound comes from plugins).
 // Real-time safe: no allocation, no locks, no exceptions inside render/noteOn/noteOff.
 #pragma once
 #include <atomic>
@@ -11,7 +12,7 @@ namespace core {
 struct AudioData;
 namespace wmod { struct Patch; }
 
-constexpr int kMaxParams = 464;  // W-Core: 106 per layer, 4 layers (+3 on switches) = 427, + 9 section lights per layer = 463
+constexpr int kMaxParams = 8;  // no built-in instrument has parameters any more (a plugin's are its own)
 
 class Instrument {
 public:
@@ -33,13 +34,6 @@ public:
   virtual bool stereo() const { return false; }
   virtual void queueNote(int /*offset*/, bool /*on*/, int /*pitch*/, double /*velocity*/) {}
   virtual void renderStereo(float* /*left*/, float* /*right*/, int /*frames*/) {}
-  // The sound a granular layer reads from (W-Core Grain): the track's sample, already at the engine
-  // rate. Set on the control thread before the instrument goes live; null means "use your own wave".
-  virtual void setSource(std::shared_ptr<const AudioData> /*source*/) {}
-  // W-Core layers: the sound one layer's Grain reads (0 = the first layer, the same as setSource).
-  virtual void setLayerSource(int layer, std::shared_ptr<const AudioData> source) { if (layer == 0) setSource(std::move(source)); }
-  // W-Core's modulation (the track's "synth": LFO shapes and links, wave_mod.hpp). Control thread, before it goes live.
-  virtual void setWavePatch(const wmod::Patch& /*patch*/) {}
   // The song position (beats) and tempo at the first sample of the next render: the graph calls it before
   // every sub-block (beat < 0 while stopped). An instrument with a slow movement (W-Core Drift) follows it
   // (see SongClock), so every pass of a loop sounds the same.
