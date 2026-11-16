@@ -81,7 +81,10 @@ add_test(NAME cli_measure COMMAND ${CMAKE_COMMAND} -DENGINE=$<TARGET_FILE:core-e
 add_test(NAME cli_unicode COMMAND ${CMAKE_COMMAND} -DENGINE=$<TARGET_FILE:core-engine> -DWORK=${CMAKE_CURRENT_BINARY_DIR}/cli
                                   -P ${CMAKE_CURRENT_SOURCE_DIR}/cli_unicode.cmake)
 
-set_tests_properties(engine_tests domain_tests role_tests midi_tests bug_tests audit_tests audit2_tests hunt_tests round3_tests bitwig_tests cli_version cli_demo_render cli_measure cli_unicode
+# O ci/gate.ps1 sem PowerShell: .bat com nome por corrida, nenhuma variavel com o nome de um parametro, JUCE_BUILDNUMBER.
+add_test(NAME gate_static COMMAND ${CMAKE_COMMAND} -DGATE=${CMAKE_SOURCE_DIR}/ci/gate.ps1 -P ${CMAKE_CURRENT_SOURCE_DIR}/gate_static.cmake)
+
+set_tests_properties(engine_tests domain_tests role_tests midi_tests bug_tests audit_tests audit2_tests hunt_tests round3_tests bitwig_tests cli_version cli_demo_render cli_measure cli_unicode gate_static
                      PROPERTIES LABELS merge TIMEOUT 300)
 # Labels por area (2026-11-16, plano de testes T03), alem do nivel. ci/testes.txt e a lista que o gate confere.
 #   ai      o que a AI chama (tools, catalogo, propostas)

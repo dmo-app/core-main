@@ -36,6 +36,7 @@ Cada teste tem um nível (`merge` ou `desktop`) e, quando se aplica, uma área (
 | `hunt_tests` | merge | caça profunda (P01–P08, IPC, traduções) |
 | `round3_tests` | merge, ai | ronda 3 (R3-A–R3-G): tools e cartões |
 | `cli_version`, `cli_demo_render`, `cli_measure`, `cli_unicode` | merge | a linha de comandos do `core-engine` |
+| `gate_static` | merge | o `ci/gate.ps1` lido sem PowerShell: `.bat` com nome por corrida, nenhuma variável com o nome de um parâmetro, `JUCE_BUILDNUMBER` |
 | `desktop_self_test` | desktop, ui | `Core.exe --self-test` no null device (abre a janela ~20 s); só onde a app é compilada |
 
 `plugins` fica vazio até ao T19 (Vital e sfizz reais, à mão, fora do gate). As labels do ctest são expressões

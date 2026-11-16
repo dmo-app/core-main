@@ -16,4 +16,5 @@ cli_version         merge
 cli_demo_render     merge
 cli_measure         merge
 cli_unicode         merge
+gate_static         merge
 desktop_self_test   desktop,ui  app

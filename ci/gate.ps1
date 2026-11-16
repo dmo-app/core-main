@@ -85,7 +85,9 @@ $rcFile = Join-Path $Build "gate-ctest-rc.txt"
 $cmakeFile = Join-Path $Build "gate-cmake-path.txt"
 Remove-Item -Force -ErrorAction SilentlyContinue $junit, $rcFile, $cmakeFile
 # Um .bat temporario numa pasta sem espacos: o cmd /c com caminhos com espacos ja partiu launchers antes.
-$bat = Join-Path $env:TEMP "core-gate.bat"
+# Um nome por corrida: dois gates em paralelo no mesmo PC nao reescrevem o .bat um do outro (16/11: o gate da
+# testes-gate reescreveu o core-gate.bat a meio do gate da qol, que ficou vermelho). Apagado no fim.
+$bat = Join-Path $env:TEMP ("core-gate-" + [guid]::NewGuid().ToString("N") + ".bat")
 @"
 @echo off
 call "$vcvars" > "$Build\vcvars.log" 2>&1 || exit /b 1
@@ -103,6 +105,7 @@ $t0 = Get-Date
 $ErrorActionPreference = "Continue"
 cmd /c "`"$bat`" 2>&1" | Tee-Object -FilePath $log
 $buildRc = $LASTEXITCODE
+Remove-Item -Force -ErrorAction SilentlyContinue $bat
 $secs = [int]((Get-Date) - $t0).TotalSeconds
 $ctestRc = if (Test-Path $rcFile) { (Get-Content $rcFile -First 1).Trim() } else { "nao correu (configure ou build falhou)" }
 $cmake = if (Test-Path $cmakeFile) { (Get-Content $cmakeFile -First 1).Trim() } else { "cmake" }
