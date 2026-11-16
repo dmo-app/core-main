@@ -655,7 +655,7 @@ int PatternEditor::playheadX() const {
 // The start line to the ruler's tick under x (to the grid), in the pass of the pattern the song is in now.
 void PatternEditor::movePlayheadTo(int x) {
   if (!currentTrack() || pattern()->lengthTicks <= 0) return;
-  host_.movePlayhead(doc::songTickInPattern((int64_t)host_.playheadTick(), pattern()->lengthTicks, tickAtX(x, true)));
+  host_.movePlayhead(doc::songTickInPattern((int64_t)std::llround(host_.playheadTick()), pattern()->lengthTicks, tickAtX(x, true)));
 }
 
 // Called every frame: the strips under the old and the new line are redrawn, not the whole piano roll.

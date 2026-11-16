@@ -1310,7 +1310,7 @@ private:
   void splitHere() {
     const doc::AudioClip* c = clip();
     if (!c) return;
-    const int64_t at = hasSelection() ? tickOf(selFrom_) : (int64_t)owner_.snap_.positionTick;
+    const int64_t at = hasSelection() ? tickOf(selFrom_) : (int64_t)std::llround(owner_.snap_.positionTick);
     const std::string t = trackId_, id = clipId_;
     owner_.edit([&](doc::Document& d) { doc::splitAudioClip(d, t, id, at); }, u8("Split audio clip"));
     selFrom_ = selTo_ = 0;
@@ -1953,7 +1953,7 @@ MainComponent::MainComponent(EngineSession::Options options, doc::Document docum
   };  // Play while stopped, Pause while playing
   stop_.onClick = [this] { if (patternPlay_) stopPatternSlot(); else session_->stop(); };
   loop_.onClick = [this] {
-    const int64_t at = (int64_t)shownPosition() / kBar * kBar;
+    const int64_t at = positionTick() / kBar * kBar;
     edit([at](doc::Document& d) {
       if (d.loop.endTick <= d.loop.startTick) d.loop = {true, at, at + 4 * kBar, d.loop.extra};  // none yet: 4 bars from here
       else d.loop.enabled = !d.loop.enabled;
@@ -2153,7 +2153,7 @@ MainComponent::MainComponent(EngineSession::Options options, doc::Document docum
   // The Sound card's «Open», or a right-click on one of its bars: the sound and its modulation on one page.
   editor_.onSavePattern = [this](int64_t start, int64_t end) { savePatternFromEditor(start, end); };
   editor_.onBuildupTrack = [this](int bars, bool roll, bool gap) { buildupTrack(bars, roll, gap); };
-  editor_.bpm = [this] { return doc::bpmAt(history_.current(), (int64_t)shownPosition()); };
+  editor_.bpm = [this] { return doc::bpmAt(history_.current(), positionTick()); };
   editor_.patternLibrary = [this] { return loadPatterns(); };
   editor_.pcoreCatalog = [this]() -> const doc::PCoreCatalog* {
     // pcore/styles.json beside Core.exe, read once (a broken file is logged and P-Core says it is missing).
@@ -2363,7 +2363,7 @@ doc::Loop MainComponent::engineLoop() const { return patternPlay_ ? engineDocume
 
 void MainComponent::playPatternSlot(const std::string& slot, std::optional<doc::Document> preview, int64_t openTick) {
   const bool already = patternPlay_.has_value();
-  if (!already) patternSongTick_ = (int64_t)shownPosition();
+  if (!already) patternSongTick_ = positionTick();
   patternPlay_ = PatternPlay{slot, std::move(preview), openTick};
   session_->setDocument(engineDocument());
   session_->setLoop(engineLoop());
@@ -3132,7 +3132,7 @@ bool MainComponent::timeSelectionKey(const juce::KeyPress& key) {
     std::vector<std::string> targets;
     if (!first.empty()) targets = doc::tracksFrom(d, first, rangeCopy_.parts.size());
     else for (const auto& p : rangeCopy_.parts) targets.push_back(p.trackId);
-    const int64_t at = (int64_t)shownPosition() / kBeat * kBeat;
+    const int64_t at = positionTick() / kBeat * kBeat;
     doc::RangePasteResult result;
     const auto copy = rangeCopy_;
     edit([&](doc::Document& doc) { result = doc::pasteRange(doc, copy, at, targets); }, u8("Paste time"));
@@ -3360,7 +3360,7 @@ bool MainComponent::importAudioFile(const juce::File& wav, juce::String* problem
   if (dir.empty()) { if (problem) *problem = u8("the song has not been saved yet"); return false; }
   const doc::Track* selected = history_.current().findTrack(onTrack.empty() ? selectedTrack_ : onTrack);
   std::string trackId = selected && selected->instrument.kind == "audio" ? selected->id : std::string();
-  const int64_t at = where >= 0 ? where : (int64_t)snap_.positionTick / kBar * kBar;
+  const int64_t at = where >= 0 ? where : (int64_t)std::llround(snap_.positionTick) / kBar * kBar;
   std::string clipId, error;
   doc::Document next = history_.current();
   try {
@@ -5036,7 +5036,7 @@ void MainComponent::importMidi() {
       return;
     }
     doc::MidiImportOptions o;
-    o.atTick = (int64_t)snap_.positionTick / kBar * kBar;
+    o.atTick = (int64_t)std::llround(snap_.positionTick) / kBar * kBar;
     o.useTempo = history_.current().tracks.empty();  // an empty song takes the file's tempo
     doc::MidiImportResult result;
     edit([&](doc::Document& d) { result = doc::importMidi(d, midi, o); }, u8("Import MIDI"));
@@ -5215,7 +5215,7 @@ void MainComponent::showProjectMenu() {
 void MainComponent::previewNotes(const std::string& trackId, const std::vector<doc::Note>& notes) {
   if (notes.empty() || trackId.empty()) return;
   // The tempo playing where the song is now (the tempo map's, not the starting BPM); the engine's range is 40-600.
-  const double msPerTick = 60000.0 / (std::clamp(doc::bpmAt(history_.current(), (int64_t)shownPosition()), 40.0, 600.0) * doc::kPpq);
+  const double msPerTick = 60000.0 / (std::clamp(doc::bpmAt(history_.current(), positionTick()), 40.0, 600.0) * doc::kPpq);
   const int64_t first = notes.front().tick;
   juce::Component::SafePointer<MainComponent> safe(this);
   for (size_t i = 0; i < notes.size() && i < 64; ++i) {
@@ -5255,7 +5255,7 @@ void MainComponent::previewPattern(const std::string& trackId, const std::vector
   if (notes.empty() || trackId.empty() || session_ == nullptr) return;
   const uint64_t gen = patternPreviewGen_;
   patternPreviewTrack_ = trackId;
-  const double msPerTick = 60000.0 / (std::clamp(doc::bpmAt(history_.current(), (int64_t)shownPosition()), 40.0, 600.0) * doc::kPpq);
+  const double msPerTick = 60000.0 / (std::clamp(doc::bpmAt(history_.current(), positionTick()), 40.0, 600.0) * doc::kPpq);
   juce::Component::SafePointer<MainComponent> safe(this);
   for (size_t i = 0; i < notes.size() && i < 2000; ++i) {
     const auto& n = notes[i];
@@ -5327,7 +5327,7 @@ void MainComponent::savePatternFromEditor(int64_t start, int64_t end) {
 void MainComponent::buildupTrack(int bars, bool roll, bool gap) {
   const doc::Document& d0 = history_.current();
   const int64_t bar = 4 * doc::kPpq, length = (int64_t)std::clamp(bars, 1, 16) * bar;
-  const int64_t now = (int64_t)shownPosition();
+  const int64_t now = positionTick();
   int64_t drop = -1;
   for (const auto& sec : d0.sections) if (sec.startTick > now && sec.startTick >= length) { drop = sec.startTick; break; }
   if (drop < 0) drop = std::max<int64_t>(length, ((now + length) / (8 * bar) + 1) * 8 * bar);
@@ -6217,7 +6217,7 @@ const MainComponent::LiveWave* MainComponent::liveWave(const std::string& trackI
 void MainComponent::captureLiveWaves() {
   if (!snap_.playing) { for (auto& [k, w] : liveWaves_) w.lastBin = -1; return; }
   const doc::Document& d = history_.current();
-  const int64_t pos = (int64_t)snap_.positionTick;
+  const int64_t pos = (int64_t)std::llround(snap_.positionTick);
   for (const auto& t : d.tracks) {
     const auto peak = snap_.trackPeaks.find(t.id);
     for (const auto& c : t.clips) {
@@ -6425,7 +6425,7 @@ void MainComponent::playStop() {
   if (patternPlay_) { stopPatternSlot(); snap_.playing = false; return; }  // a pattern playing alone stops first
   if (!snap_.playing) {
     // The loop on and the start line outside it: Play starts at the loop's start (the line goes there too).
-    const int64_t at = (int64_t)shownPosition();
+    const int64_t at = positionTick();
     if (const int64_t from = doc::playStartTick(history_.current().loop, at); from != at) moveShownPosition(from);
   }
   snap_.playing ? session_->stop() : session_->play();
@@ -6449,7 +6449,7 @@ bool MainComponent::keyPressed(const juce::KeyPress& key) {
     const int64_t step = m.step;
     const bool back = m.back;
     if (is(m.id)) {
-      const int64_t now = (int64_t)shownPosition();
+      const int64_t now = positionTick();
       const int64_t to = back ? std::max<int64_t>(0, (now - 1) / step * step) : std::min<int64_t>(history_.current().lengthTicks, now / step * step + step);
       moveShownPosition(to);
       if ((double)to < viewStart() || (double)to > viewStart() + viewLength()) setView((double)to - viewLength() * 0.25, viewLength());
@@ -6491,7 +6491,7 @@ bool MainComponent::keyPressed(const juce::KeyPress& key) {
   if (is("transport.sectionBack") || is("transport.sectionForward")) {
     const doc::Document& d = history_.current();
     const bool back = is("transport.sectionBack");
-    const int64_t now = (int64_t)shownPosition();
+    const int64_t now = positionTick();
     const int64_t to = back ? doc::previousSectionStart(d, now, snap_.playing ? kBeat : 0) : doc::nextSectionStart(d, now);
     if (to < 0) {
       notice_ = d.sections.empty() ? u8("No sections yet: right-click the ruler to add one.")
@@ -6506,7 +6506,7 @@ bool MainComponent::keyPressed(const juce::KeyPress& key) {
     return true;
   }
   if (is("transport.loopSection")) {
-    const doc::Section* s = doc::sectionAt(history_.current(), (int64_t)shownPosition());
+    const doc::Section* s = doc::sectionAt(history_.current(), positionTick());
     if (!s) { notice_ = u8("The playhead is not in a section: right-click the ruler to add one."); repaint(); return true; }
     const std::string id = s->id;
     const juce::String name = u8(s->name);
@@ -6558,7 +6558,7 @@ bool MainComponent::keyPressed(const juce::KeyPress& key) {
   }
   if (is("edit.copy")) { copyClips(); return true; }
   if (is("edit.cut")) { cutClips(); return true; }
-  if (is("edit.paste")) { pasteClips((int64_t)shownPosition() / kBeat * kBeat); return true; }
+  if (is("edit.paste")) { pasteClips(positionTick() / kBeat * kBeat); return true; }
   if (is("edit.duplicate") && !selectedClipKeys().empty()) { duplicateClips(); return true; }
   if (del && boxClips_.size() > 1) { deleteBoxClips(); return true; }
   if (del && !selectedClip_.empty()) {
@@ -6880,7 +6880,7 @@ void MainComponent::timerCallback() {
     auto it = meters_.find(row->id());
     row->setLevels(it == meters_.end() ? 0 : it->second.first, it == meters_.end() ? 0 : it->second.second);
   }
-  const int64_t tick = (int64_t)shownPosition();
+  const int64_t tick = positionTick();
   // Bar, beat and sixteenth, as a counter: 009.01.01.
   position_.setText(juce::String(tick / kBar + 1).paddedLeft('0', 3) + "." + juce::String((tick / kBeat) % 4 + 1).paddedLeft('0', 2) + "." +
                         juce::String((tick % kBeat) / (kBeat / 4) + 1).paddedLeft('0', 2),
@@ -7386,7 +7386,7 @@ void MainComponent::selfTestStep() {
       {  // QoL from other DAWs (quick_tools.hpp), through the real keys: next section, loop it, nudge a clip and back.
         moveShownPosition(0);
         keyPressed(juce::KeyPress(juce::KeyPress::pageDownKey, juce::ModifierKeys::shiftModifier, 0));
-        if ((int64_t)shownPosition() != 8 * kBar) return finish(false, "next section key");
+        if (positionTick() != 8 * kBar) return finish(false, "next section key");
         keyPressed(juce::KeyPress('l', juce::ModifierKeys::ctrlModifier | juce::ModifierKeys::shiftModifier, 0));
         const doc::Loop& l = history_.current().loop;
         if (!l.enabled || l.startTick != 8 * kBar || l.endTick != 16 * kBar) return finish(false, "loop section key");

@@ -2,6 +2,7 @@
 // and L/R meters, undo/redo, open/save, engine status.
 // Only drawing and input here: the document lives in a History, the engine is reached through EngineSession.
 #pragma once
+#include <cmath>
 #include <optional>
 #include <functional>
 #include <map>
@@ -573,6 +574,9 @@ private:
   double shownTick_ = -1;
   juce::uint32 shownUntil_ = 0;
   double shownPosition() const { return shownTick_ >= 0 ? shownTick_ : playTick_; }
+  // The playhead as a whole tick, rounded: after a seek the engine reports it from a whole sample (7679.97 for
+  // 7680 at 190 BPM), and cutting that down put the playhead in the bar, beat or section before.
+  int64_t positionTick() const { return (int64_t)std::llround(shownPosition()); }
   // The engine's position goes on between its reports (about 21 a second): the playhead moves every frame.
   double playTick_ = 0;
   void updatePlayTick();
