@@ -59,6 +59,23 @@ TEST("auditoria 2, bug 1: uma linha do motor com tipos errados nunca lanca no cl
   CHECK_EQ(r.error, std::string("[\"a\"]"));
 }
 
+TEST("auditoria 2, ponto 4: uma resposta sem id valido termina a sessao logo, com o motivo") {
+  // Antes: so ficava no registo, e o comando a espera so falhava no timeout (10 s), sem dizer porque.
+  using core::client::endsSession;
+  using core::client::endReason;
+  for (const char* line : {R"({"id":"1","ok":false,"error":{"msg":"x"}})", R"({"ok":false,"error":"Bad JSON: x"})",
+                           R"({"id":null,"ok":true})", R"({"id":2.5,"ok":true,"result":1})"}) {
+    const EngineLine r = readEngineLine(line);
+    CHECK(endsSession(r));
+    CHECK(endReason(r).find("protocol") != std::string::npos);
+  }
+  CHECK(endReason(readEngineLine(R"({"ok":false,"error":"Bad JSON: x"})")).find("Bad JSON: x") != std::string::npos);
+  // O que o protocolo permite continua a nao terminar nada.
+  for (const char* line : {R"({"id":1,"ok":false,"error":42})", R"({"id":1,"ok":true})", R"({"event":"state"})",
+                           R"({"event":"ready"})", "isto nao e JSON", "[1]"})
+    CHECK(!endsSession(readEngineLine(line)));
+}
+
 TEST("auditoria 2, bug 2: um project.load sem resposta volta a ser enviado sozinho, com uma revisao nova") {
   SyncRetry retry;
   int delay = -1;

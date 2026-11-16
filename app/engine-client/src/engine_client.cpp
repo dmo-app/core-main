@@ -269,7 +269,7 @@ void EngineClient::readLoop() {
         try {
           onLine(line);
         } catch (const std::exception& e) {
-          protocolError = std::string("The engine's answer could not be read: ") + e.what();
+          protocolError = e.what();
         } catch (...) {
           protocolError = "The engine's answer could not be read.";
         }
@@ -297,7 +297,9 @@ void EngineClient::readLoop() {
 }
 
 void EngineClient::onLine(const std::string& line) {
-  EngineLine read = readEngineLine(line);  // never throws on what the engine wrote (audit 2, bug 1)
+  // Never throws on what the engine wrote (audit 2, bug 1). A broken protocol throws on purpose (NoId below): readLoop
+  // turns that into a clean end of the session, with the reason.
+  EngineLine read = readEngineLine(line);
   switch (read.kind) {
     case EngineLine::Kind::NotJson: {
       std::lock_guard<std::mutex> g(mutex_);
@@ -326,9 +328,13 @@ void EngineClient::onLine(const std::string& line) {
       }
       return;
     case EngineLine::Kind::NoId: {
-      std::lock_guard<std::mutex> g(mutex_);
-      stderrTail_ += "[reply without id] " + read.error + "\n";
-      return;
+      // No command can be told its answer: end the session now instead of letting one wait for its timeout
+      // (audit 2, point 4). readLoop ends the process and disconnect() fails every pending command with this.
+      {
+        std::lock_guard<std::mutex> g(mutex_);
+        stderrTail_ += "[reply without id] " + read.error + "\n";
+      }
+      throw std::runtime_error(endReason(read));
     }
     case EngineLine::Kind::Reply:
       break;

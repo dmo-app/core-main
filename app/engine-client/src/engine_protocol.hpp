@@ -15,7 +15,8 @@ struct EngineLine {
     Ready,    // the hello
     Event,    // {event: ...}
     Reply,    // an answer to one of our commands (id)
-    NoId      // looks like an answer, but has no whole-number id (e.g. a line the engine could not parse)
+    NoId      // looks like an answer, but has no whole-number id: a broken protocol (our client always sends whole ids,
+              // so no command can be told its answer): the session ends at once, see endsSession()
   };
   Kind kind = Kind::NotJson;
   nlohmann::json message;  // the object as read (Ready, Event)
@@ -56,6 +57,14 @@ inline EngineLine readEngineLine(const std::string& line) {
   if (const auto result = message.find("result"); result != message.end()) out.result = *result;
   if (!out.ok) out.error = error != message.end() && !error->is_null() ? engineLineText(*error, 4000) : "Engine error.";
   return out;
+}
+
+// Audit 2 (deep version), point 4: a reply without a whole-number id used to be only logged, and the command waiting
+// for it hung until its timeout (10 s), hiding the cause. Such a line means the engine broke the protocol: the
+// session ends at once (every pending command fails with this reason) and the engine restarts.
+inline bool endsSession(const EngineLine& line) { return line.kind == EngineLine::Kind::NoId; }
+inline std::string endReason(const EngineLine& line) {
+  return "The engine broke the protocol (a reply without a valid id): " + line.error;
 }
 
 }  // namespace core::client

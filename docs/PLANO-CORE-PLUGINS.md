@@ -104,6 +104,7 @@ Verificado e corrigido, com testes em `tests/audit2_tests.cpp`:
 - Bug 1 (confirmado): uma resposta do motor com `error` ou `ok` de outro tipo lançava dentro da thread de leitura do cliente, e isso fecha a app. Agora cada linha é lida sem lançar (`engine_protocol.hpp`), e qualquer falha na leitura termina a sessão do motor de forma limpa (os comandos pendentes falham com o motivo e o motor reinicia).
 - Bug 2 (confirmado): depois de um `project.load` sem resposta a tempo, nada voltava a ser enviado até à edição seguinte. Agora volta a tentar sozinho (0,5 s, 1 s, 2 s, 4 s, 8 s) com uma revisão nova, porque o motor pode ter aceitado a antiga tarde. Recusas e mensagens grandes demais continuam à espera da próxima edição.
 - Bug 3 (confirmado): o espaço em disco do export contava todos os ficheiros como estéreo e só olhava para a pasta do primeiro. Agora cada ficheiro conta com os seus canais e cada volume é verificado com a soma do que lá vai.
+- Ponto 4 (versão aprofundada, confirmado): uma resposta do motor sem `id` válido ficava só no registo e o comando à espera só falhava no timeout (10 s). Agora a sessão do motor termina logo, com o motivo, e o motor reinicia (o cliente manda sempre ids inteiros, por isso uma resposta assim é um protocolo partido).
 - Observação do autosave: não era bug (quem chama apanha o erro e o autosave estragado nem aparece na lista), mas a mensagem passou a dizer "The autosave is damaged" em vez do erro do JSON.
 
 ### Export para o Bitwig (2026-11-16)
