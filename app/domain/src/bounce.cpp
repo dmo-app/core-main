@@ -62,7 +62,16 @@ Printed placeBounce(Document& doc, const std::string& sourceTrackId, const std::
   endTick = std::min(endTick, doc.lengthTicks);
   Document next = doc;  // all or nothing
   const Track source = *next.findTrack(sourceTrackId);
-  Printed out = place(next, file, projectDir, source.name + " (bounce)", sourceTrackId, startTick, endTick);
+  // The name fits in 80 bytes with " (bounce)" kept: a long name loses its end, not the suffix, and never half a
+  // character (deep hunt P01: a track name of 72+ bytes must not make the song unsavable).
+  const std::string suffix = " (bounce)";
+  std::string base = source.name;
+  if (base.size() > 80 - suffix.size()) {
+    size_t n = 80 - suffix.size();
+    while (n > 0 && ((unsigned char)base[n] & 0xC0) == 0x80) --n;
+    base.resize(n);
+  }
+  Printed out = place(next, file, projectDir, base + suffix, sourceTrackId, startTick, endTick);
   Track& printed = trackById(next, out.trackId);
   printed.color = source.color;
   // The render already has the fader, the pan, the sends and the buses: the new track adds nothing.
