@@ -589,6 +589,8 @@ private:
   };
   std::unique_ptr<SelfTest> test_;
   void selfTestSynth();  // the self-test's synth on every note track without a plugin
+  // The compact layout and the arrangement's time selection, by their keys (Diogo 2026-11-16: "isto devia ser testes").
+  juce::String selfTestCompactUi();  // empty: ok; else what failed
   std::vector<control::InboxItem> inbox_;           // the AI's proposals waiting (bridge inbox)
   std::string samplesAddedSeen_ = "?";               // AICORE's samples-added.json as last seen ("?" = not looked yet)
   std::string inboxSeen_, stateWritten_;            // the inbox as last read, the state as last written
