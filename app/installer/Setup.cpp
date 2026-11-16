@@ -12,14 +12,12 @@
 // The library is copied from --samples <folder>, else a Samples folder beside this program, else D:\Samples
 // (Diogo's PC). The source is only read; its _core-plan folder (scripts and notes) is not copied.
 // Songs, settings, plugins lists, autosaves and logs are never touched: they live in the user's folders.
-// The AI's synth, Vital, cannot ship inside the package: after installing, Setup looks for it where Vital's own
-// installer puts it (ai/synth.hpp) and, when it is not there, says so and offers its download page. Core installs
-// either way.
+// Nothing of the AI is in this package (Fase 4, 2026-11-16: the AI is a plugin, its own package "Core AI" with
+// core-ai.exe, its knowledge base, its memory and its plugins); Core installs and runs without it.
 #include <cstdio>
 #include <algorithm>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include "CoreSetupData.h"
-#include "synth.hpp"
 
 namespace {
 
@@ -349,17 +347,8 @@ private:
   }
 
   void report(const juce::String& problem, const juce::String& done, bool installed = false) {
+    (void)installed;
     refresh();
-    if (problem.isEmpty() && installed && !core::ai::findSynth()) {
-      const auto& s = core::ai::synth();
-      juce::AlertWindow::showAsync(juce::MessageBoxOptions().withIconType(juce::MessageBoxIconType::InfoIcon).withTitle("Core Setup")
-                                       .withMessage(done + "\n\nCore's AI plays its instruments with the " + juce::String(s.name) +
-                                                    " synth (free), which is not on this PC. Install it from " + s.download +
-                                                    ", then scan the plugins in Core.")
-                                       .withButton("Get " + juce::String(s.name), 1).withButton("OK", 0),
-                                   [](int r) { if (r == 1) juce::URL(core::ai::synth().download).launchInDefaultBrowser(); });
-      return;
-    }
     juce::AlertWindow::showAsync(juce::MessageBoxOptions().withIconType(problem.isEmpty() ? juce::MessageBoxIconType::InfoIcon : juce::MessageBoxIconType::WarningIcon)
                                      .withTitle("Core Setup").withMessage(problem.isEmpty() ? done : problem).withButton("OK", 0), nullptr);
   }
@@ -404,8 +393,6 @@ public:
       if (problem.isEmpty() && args.contains("--install") && !args.contains("--no-samples"))
         problem = copySamples(samplesSource(option(args, "--samples")), folder, nullptr);
       if (problem.isNotEmpty()) std::fputs((problem + "\n").toRawUTF8(), stderr);
-      else if (args.contains("--install") && !core::ai::findSynth())
-        std::printf("Note: the AI's synth (%s) is not installed; get it at %s\n", core::ai::synth().name, core::ai::synth().download);
       setApplicationReturnValue(problem.isEmpty() ? 0 : 1);
       quit();
       return;

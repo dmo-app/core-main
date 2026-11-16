@@ -40,15 +40,26 @@ add_subdirectory(engine)
 add_subdirectory(app/domain)
 add_subdirectory(app/engine-client)
 add_subdirectory(app/control)  # Core's functions and the bridge to AICORE (no JUCE)
-add_subdirectory(third_party/sqlite)  # SQLite with FTS5, for the AI's knowledge base
-add_subdirectory(app/ai)       # the AI inside Core: the chat, its providers and the knowledge base (no JUCE)
+add_subdirectory(app/ai-link)  # Core's side of the AI: catalog, scope, check of proposals, pipes to the AI process (no JUCE)
+# The AI is a plugin (Diogo, 2026-11-16): its own process and package, never inside Core.exe. OFF builds Core with no
+# AI at all (the proof that Core does not need it).
+option(CORE_BUILD_AI "Build the AI process (core-ai) and its package" ON)
+if(CORE_BUILD_AI)
+  add_subdirectory(third_party/sqlite)  # SQLite with FTS5, for the AI's knowledge base and memory
+  add_subdirectory(app/ai)            # the AI: the chat, its providers, the knowledge base, the memory (no JUCE)
+endif()
 add_subdirectory(app/sampling) # making samples from audio (no JUCE)
 add_subdirectory(app/previews) # what each pattern sounds like, for the clips' waveforms (no JUCE)
 if(CORE_BUILD_APP AND WIN32)
-  add_subdirectory(app/aifx)  # Core AI Gate: the own "AI FX" plugins, driven by the AI (VST3)
+  if(CORE_BUILD_AI)
+    add_subdirectory(app/aifx)  # Core AI Gate: the own "AI FX" plugins, driven by the AI (VST3), in the AI's package
+  endif()
   add_subdirectory(app/selftest-plugins)  # a test synth and gain VST3 for Core.exe --self-test (never shipped)
   add_subdirectory(app/desktop)
   add_subdirectory(app/installer)  # Core Setup.exe (M6)
+endif()
+if(CORE_BUILD_AI)
+  add_subdirectory(app/ai-process)  # core-ai: the AI's process, and core-ai-package (after aifx: it packs the gate)
 endif()
 
 # Tests (ctest -L merge before every merge; see tests/CMakeLists.txt and ci/).

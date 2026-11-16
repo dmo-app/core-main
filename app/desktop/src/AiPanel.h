@@ -1,25 +1,23 @@
-// Core's own AI (Diogo, 2026-11-16): a chat inside the main window, docked at the right side (or at the bottom), opened
-// and closed with the "AI" button at the bottom right of the window, as the chat was before (core-old ChatPanel). Its
-// edge is dragged to make it wider or taller. It asks for beats, the song's structure and changes to parts; the
-// answer is a proposal of Core's calls, shown here checked against the song, and Apply makes it as ONE undo step
-// ("AI: ..."). Nothing else changes the song from here. Core's AI is its own: it does not go through AICORE.
+// The AI panel (Diogo, 2026-11-16): a chat docked at the right side (or at the bottom), opened and closed with the
+// "AI" button. Since Fase 4 it is a thin client: the AI is a plugin, its own process (core-ai, the "Core AI" package),
+// and this panel only starts it, sends it what Diogo writes with the song, and shows what it answers. Everything of
+// the AI lives in that process: the model and its keys, the knowledge base, the memory of recipes (SQLite, Gostei /
+// Não gostei, the JSONL export) and the chats on disk. Core keeps the catalog it exposes (music creation only), the
+// check of each proposal and the Undo: Apply makes a proposal Core admitted whole as ONE undo step ("AI: ...").
 //
-// The header: New (a new chat), Chats (the chats kept on disk: open one again, or the folder), Copy (the last answer
-// or the whole conversation; text can also be selected and copied), Delete (this chat, from the screen and the disk),
-// Settings (model, effort, what the AI may do, the memory, where the panel goes) and X (closes it; the chat stays).
-// Each chat is kept in %APPDATA%\Core\AI\chats after every answer, and can be taken up again with any model.
-// The conversation, the tools and the cost live in core_ai (app/ai, testable); this panel only sends the requests
-// (HTTPS, on a background thread) and shows the answers, the calls Core accepted or left out, and what it cost.
-// The model: Claude (key ANTHROPIC_API_KEY or anthropic-key.txt in %APPDATA%\Core\AI), or any OpenAI-compatible API or
-// local server listed in ai-settings.json there (ai/models.hpp).
+// The wire is two pipes (core_ai_link): no network on Core's side. Without the process (not installed, ended,
+// misbehaving) the panel says "offline" and Core works at 100%; Settings > Restart the AI starts it again.
+//
+// The header: New, Chats, Copy, Delete, Settings (model, effort, what the AI may do, the memory, where the panel goes,
+// the AI's state) and X (closes it; the chat stays).
 #pragma once
 #include <atomic>
 #include <functional>
 #include <memory>
 #include <juce_gui_basics/juce_gui_basics.h>
-#include "ai_chat.hpp"
-#include "models.hpp"
-#include "stream.hpp"
+#include "ai_link.hpp"
+#include "calls.hpp"
+#include "catalog.hpp"
 
 namespace core::app {
 
@@ -28,18 +26,16 @@ public:
   struct Host {
     std::function<const doc::Document&()> song;                 // the song as it is now
     std::function<std::vector<control::CoreFunction>()> functions;
-    const doc::PCoreCatalog* pcore = nullptr;
-    const ai::Knowledge* knowledge = nullptr;                    // the style knowledge base (ai/ beside Core.exe), or none
-    juce::File keyFolder;                                        // %APPDATA%\Core\AI: anthropic-key.txt, ai-settings.json
-    // Applies a proposal as one undo step; returns the lines applied, or throws (nothing changed then).
-    std::function<std::vector<std::string>(const nlohmann::json& proposal)> apply;
+    juce::File keyFolder;    // %APPDATA%\Core\AI: the AI's own folder (it keeps its keys, memory, chats there)
+    juce::File pcoreStyles;  // pcore/styles.json beside Core.exe (the AI reads P-Core's styles from it)
+    // Applies a proposal Core admits (with the zone Core sent with the request) as one undo step; returns the lines
+    // applied, or throws (nothing changed then).
+    std::function<std::vector<std::string>(const nlohmann::json& proposal, const control::Zone& zone)> apply;
     // The selection on the tracks (a box: tracks and bars); inactive = the whole song. The AI changes only that.
     std::function<control::Zone()> zone;
     // The plugins Core knows (its scanned list), and a scan of only some plugin files (the AI's: Settings).
     std::function<std::vector<nlohmann::json>()> instruments;
     std::function<void(const juce::Array<juce::File>&, std::function<void(int found, int failed)>)> scanPlugins;
-    // Renders two tracks with their plugins (ler_kick_bass: ai::Config::listen); not set = the tool is not offered.
-    decltype(ai::Config::listen) listen;
   };
   enum class Dock { Side, Bottom };
 
@@ -58,14 +54,13 @@ public:
   explicit AiPanel(Host host);
   ~AiPanel() override;
 
-  // The main window lays out again when the panel moves, changes size or closes.
   std::function<void()> onLayoutChange;
   std::function<void()> onClose;  // X
 
   Dock dock() const { return prefs_.dock; }
   int sideWidth() const { return prefs_.width; }
   int bottomHeight() const { return prefs_.height; }
-  void setLimits(int maxWidth, int maxHeight);  // what the main window can give
+  void setLimits(int maxWidth, int maxHeight);
   void focusInput();
 
   void resized() override;
@@ -75,64 +70,65 @@ public:
   class Settings;
 
 private:
+  // The AI process
+  void startAi();
+  juce::File aiExe() const;
+  void received(const nlohmann::json& m);  // on the message thread
+  void offline(const std::string& why);    // on the message thread
+  bool online() const { return link_ && link_->online(); }
+  // The chat
   void send();
-  void post(nlohmann::json body);                  // on a background thread; the answer comes back here
-  void answered(const nlohmann::json& response, const juce::String& failure);
-  void liveText(const juce::String& piece);         // a piece of the answer as it streams (shown in the status line)
-  void finished();
+  void liveText(const juce::String& piece);
+  void finished(const nlohmann::json& answer);
   void say(const juce::String& who, const juce::String& text);
-  void showCost();
   void showProposal();
   void applyProposal();
   void dropProposal();
-  void remember(bool liked);         // Gostei / Não gostei on the recipe just applied
-  void memoryAction(int choice);     // 1 export, 2 import, 3 export for training (JSONL)
+  void remember(bool liked);
+  void memoryAction(int choice);  // 1 export, 2 import, 3 export for training (JSONL)
   void showFeedback(bool visible);
-  // Chats
   void newChat();
-  void saveChat();
-  void openChat(const juce::File& file);
   void deleteChat();
   void showChats();
+  void showChatList(const nlohmann::json& chats, const juce::String& folder);
+  void openedChat(const nlohmann::json& data);
   void showCopy();
   void showSettings();
-  juce::File chatsFolder() const;
   // Settings
   void loadPrefs();
   void savePrefs();
   void setDock(Dock d);
-  void resizeBy(int start, int delta);  // from the grip
+  void resizeBy(int start, int delta);
   int startSize() const { return prefs_.dock == Dock::Side ? prefs_.width : prefs_.height; }
-
-  juce::String apiKey() const;
-  bool needsKey() const;
-  const ai::ModelEntry& entry() const;
   int modelIndex() const;
-  ai::Config configNow() const;
+  ai::Permissions permissionsNow() const;  // ai-settings.json's, with the panel's mode over them
 
   Host host_;
   Prefs prefs_;
-  std::unique_ptr<ai::Chat> chat_;
-  std::vector<ai::ModelEntry> models_;
+  std::unique_ptr<ai::Link> link_;
+  juce::String aiState_;              // "online", or offline and why (Settings shows it)
+  juce::StringArray models_;          // what the AI process offers (its hello)
+  int recipes_ = 0;                   // in the AI's memory (its hello, and after each memory operation)
+  ai::Permissions permissions_;       // ai-settings.json's (Core's own check of what the AI may do)
+  std::vector<control::CoreFunction> functions_;  // the list the pending proposal was checked against (it points into it)
   juce::TextEditor transcript_, input_;
   juce::TextButton send_{"Send"}, apply_{"Apply"}, discard_{"Discard"};
   juce::TextButton new_{"New"}, chats_{"Chats"}, copy_{"Copy"}, delete_{"Delete"}, settings_{"Settings"}, close_{"X"};
   juce::TextButton like_{"Gostei"}, dislike_;
   juce::Label title_;
   std::unique_ptr<Grip> grip_;
-  std::unique_ptr<ai::Memory> memory_;  // %APPDATA%\Core\AI\core-ai-memory.sqlite: recipes of what Diogo applied and liked
-  std::string lastRequest_, recipeId_;   // the message the proposal answered; the recipe Apply just kept
   std::unique_ptr<juce::FileChooser> chooser_;
-  nlohmann::json pending_;  // the proposal waiting for Apply (null: none)
-  ai::Permissions permissions_;  // from ai-settings.json; the panel's mode over it
-  const ai::Memory* chatMemory_ = nullptr;  // the memory chat_ was made with (none when not shared)
+  int asked_ = 0;                     // messages sent (their ids)
+  juce::String askId_;                // the message being answered ("" = none)
+  control::Zone askZone_;             // the zone sent with it
+  nlohmann::json pending_;            // the proposal waiting for Apply (null: none)
+  juce::String pendingId_;            // the message it answered
+  control::Zone pendingZone_;
+  juce::String recipeId_;             // the recipe the AI kept for what was just applied
   juce::Label status_, cost_;
-  juce::String live_;  // what the current request has streamed so far
+  juce::String live_;
   bool busy_ = false;
-  // The chat on screen: what was said (for Copy and the file), its file, when it began.
-  std::vector<std::pair<juce::String, juce::String>> said_;
-  juce::File chatFile_;
-  juce::String chatTitle_;
+  std::vector<std::pair<juce::String, juce::String>> said_;  // what is on screen (Copy)
   int maxWidth_ = 1200, maxHeight_ = 800;
   std::shared_ptr<std::atomic<bool>> alive_ = std::make_shared<std::atomic<bool>>(true);
 };

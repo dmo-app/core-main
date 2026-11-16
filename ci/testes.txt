@@ -15,6 +15,9 @@ audit_tests         merge
 audit2_tests        merge
 hunt_tests          merge
 round3_tests        merge,ai
+ai_link_tests       merge,ai
+ai_process_tests    merge,ai
+ai_boundary_static  merge,ai
 time_range_tests    merge
 pattern_rack_tests  merge
 song_notes_tests    merge
