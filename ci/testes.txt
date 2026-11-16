@@ -3,6 +3,7 @@
 #   app = so existe quando a app JUCE e compilada (Windows); no gate Linux aparece como "sem app", nunca como verde.
 # Tirar uma linha ou uma label exige uma decisao numerada no ESTADO.md. Um teste novo entra aqui no mesmo commit.
 engine_tests        merge
+motor_tests         merge
 domain_tests        merge
 role_tests          merge,ai
 midi_tests          merge
