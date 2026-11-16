@@ -6,6 +6,7 @@
 #include "support/check.hpp"
 #include "edit.hpp"
 #include "follow.hpp"
+#include "core_plugins.hpp"
 #include "role_tools.hpp"
 #include "roles.hpp"
 
@@ -376,4 +377,20 @@ TEST("catalogo das tools: ids unicos, cada uma com o que faz e parametros com no
   Document d = newTemplateDocument();
   CHECK_THROWS(sectionSpan(d, "nao existe nenhuma"));
   CHECK_EQ(sectionSpan(d, "").end, d.lengthTicks);
+}
+
+TEST("cartoes das tools: a lista esta certa, sem S-Core, e acha-se por id e pelos nomes da AI") {
+  const auto problems = corePluginListProblems();
+  for (const auto& p : problems) std::printf("  problema: %s\n", p.c_str());
+  CHECK(problems.empty());
+  CHECK(findCorePlugin("score") == nullptr);  // S-Core nao e um cartao (Diogo 2026-11-16)
+  CHECK(findCorePlugin("Pattern Maker") && findCorePlugin("Pattern Maker")->id == "pcore");
+  CHECK(findCorePlugin("pump") && findCorePlugin("pump")->id == "pum");
+  CHECK(findCorePlugin("R-Core") && findCorePlugin("R-Core")->id == "rcore");
+  CHECK(findCorePlugin("") == nullptr);
+  // Cada tool do catalogo da AI tem o seu cartao (space = R-Core e D-Core, fx = F-Core).
+  for (const auto& t : songToolCatalog()) {
+    const std::string card = t.id == "space" ? "rcore" : t.id == "fx" ? "fcore" : t.id == "pump" ? "pum" : t.id;
+    CHECK(findCorePlugin(card) != nullptr);
+  }
 }

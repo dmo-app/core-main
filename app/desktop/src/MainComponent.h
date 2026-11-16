@@ -21,6 +21,7 @@
 #include "LibraryPanel.h"
 #include "PatternEditor.h"
 #include "PatternsWindow.h"
+#include "PluginCards.h"
 #include "Plugins.h"
 #include "Waveforms.h"
 #include "edit.hpp"
@@ -243,6 +244,19 @@ private:
   // The Patterns window (P-Core's channel rack), a window of its own beside this one (Diogo, 2026-11-08). While it
   // plays a pattern, the engine gets that pattern alone, looped (doc::rackPlayDocument); stopping gives the song back.
   void giveSilentTracksPlugins();  // Plugins menu: old (builtin) and empty tracks get their role's plugin
+  // Core's tools (doc::corePlugins: the Tools panel, the Plugins menu, a track's right-click "Tools"): the same
+  // functions the AI calls (role_tools.hpp). coreToolMenu: one tool's menu (where it works, then it writes) for the
+  // track (""= the selected one); coreToolsMenu: every tool.
+  juce::PopupMenu coreToolMenu(const std::string& toolId, const std::string& trackId);
+  juce::PopupMenu coreToolsMenu(const std::string& trackId);
+  void openCorePlugin(const doc::CorePluginInfo& info, juce::Component* near);
+  void runTool(const juce::String& label, std::function<std::string(doc::Document&, const doc::RoleMap&)> tool);
+  std::string toolTrack() const;  // the track the tools work on: the selected one, else the piano roll's
+  void togglePlugins();
+  bool pluginsShown() const;
+  bool sideShown() const { return libraryShown() || pluginsShown(); }
+  PluginCards pluginCards_;
+  bool showPlugins_ = false;
   void openPatterns();
   std::unique_ptr<PatternsWindow> patternsWindow_;
   struct PatternPlay { std::string slot; std::optional<doc::Document> preview; int64_t openTick = 0; };
