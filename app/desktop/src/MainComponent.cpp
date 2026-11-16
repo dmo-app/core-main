@@ -3524,7 +3524,7 @@ void MainComponent::scanPlugins() {
 bool MainComponent::fetchPluginStates() {
   if (!doc::hasPlugins(history_.current())) return true;
   const json states = session_->pluginStates(5000);
-  if (states.empty() && snap_.missingPlugins.empty()) return false;  // no answer from the engine
+  if (!states.is_object()) return false;  // no answer from the engine ({} is an answer: nothing to take)
   doc::Document withStates = history_.current();
   if (doc::applyPluginStates(withStates, states) > 0) {
     history_.amend(withStates);
@@ -5981,7 +5981,7 @@ void MainComponent::autosaveTick() {
       if (!self) return;
       self->autosaveAsking_ = false;
       doc::Document document = self->history_.current();
-      if (states.empty()) logLine("Autosave: the engine did not give the plugins' settings; the copy has the last ones");
+      if (!states.is_object()) logLine("Autosave: the engine did not give the plugins' settings; the copy has the last ones");
       else doc::applyPluginStates(document, states);
       self->startAutosave(std::move(document));
     });

@@ -75,7 +75,7 @@ namespace {
 // A short-lived waiter thread: the message thread goes on; the answer (or nothing) comes back to it.
 void answerLater(std::shared_ptr<std::future<json>> answer, int timeoutMs, std::function<void(json)> done) {
   std::thread([answer, timeoutMs, done = std::move(done)]() mutable {
-    json result = json::object();
+    json result;  // null: no answer (an engine that answers with nothing gives {})
     if (answer->wait_for(std::chrono::milliseconds(timeoutMs)) == std::future_status::ready) {
       try { result = answer->get(); } catch (const std::exception&) {}  // dropped (engine restarted): nothing
     }
@@ -97,11 +97,13 @@ json EngineSession::pluginStates(int timeoutMs) {
   a.reply = std::make_shared<std::promise<json>>();
   std::future<json> answer = a.reply->get_future();
   queue(a);
-  if (answer.wait_for(std::chrono::milliseconds(timeoutMs)) != std::future_status::ready) return json::object();
+  // null when the engine gave no answer; {} is an answer (no loaded plugin holds a state), and the two must not be
+  // confused: an empty answer counted as "no answer" made Save report a failure that was not one.
+  if (answer.wait_for(std::chrono::milliseconds(timeoutMs)) != std::future_status::ready) return json();
   try {
     return answer.get();
-  } catch (const std::exception&) {  // dropped (engine restarted): no states
-    return json::object();
+  } catch (const std::exception&) {  // dropped (engine restarted): no answer
+    return json();
   }
 }
 
@@ -254,7 +256,7 @@ void EngineSession::run() {
     if (first || restartRequested_) {
       first = false;
       restartRequested_ = false;
-      for (auto& a : actions_) if (a.reply) a.reply->set_value(json::object());  // nobody waits for a dropped answer
+      for (auto& a : actions_) if (a.reply) a.reply->set_value(json());  // nobody waits for a dropped answer (null: no answer)
       actions_.clear();  // never resume sound automatically after a failure or a restart
       transportPending_ = 0;
       std::unique_ptr<client::EngineClient> old = std::move(client_);
@@ -267,7 +269,7 @@ void EngineSession::run() {
     }
     const bool connected = client_ && snap_.status != EngineStatus::Stopped;
     if (!connected)
-      for (auto& a : actions_) if (a.reply) { a.reply->set_value(json::object()); a.reply.reset(); }
+      for (auto& a : actions_) if (a.reply) { a.reply->set_value(json()); a.reply.reset(); }  // null: no answer
     if (connected && !actions_.empty()) {
       const Action action = actions_.front();
       actions_.pop_front();
@@ -363,7 +365,7 @@ void EngineSession::run() {
       } catch (const EngineError& e) {
         std::lock_guard<std::mutex> g(mutex_);
         if (action.kind == Action::Export) { snap_.exportJob.state = "failed"; snap_.exportJob.error = e.what(); }
-        else if (action.reply) action.reply->set_value(json::object());
+        else if (action.reply) action.reply->set_value(json());  // null: no answer
         else snap_.message = e.what();
       }
       lock.lock();

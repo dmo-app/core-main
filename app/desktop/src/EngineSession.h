@@ -130,9 +130,9 @@ public:
   // waiting: `done` runs on the message thread (empty if no answer in timeoutMs). The Mixer asks once a second.
   void cpuAsync(int timeoutMs, std::function<void(json)> done);
   void newSong();  // another song (open, new): the document the engine accepted is not this song's any more
-  // Plugins: the state of every loaded plugin ({key: base64}); waits at most timeoutMs (empty if no answer).
+  // Plugins: the state of every loaded plugin ({key: base64}); waits at most timeoutMs (null if no answer; {} is an answer).
   json pluginStates(int timeoutMs);
-  // The same without waiting: `done` runs later on the message thread with the states (empty if no answer).
+  // The same without waiting: `done` runs later on the message thread with the states (null if no answer).
   void pluginStatesAsync(int timeoutMs, std::function<void(json)> done);
   // The parameters of a loaded plugin that can be automated ([{id, name, value, default, steps, text}]);
   // empty if it is not loaded or there is no answer in timeoutMs. UI thread.
