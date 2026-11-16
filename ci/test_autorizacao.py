@@ -186,6 +186,14 @@ def gatilho_desconhecido_vermelho(tmp, base):
 
 
 @caso
+def gatilho_default_aceite(tmp, base):
+    escrever(tmp, "app/x.txt", "a\n")
+    commit(tmp, "x\n\nAutorizado-por: D10\nGatilhos: default", DEPOIS)
+    rc, out = correr(tmp, base)
+    return rc == 0
+
+
+@caso
 def corpo_do_pr(tmp, base):
     ledger = os.path.join(tmp, "E.md")
     with open(ledger, "w", encoding="utf-8") as f:

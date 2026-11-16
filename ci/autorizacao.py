@@ -6,7 +6,8 @@ Todo o trabalho leva "Autorizado-por: D###", e o D### tem de existir no ledger (
 
 Além disso, cada commit que toca um gatilho de arquitetura (muda o que o Core é) tem de o declarar
 numa linha "Gatilhos: <lista>". Os gatilhos são os da D48: dependencia, processo, persistencia, ui,
-audio, ambito. Os cinco primeiros são detetados no diff; "ambito" não se deteta e declara-se à mão.
+audio, ambito, e "default" (D50: qualquer default que mude comportamento). Os cinco primeiros são
+detetados no diff; "ambito" e "default" não se detetam e declaram-se à mão.
 
 Uso:
   python ci/autorizacao.py --ledger <ESTADO.md> [--base origin/main] [--head HEAD] [--desde ISO]
@@ -23,7 +24,7 @@ import subprocess
 import sys
 
 REGRA_DESDE = "2026-11-16T13:18:27+00:00"
-GATILHOS = ("dependencia", "processo", "persistencia", "ui", "audio", "ambito")
+GATILHOS = ("dependencia", "processo", "persistencia", "ui", "audio", "ambito", "default")
 
 # Linhas acrescentadas que mudam o que o Core é. Pastas de testes, ci e docs não contam.
 PADROES = {
