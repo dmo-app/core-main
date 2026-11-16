@@ -20,15 +20,20 @@ constexpr int kTopH = 56, kSideW = 262, kStatusH = 28, kBottomH = 46, kVelocityH
 constexpr int64_t kBar = 4 * doc::kPpq;
 constexpr int kButtonsW = 152;  // a row's head, right side: Piano, FX, volume, meter
 
-const char* instrumentLabel(const doc::Track& t) {
+std::string instrumentLabel(const doc::Track& t) {
+  // 0.7.0: the sound comes from the track's VST3 plugin; a track without one is silent and says so.
+  if (t.instrument.kind == "plugin") return t.instrument.plugin.value("name", std::string("Plugin"));
+  if (t.instrument.kind == "none" || t.instrument.kind.empty()) return "No instrument: FX > Replace instrument";
+  // "builtin": an old Core sound kept in the song but no longer played.
   const std::string& n = t.instrument.name;
-  if (n == "kick") return "Core Kick";
-  if (n == "wave") return "W-Core Synth";
-  if (n == "sampler") return "Core Sampler";
-  if (n == "hats") return "Core Hats";
-  if (n == "snare") return "Core Snare";
-  if (n == "drums") return "Core Drums";
-  return "Core";
+  const std::string old = " (old, silent: choose a plugin)";
+  if (n == "kick") return "Core Kick" + old;
+  if (n == "wave") return "W-Core Synth" + old;
+  if (n == "sampler") return "Core Sampler" + old;
+  if (n == "hats") return "Core Hats" + old;
+  if (n == "snare") return "Core Snare" + old;
+  if (n == "drums") return "Core Drums" + old;
+  return "Core" + old;
 }
 
 void flat(juce::TextButton& b, bool on = false) {
@@ -481,7 +486,7 @@ PatternsPanel::PatternsPanel(Host host) : host_(std::move(host)) {
   filterBuiltin_.setButtonText(u8("Built-in"));
   filterMine_.setButtonText(u8("Mine"));
   filterBuiltin_.setTooltip(u8("P-Core's styles: a groove written fresh on your tracks each time"));
-  filterMine_.setTooltip(u8("The ones you saved with Save as Template"));
+  filterMine_.setTooltip(u8("The ones you saved with Save as template"));
   int f = 0;
   for (auto* b : {&filterAll_, &filterBuiltin_, &filterMine_}) {
     b->onClick = [this, f] { filter_ = f; refreshTemplates(); };
@@ -583,7 +588,7 @@ PatternsPanel::PatternsPanel(Host host) : host_(std::move(host)) {
     change(u8("New pattern"), [&made, bars](doc::Document& d) { made = doc::addRackSlot(d, "", bars); });
     if (!made.empty()) chooseSlot(made);
   };
-  saveTemplate_.setButtonText(u8("Save as Template"));
+  saveTemplate_.setButtonText(u8("Save as template"));
   saveTemplate_.setTooltip(u8("This pattern, all its rows, as a template of yours (Templates > Mine)"));
   saveTemplate_.onClick = [this] { saveTemplate(); };
   for (auto* b : {&duplicate_, &clear_, &addTrack_, &addSlot_, &saveTemplate_}) addAndMakeVisible(*b);
@@ -967,7 +972,7 @@ void PatternsPanel::loadTemplate() {
 void PatternsPanel::saveTemplate() {
   const doc::PatternSlot* s = slot();
   if (!s) return;
-  auto* w = new juce::AlertWindow(lang::tr("Save as Template"), lang::tr("This pattern, all its rows, goes into Templates > Mine."),
+  auto* w = new juce::AlertWindow(lang::tr("Save as template"), lang::tr("This pattern, all its rows, goes into Templates > Mine."),
                                   juce::MessageBoxIconType::NoIcon, this);
   w->addTextEditor("name", u8(s->name), lang::tr("Name:"));
   w->addButton(lang::tr("Save"), 1, juce::KeyPress(juce::KeyPress::returnKey));

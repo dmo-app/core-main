@@ -118,6 +118,13 @@ bool trimSilence(Channels& channels, double sampleRate, double thresholdDb, doub
   return true;
 }
 
+bool hasBrokenSamples(const Channels& channels) {
+  for (const auto& ch : channels)
+    for (float v : ch)
+      if (!std::isfinite(v)) return true;
+  return false;
+}
+
 float peakOf(const Channels& channels) {
   float peak = 0;
   for (const auto& ch : channels)

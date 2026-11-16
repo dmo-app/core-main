@@ -38,7 +38,9 @@ inline EngineLine readEngineLine(const std::string& line) {
   EngineLine out;
   nlohmann::json message = nlohmann::json::parse(line, nullptr, false);
   if (message.is_discarded() || !message.is_object()) return out;
-  if (message.contains("event")) {
+  // An event has a text "event" and no "id". A line with an "id" is a reply even if it also carries an "event" (deep
+  // hunt: {"id":5,"ok":true,"event":{}} used to be taken as an event, and the call waited for its whole timeout).
+  if (message.contains("event") && !message.contains("id")) {
     const nlohmann::json& event = message["event"];
     out.kind = event.is_string() && event.get_ref<const std::string&>() == "ready" ? EngineLine::Kind::Ready : EngineLine::Kind::Event;
     out.message = std::move(message);

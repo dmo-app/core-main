@@ -37,9 +37,13 @@ AudibleRange audibleRange(const Channels& channels, double sampleRate, double th
 // Cuts the silence before and after the sound (audibleRange) and puts a short fade (fadeMs) where a cut lands in
 // sound, so there is no click. Returns false (nothing changed) when everything is silent.
 bool trimSilence(Channels& channels, double sampleRate, double thresholdDb = -60, double fadeMs = 2);
+// True when any sample is NaN or Inf: a damaged file, not silence (deep hunt P08: audibleRange calls it silent,
+// so check this first and say the file is damaged).
+bool hasBrokenSamples(const Channels& channels);
 // The peak of all channels, as a level (0..); 0 for silence.
 float peakOf(const Channels& channels);
-// Gain so the peak reaches targetDb (dBFS). Returns the gain in dB; silence is left as it is (returns 0).
+// Gain so the peak reaches targetDb (dBFS). Returns the gain in dB; silence and broken samples (hasBrokenSamples)
+// are left as they are (returns 0).
 double normalizePeak(Channels& channels, double targetDb = -0.3);
 // The catalogue's role for a sample made from this name (a track, a stem, a clip): "Kick 2" -> kick,
 // "Bass" -> bass; "other" when the name says nothing (doc::classifySample's rules).

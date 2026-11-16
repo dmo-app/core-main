@@ -10,6 +10,7 @@
 #include "pattern_rack.hpp"
 #include "ProposalsPanel.h"
 #include "Diagnostics.h"
+#include <cctype>
 #include <cmath>
 #include <thread>
 #include "Stretch.h"
@@ -27,6 +28,8 @@
 #include "storage.hpp"
 #include "midi.hpp"
 #include "bitwig.hpp"
+#include "core_plugins.hpp"
+#include "role_tools.hpp"
 
 namespace core::app {
 
@@ -900,6 +903,10 @@ private:
       for (int ch = 0; ch < buf.getNumChannels(); ++ch) channels.emplace_back(buf.getReadPointer(ch), buf.getReadPointer(ch) + frames);
     } catch (const std::bad_alloc&) {
       owner_.showError(u8("Cut silence"), u8("Not enough memory for this clip."));
+      return;
+    }
+    if (core::sampling::hasBrokenSamples(channels)) {  // deep hunt P08: not "silent"
+      owner_.showError(u8("Cut silence"), u8("The clip has broken samples (NaN or Inf): the file is damaged."));
       return;
     }
     const auto r = core::sampling::audibleRange(channels, reader->sampleRate, -60, 1, 20);
@@ -1972,7 +1979,10 @@ MainComponent::MainComponent(EngineSession::Options options, doc::Document docum
     const std::vector<Item> items = {
         {"arrange", "Arrangement", [this] { arrangeButton_.onClick(); }},
         {"mixer", "Mixer (Ctrl+M)", [this] { setMixerOpen(!mixerOpen_); }},
+        // The Patterns window (channel rack, templates, swing, Send to Arrange): Diogo 2026-11-16, "facilidade em criar".
+        {"patterns", "Patterns: the channel rack and the templates (Ctrl+P)", [this] { openPatterns(); }},
         {"library", "Library", [this] { toggleSidePanel(true); }},
+        {"plugins", "Tools: Core's tools as cards (the AI uses the same ones)", [this] { togglePlugins(); }},
         {"inspector", "Inspector", [this] { toggleSidePanel(false); }}};
     for (const auto& item : items) {
       auto b = std::make_unique<juce::TextButton>(item.tip);
@@ -1987,6 +1997,8 @@ MainComponent::MainComponent(EngineSession::Options options, doc::Document docum
       rail_.push_back(std::move(b));
     }
   }
+  addChildComponent(pluginCards_);
+  pluginCards_.onOpen = [this](const doc::CorePluginInfo& p, juce::Component& card) { openCorePlugin(p, &card); };
   mixerButton_.setButtonText("MIX");
   mixerButton_.setTooltip(u8("The mixer in the bottom panel (Ctrl+M)"));
   mixerButton_.setClickingTogglesState(false);
@@ -2232,6 +2244,188 @@ void MainComponent::stopPatternSlot() {
   session_->setDocument(engineDocument());
   session_->setLoop(history_.current().loop);
   session_->seek(patternSongTick_);
+}
+
+// ---------------------------------------------------------------- Core's tools (cards, menus; the AI calls the same)
+
+std::string MainComponent::toolTrack() const { return selectedTrack_.empty() ? editor_.track() : selectedTrack_; }
+
+void MainComponent::runTool(const juce::String& label, std::function<std::string(doc::Document&, const doc::RoleMap&)> tool) {
+  std::string problem;
+  const doc::RoleMap roles = PluginCatalog::roles(&problem);
+  if (!problem.empty()) { showError(label, u8("The role map could not be read (") + u8(problem) + u8("): Settings > Roles.")); return; }
+  std::string sentence;
+  bool done = false;
+  edit([&](doc::Document& d) { sentence = tool(d, roles); done = true; }, label);  // a refusal shows its reason; nothing changes
+  if (!done) return;
+  notice_ = u8(sentence) + u8(" (Ctrl+Z puts it back)");
+  repaint();
+}
+
+namespace {
+std::string withSkipped(const doc::RoleToolResult& r) {
+  std::string s = r.sentence;
+  for (const auto& k : r.skipped) s += ". Skipped: " + k;
+  return s;
+}
+std::string capital(std::string s) {
+  if (!s.empty()) s[0] = (char)std::toupper((unsigned char)s[0]);
+  return s;
+}
+}  // namespace
+
+juce::PopupMenu MainComponent::coreToolMenu(const std::string& toolId, const std::string& trackIdIn) {
+  juce::PopupMenu m;
+  juce::Component::SafePointer<MainComponent> safe(this);
+  const doc::Document& song = history_.current();
+  const std::string trackId = trackIdIn.empty() ? toolTrack() : trackIdIn;
+  const doc::Track* t = song.findTrack(trackId);
+  const bool notes = t && doc::playsPatterns(*t);
+  using Act = std::function<void(const doc::SongSpan&)>;
+  // Where it works: each section by name, and the whole song when it fits.
+  auto where = [&song](const Act& act, bool whole) {
+    juce::PopupMenu s;
+    for (const auto& sec : song.sections) {
+      const doc::SongSpan span{sec.startTick, std::min(song.lengthTicks, sec.startTick + sec.lengthTicks), sec.name};
+      if (span.end > span.start) s.addItem(juce::PopupMenu::Item(u8(sec.name)).setAction([act, span] { act(span); }));
+    }
+    if (whole) s.addItem(juce::PopupMenu::Item(u8("The whole song")).setAction([act, len = song.lengthTicks] { act({0, len, "the whole song"}); }));
+    if (s.getNumItems() == 0) s.addItem(juce::PopupMenu::Item(u8("No sections yet: right-click the timeline to add one")).setEnabled(false));
+    return s;
+  };
+  auto needTrack = [&m, notes] {
+    if (!notes) m.addItem(juce::PopupMenu::Item(u8("Choose a track with notes first (click its name)")).setEnabled(false));
+    return notes;
+  };
+  const juce::String on = t ? u8(" on ") + u8(t->name) : juce::String();
+  if (toolId == "pcore") {
+    m.addItem(juce::PopupMenu::Item(u8("Open the Patterns window…")).setAction([safe] { if (safe) safe->openPatterns(); }));
+  } else if (toolId == "wcore") {
+    for (const char* role : {"bass", "lead", "pad", "pluck", "drums"}) {
+      const juce::String label = u8(doc::findRole(role) ? doc::findRole(role)->label : role);
+      if (notes)
+        m.addItem(juce::PopupMenu::Item(label + on).setAction([safe, trackId, role = std::string(role), label] {
+          if (!safe) return;
+          safe->runTool(u8("Instrument: ") + label, [&](doc::Document& d, const doc::RoleMap& r) {
+            doc::setTrackRole(d, trackId, role, r);
+            return doc::trackById(d, trackId).name + " plays the " + role + " plugin";
+          });
+          safe->session_->openPluginEditor(doc::pluginKey(trackId));
+        }));
+    }
+    juce::PopupMenu fresh;
+    for (const char* role : {"bass", "lead", "pad", "pluck", "drums"}) {
+      const juce::String label = u8(doc::findRole(role) ? doc::findRole(role)->label : role);
+      fresh.addItem(juce::PopupMenu::Item(label).setAction([safe, role = std::string(role), label] {
+        if (!safe) return;
+        safe->runTool(u8("New track: ") + label, [&](doc::Document& d, const doc::RoleMap& r) {
+          doc::addRoleTrack(d, role, r);
+          return "A new " + role + " track, played by the role's plugin";
+        });
+      }));
+    }
+    m.addSubMenu(u8("A new track"), fresh);
+  } else if (toolId == "fcore") {
+    if (needTrack())
+      for (const auto& intent : doc::fxIntents())
+        m.addSubMenu(u8(capital(intent)) + on, where([safe, trackId, intent](const doc::SongSpan& span) {
+          if (!safe) return;
+          safe->runTool(u8("F-Core: ") + u8(intent), [&](doc::Document& d, const doc::RoleMap& r) {
+            return withSkipped(doc::toolIntentFx(d, trackId, r, intent, span.start, span.end, 0.7));
+          });
+        }, true));
+  } else if (toolId == "rcore" || toolId == "dcore") {
+    const std::string kind = toolId == "rcore" ? "reverb" : "delay";
+    std::vector<std::string> tracks = selectedTracks();
+    if (tracks.empty() && notes) tracks.push_back(trackId);
+    if (tracks.empty()) m.addItem(juce::PopupMenu::Item(u8("Select the tracks that share it first")).setEnabled(false));
+    else
+      for (const auto& p : doc::spacePresets()) {
+        if (p.kind != kind) continue;
+        m.addItem(juce::PopupMenu::Item(u8(capital(p.id)) + u8(": ") + u8(p.what) + u8(" (") + juce::String((int)tracks.size()) + u8(" tracks)"))
+                      .setAction([safe, tracks, kind, id = p.id] {
+                        if (!safe) return;
+                        safe->runTool(u8(kind == "reverb" ? "R-Core " : "D-Core ") + u8(id), [&](doc::Document& d, const doc::RoleMap& r) {
+                          return doc::toolSharedBus(d, tracks, r, kind, id).sentence;
+                        });
+                      }));
+      }
+  } else if (toolId == "suck" || toolId == "buildup") {
+    if (needTrack())
+      m.addSubMenu(u8(toolId == "suck" ? "Into the drop after" : "Over the build-up") + on, where([safe, trackId, toolId](const doc::SongSpan& span) {
+        if (!safe) return;
+        safe->runTool(u8(toolId == "suck" ? "SUCK" : "Build-up"), [&](doc::Document& d, const doc::RoleMap& r) {
+          return withSkipped(doc::toolIntentFx(d, trackId, r, toolId, span.start, span.end, 0.8));
+        });
+      }, false));
+  } else if (toolId == "roll") {
+    if (needTrack())
+      for (const char* style : {"steps", "gradual"})
+        m.addSubMenu(u8(style == std::string("steps") ? "Steps (1/4, 1/8, 1/16, 1/32)" : "Gradual (speeding up all the way)") + on,
+                     where([safe, trackId, style = std::string(style)](const doc::SongSpan& span) {
+                       if (!safe) return;
+                       safe->runTool(u8("ROLL"), [&](doc::Document& d, const doc::RoleMap&) {
+                         return doc::toolRoll(d, trackId, span.start, span.end, style).sentence;
+                       });
+                     }, false));
+  } else if (toolId == "pum") {
+    if (needTrack())
+      for (const auto& src : song.tracks) {
+        if (src.id == trackId || !doc::playsPatterns(src)) continue;
+        m.addSubMenu(u8("From ") + u8(src.name) + on, where([safe, trackId, from = src.id](const doc::SongSpan& span) {
+          if (!safe) return;
+          safe->runTool(u8("PUM"), [&](doc::Document& d, const doc::RoleMap& r) {
+            return withSkipped(doc::toolPump(d, trackId, from, r, span.start, span.end));
+          });
+        }, true));
+      }
+  }
+  return m;
+}
+
+juce::PopupMenu MainComponent::coreToolsMenu(const std::string& trackId) {
+  juce::PopupMenu m;
+  for (const auto& p : doc::corePlugins()) {
+    juce::PopupMenu one = coreToolMenu(p.id, trackId);
+    if (p.id == "pcore") { m.addItem(juce::PopupMenu::Item(u8("P-Core: the Patterns window…")).setAction([this] { openPatterns(); })); continue; }
+    m.addSubMenu(u8(p.shortName) + u8(" · ") + u8(p.word), one);
+  }
+  return m;
+}
+
+void MainComponent::openCorePlugin(const doc::CorePluginInfo& info, juce::Component* near) {
+  if (info.opens == "window") { openPatterns(); return; }
+  juce::PopupMenu m = coreToolMenu(info.id, "");
+  auto options = juce::PopupMenu::Options();
+  if (near) options = options.withTargetComponent(near);
+  m.showMenuAsync(options);
+}
+
+void MainComponent::giveSilentTracksPlugins() {
+  std::string problem;
+  const doc::RoleMap roles = PluginCatalog::roles(&problem);
+  if (roles.roles.empty()) {
+    showError(u8("No plugins for the roles yet"),
+              u8("Settings > Roles says which plugin plays each part (Drums: sfizz, Bass / Lead / Pad: Vital...). Choose them there, then try again.") +
+                  (problem.empty() ? juce::String() : u8("\n\n") + u8(problem)));
+    return;
+  }
+  int changed = 0;
+  std::vector<std::string> left;
+  try {
+    edit([&](doc::Document& d) { changed = doc::giveSilentTracksRolePlugins(d, roles, &left); }, u8("Plugins for the silent tracks"));
+  } catch (const std::exception& e) {
+    showError(u8("Plugins for the silent tracks"), u8(e.what()));
+    return;
+  }
+  juce::String text = juce::String(changed) + u8(" tracks play their role's plugin now (Ctrl+Z puts them back).");
+  if (!left.empty()) {
+    juce::String names;
+    for (const auto& n : left) names += (names.isEmpty() ? juce::String() : juce::String(", ")) + u8(n);
+    text += u8(" Still silent (no role guessed, or no plugin for it in Settings > Roles): ") + names + ".";
+  }
+  notice_ = text;
+  repaint();
 }
 
 void MainComponent::openPatterns() {
@@ -4376,6 +4570,7 @@ void MainComponent::showTrackMenu(const std::string& trackId) {
     menu.addSubMenu(u8("Replace instrument"), replace);
   }
   std::vector<std::string> offered;
+  if (current && doc::playsPatterns(*current)) menu.addSubMenu(u8("Tools"), coreToolsMenu(trackId));
   menu.addSeparator();
   menu.addItem(3, "Remove");
   menu.showMenuAsync(juce::PopupMenu::Options(), [this, trackId, offered, instruments, pluginFx](int chosen) {
@@ -4899,6 +5094,7 @@ bool MainComponent::previewLibrarySample(const doc::LibrarySample& sample, const
 
 namespace { enum MenuId { kMidiNone = 200, kMidiDevice = 201, kNewEmpty = 50, kOpen = 1, kSave, kSaveAs, kExport24, kExport32, kQuit, kUndo, kRedo, kImportAudio, kRelocate, kDevice = 100,
                        kMidiDevicesEnd = 400, kPluginCoreFirst = 420 /* + place in doc::corePlugins(), up to 20 */,
+                       kPluginPatterns = 440, kPluginSilent = 442,
                        kPluginScan = 460, kPluginFolder, kPluginRetry, kMasterFx = 2400 /* + 60 */, kMasterFxAdd = 2500 /* + 400 */,
                        kOpenLogs = 580, kAbout = 581, kExportMono = 590, kImportMidi = 595, kExportMidi = 596, kExportBitwig = 597,
                        kSampleFolder = 1600, kSampleRescan, kSampleApply, kSampleAuto, kSampleShuffle, kSampleCatalogUndo,
@@ -4915,7 +5111,7 @@ juce::String MainComponent::MenuBar::getTooltip() {
       "Undo and redo, and Randomize a song made from a style template (pattern, tempo, sound)",
       "Show or hide the Library and Inspector; open the Mixer; the UI size",
       "Cut or render samples, the audio output and the MIDI input",
-      "Core's own plugins: the song, the instruments, the gestures, each in its window",
+      "Patterns (the channel rack) and Core's tools; the VST3 plugins: scan, folders, the master's effects",
       "Your sample library: its folder, rescan, the best samples for this song",
       "Core's AI: ask for a beat, a song structure or a change to a part (a proposal you apply)",
       "AICORE, Core's add-on: open its chat, its proposals, its folder",
@@ -4982,6 +5178,18 @@ juce::PopupMenu MainComponent::getMenuForIndex(int index, const juce::String&) {
   } else if (index == 3) {
     // The VST plugins of this PC (Diogo 2026-11-16: Core's sound comes from plugins). Each file is scanned and played
     // on its own first, in its own process: one that hangs or crashes is set aside, never taking Core down.
+    // Core's own windows first: the Patterns window is where songs start (Diogo 2026-11-16), and it plays the tracks' plugins.
+    menu.addSectionHeader(u8("Core"));
+    menu.addItem(juce::PopupMenu::Item(u8("Patterns (channel rack, templates)…")).setID(kPluginPatterns));
+    for (const auto& p : doc::corePlugins())
+      if (p.id != "pcore") menu.addSubMenu(u8(p.shortName) + u8(": ") + u8(p.about), coreToolMenu(p.id, ""));
+    {  // A song from before 0.7.0: its old Core sounds are kept but silent (Diogo 2026-11-16, "não sai som").
+      int silent = 0;
+      for (const auto& t : history_.current().tracks) silent += t.instrument.kind == "builtin" || t.instrument.kind == "none";
+      menu.addItem(juce::PopupMenu::Item(u8("Give the silent tracks their role's plugin (") + juce::String(silent) + u8(" silent)"))
+                       .setID(kPluginSilent).setEnabled(silent > 0));
+    }
+    menu.addSectionHeader(u8("VST3 plugins"));
     menu.addItem(juce::PopupMenu::Item(plugins_->scanning() ? u8("Scanning: ") + plugins_->progress() : u8("Scan plugins (VST3)"))
                      .setID(kPluginScan).setEnabled(!plugins_->scanning()));
     menu.addItem(juce::PopupMenu::Item(u8("Add a plugin folder…")).setID(kPluginFolder));
@@ -5087,7 +5295,7 @@ juce::PopupMenu MainComponent::getMenuForIndex(int index, const juce::String&) {
                    : item.itemID == kUndo ? "edit.undo" : item.itemID == kRedo ? "edit.redo"
                    : item.itemID == kNewEmpty ? "file.new"
                    : item.itemID == kExport24 ? "file.export" : item.itemID == kSettings ? "file.settings" : item.itemID == kImportAudio ? "file.importAudio"
-                   : item.itemID == kViewMixer ? "view.mixer" : nullptr;
+                   : item.itemID == kViewMixer ? "view.mixer" : item.itemID == kPluginPatterns ? "view.patterns" : nullptr;
     item.shortcutKeyDescription = id != nullptr ? Keymap::get().text(id) : juce::String();
   }
   return menu;
@@ -5154,6 +5362,8 @@ void MainComponent::menuItemSelected(int id, int) {
     case kImportAudio: importAudio(); break;
     case kRelocate: relocateMissing(); break;
     case kMidiNone: openMidiInput({}); break;
+    case kPluginPatterns: openPatterns(); break;
+    case kPluginSilent: giveSilentTracksPlugins(); break;
     case kPluginScan: scanPlugins(); break;
     case kPluginRetry: plugins_->clearQuarantine(); scanPlugins(); break;
     case kPluginFolder: {
@@ -5202,7 +5412,8 @@ juce::Rectangle<int> MainComponent::workArea() const {
 
 void MainComponent::toggleSidePanel(bool library) {
   bool& shown = library ? showLibrary_ : showInspector_;
-  shown = !shown;
+  shown = library && showPlugins_ ? true : !shown;  // from the Tools: back to the Library
+  if (library) showPlugins_ = false;
   settings_.getUserSettings()->setValue(library ? "showLibrary" : "showInspector", shown);
   resized();
   repaint();
@@ -5224,7 +5435,7 @@ juce::Rectangle<int> MainComponent::content() const {
 juce::Rectangle<int> MainComponent::body() const { return content().withTrimmedLeft(kRail + 8); }
 juce::Rectangle<int> MainComponent::centre() const {
   auto r = body();
-  if (libraryShown()) r.removeFromLeft(libraryWidth() + 8);
+  if (sideShown()) r.removeFromLeft(libraryWidth() + 8);
   if (inspectorShown()) r.removeFromLeft(inspectorWidth() + 8);
   return r;
 }
@@ -5233,19 +5444,31 @@ int MainComponent::inspectorWidth() const { return inspector_ && inspector_->fol
 
 bool MainComponent::inspectorShown() const { return showInspector_ && !mixerOpen_; }
 // With the Mixer open the strips get the whole width, as on ref-3 (the Library comes back when it closes).
-bool MainComponent::libraryShown() const { return showLibrary_ && !mixerOpen_; }
+bool MainComponent::libraryShown() const { return showLibrary_ && !mixerOpen_ && !showPlugins_; }
+// The Tools panel takes the Library's place (one of the two at a time).
+bool MainComponent::pluginsShown() const { return showPlugins_ && !mixerOpen_; }
+void MainComponent::togglePlugins() {
+  showPlugins_ = !showPlugins_;
+  if (showPlugins_) {
+    std::string problem;
+    pluginCards_.setRoles(PluginCatalog::roles(&problem));
+  }
+  resized();
+  repaint();
+  for (auto& row : rows_) row->repaint();
+}
 juce::Rectangle<int> MainComponent::libraryArea() const { return body().removeFromLeft(libraryWidth()); }
 // Every panel's edge is dragged (Diogo 2026-11-09: "não me deixa expandir ou encurtar nenhuma janela"): the Library's
 // right edge and the instrument dock's left edge, kept in the settings like the editor's height. Layout only.
 int MainComponent::libraryWidth() const { return juce::jlimit(200, std::max(200, body().getWidth() / 3), libraryWidth_ > 0 ? libraryWidth_ : kLibraryWidth); }
 juce::Rectangle<int> MainComponent::libraryEdge() const {
-  if (!libraryShown()) return {};
+  if (!sideShown()) return {};
   const auto l = libraryArea();
   return {l.getRight(), l.getY(), 8, l.getHeight()};
 }
 juce::Rectangle<int> MainComponent::inspectorArea() const {
   auto r = body();
-  if (libraryShown()) r.removeFromLeft(libraryWidth() + 8);
+  if (sideShown()) r.removeFromLeft(libraryWidth() + 8);
   return r.removeFromLeft(inspectorWidth());
 }
 juce::Rectangle<int> MainComponent::timelineArea() const { return centre().withHeight(52); }
@@ -5329,6 +5552,8 @@ void MainComponent::resized() {
   mid.removeFromLeft(topGap_);
   position_.setBounds(mid.removeFromLeft(std::max(positionWidth, 0)).reduced(2, 5));
   library_.setVisible(libraryShown());
+  pluginCards_.setVisible(pluginsShown());
+  pluginCards_.setBounds(libraryArea());
   library_.setBounds(libraryArea());
   if (inspector_) {
     inspector_->setVisible(inspectorShown());
@@ -5368,7 +5593,7 @@ void MainComponent::resized() {
   {  // the page rail: the pages, then the side panels (as on the reference's left edge)
     auto rail = content().withWidth(kRail);
     for (size_t i = 0; i < rail_.size(); ++i) {
-      if (i == 2) rail.removeFromTop(14);  // the side panels: Library, Plugins, Inspector
+      if (i == 3) rail.removeFromTop(14);  // the side panels: Library, Tools, Inspector
       rail_[i]->setBounds(rail.removeFromTop(kRail).reduced(4));
     }
   }
@@ -5703,6 +5928,7 @@ bool MainComponent::keyPressed(const juce::KeyPress& key) {
   if (is("file.settings")) { openSettings(false); return true; }
   if (is("edit.addTrack")) { showAddTrackMenu(); return true; }
   if (is("view.mixer")) { setMixerOpen(!mixerOpen_); return true; }
+  if (is("view.patterns")) { openPatterns(); return true; }
   if (is("view.effects")) {  // the selected track's plugins
     if (const std::string id = selectedTrack_.empty() ? editor_.track() : selectedTrack_; !id.empty()) showTrackMenu(id);
     return true;
@@ -6095,9 +6321,10 @@ void MainComponent::timerCallback() {
   }
   if (test_) selfTestStep();
   arrangeButton_.setToggleState(!mixerOpen_, juce::dontSendNotification);
-  if (rail_.size() == 4) {
-    const bool states[] = {arrangeButton_.getToggleState(), mixerOpen_, libraryShown(), inspectorShown()};
-    for (size_t i = 0; i < 4; ++i) rail_[i]->setToggleState(states[i], juce::dontSendNotification);
+  if (rail_.size() == 6) {
+    const bool states[] = {arrangeButton_.getToggleState(), mixerOpen_, patternsWindow_ != nullptr && patternsWindow_->isVisible(), libraryShown(),
+                           pluginsShown(), inspectorShown()};
+    for (size_t i = 0; i < 6; ++i) rail_[i]->setToggleState(states[i], juce::dontSendNotification);
   }
   repaint(timelineArea());
   editor_.playheadMoved();  // only the old and the new line, not the whole piano roll
