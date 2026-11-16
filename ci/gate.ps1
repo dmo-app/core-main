@@ -33,7 +33,8 @@ if (Test-Path $Juce) { $juceArg = "-DFETCHCONTENT_SOURCE_DIR_JUCE=$Juce" }
 $label = if ($Desktop) { "" } else { "-L merge" }
 $log = Join-Path $Build "gate.log"
 # Um .bat temporario numa pasta sem espacos: o cmd /c com caminhos com espacos ja partiu launchers antes.
-$bat = Join-Path $env:TEMP "core-gate.bat"
+# Um .bat por build e por processo: dois gates ao mesmo tempo nao se pisam (2026-11-16, gate do ui-compacto).
+$bat = Join-Path $env:TEMP ("core-gate-" + (Split-Path $Build -Leaf) + "-" + $PID + ".bat")
 @"
 @echo off
 call "$vcvars" > "$Build\vcvars.log" 2>&1 || exit /b 1
@@ -48,6 +49,7 @@ $t0 = Get-Date
 $ErrorActionPreference = "Continue"
 cmd /c "`"$bat`" 2>&1" | Tee-Object -FilePath $log
 $rc = $LASTEXITCODE
+Remove-Item -Force -ErrorAction SilentlyContinue $bat
 $ErrorActionPreference = "Stop"
 $secs = [int]((Get-Date) - $t0).TotalSeconds
 $commit = (git -C $src rev-parse --short HEAD 2>$null)

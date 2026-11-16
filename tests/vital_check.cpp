@@ -1,5 +1,6 @@
 // Verificacao no Windows com o Vital verdadeiro (nao entra no gate "merge": precisa do Vital.vst3 instalado).
-//   vital_check make <Vital.vst3> <presets/vital> <pasta>   -> projetos: init (sem estado), boom, bell, kbbb
+//   vital_check make <Vital.vst3> <plugin id> <presets/vital> <pasta>   -> projetos: init (sem estado), boom, bell, kbbb
+//   (o id vem de "core-engine scan <Vital.vst3>", ex. VST3-Vital-57c62bea-6e1cebf4: o engine recusa um id vazio)
 //   (correr: core-engine render <pasta>/<nome>.json <pasta>/<nome>.wav para cada um)
 //   vital_check judge <pasta>                                -> confere os WAV: o Vital aceitou o estado de cada preset
 // O teste: o mesmo Vital, as mesmas notas; so muda o estado. Se o Vital ignorasse o estado, os 4 soavam ao init.
@@ -64,10 +65,11 @@ Facts facts(const Wav& w) {  // peak; zero crossings per second (pitch/brightnes
   return f;
 }
 
-int make(const fs::path& vst3, const fs::path& lib, const fs::path& out) {
+int make(const fs::path& vst3, const std::string& id, const fs::path& lib, const fs::path& out) {
+  if (id.empty()) throw std::runtime_error("the plugin id is required (core-engine scan <Vital.vst3>)");
   fs::create_directories(out);
   const auto presets = loadVitalLibrary(lib, "");
-  const json plugin = {{"format", "vst3"}, {"id", ""}, {"name", "Vital"}, {"vendor", "Vital Audio"}, {"file", vst3.string()}};
+  const json plugin = {{"format", "vst3"}, {"id", id}, {"name", "Vital"}, {"vendor", "Vital Audio"}, {"file", vst3.string()}};
   struct Case { const char* name; const char* preset; int pitch; int64_t len; };
   const Case cases[] = {{"init", "", 52, kPpq / 2}, {"boom", "SLA Low Boom", 28, kPpq / 2},
                         {"bell", "HT Glass Bell", 76, kPpq / 8}, {"kbbb", "DPC KBBB Plonk", 28, 150}};
@@ -112,9 +114,9 @@ int judge(const fs::path& dir) {
 int main(int argc, char** argv) {
   try {
     const std::string mode = argc > 1 ? argv[1] : "";
-    if (mode == "make" && argc == 5) return make(fs::u8path(argv[2]), fs::u8path(argv[3]), fs::u8path(argv[4]));
+    if (mode == "make" && argc == 6) return make(fs::u8path(argv[2]), argv[3], fs::u8path(argv[4]), fs::u8path(argv[5]));
     if (mode == "judge" && argc == 3) return judge(fs::u8path(argv[2]));
-    std::cerr << "usage: vital_check make <Vital.vst3> <presets/vital> <dir> | judge <dir>\n";
+    std::cerr << "usage: vital_check make <Vital.vst3> <plugin id> <presets/vital> <dir> | judge <dir>\n";
     return 2;
   } catch (const std::exception& e) {
     std::cerr << e.what() << '\n';
