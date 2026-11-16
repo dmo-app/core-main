@@ -379,6 +379,27 @@ public:
     }
   }
 
+  // A plugin's sound inside its clip (caught while the song played): the level per bin, mirrored round the middle;
+  // the parts not heard yet show the notes' places as thin marks.
+  void paintLiveWave(juce::Graphics& g, const doc::Clip& c, const doc::Pattern& p, const MainComponent::LiveWave& w, juce::Rectangle<int> box, int x0, int x1) {
+    const auto area = box.reduced(0, 3);
+    const auto visible = area.getIntersection(g.getClipBounds());
+    if (visible.isEmpty() || x1 <= x0 || p.lengthTicks <= 0 || w.peaks.empty()) return;
+    const double ticksPerPixel = (double)c.lengthTicks / (double)(x1 - x0);
+    const float mid = (float)area.getCentreY(), half = area.getHeight() / 2.0f - 1.0f;
+    g.setColour(colour_.interpolatedWith(kText, 0.3f).withAlpha(track_.mix.mute ? 0.35f : 0.82f));
+    for (int x = visible.getX(); x < visible.getRight(); ++x) {
+      const double at = std::fmod((x - x0) * ticksPerPixel + (double)c.offsetTicks, (double)p.lengthTicks);
+      const size_t b0 = (size_t)(at / MainComponent::kLiveWaveBin);
+      const size_t b1 = std::max(b0, (size_t)(std::min((double)p.lengthTicks - 1, at + ticksPerPixel) / MainComponent::kLiveWaveBin));
+      float level = -1.0f;
+      for (size_t b = b0; b <= b1 && b < w.peaks.size(); ++b) level = std::max(level, w.peaks[b]);
+      if (level < 0) continue;
+      const float h = std::max(0.5f, std::sqrt(std::clamp(level, 0.0f, 1.0f)) * half);  // a meter's level reads better on a root scale
+      g.fillRect((float)x, mid - h, 1.0f, 2 * h);
+    }
+  }
+
   // A pattern's notes, small and light, inside its clip (each repeat), as on the reference. Drum rows (one pitch
   // per sound) and melodies both fit: the pitches in use spread over the clip's height.
   void paintClipNotes(juce::Graphics& g, const doc::Clip& c, const doc::Pattern& p, juce::Rectangle<int> box) {
@@ -480,6 +501,8 @@ public:
       // until the first render is done, or when there is no sound to show (a plugin, silence).
       if (auto wave = owner_.patternWaves_.get(owner_.history_.current(), owner_.history_.revision(), id_, p->id, owner_.projectDir()))
         paintClipWave(g, c, *p, *wave, box, x0, x1);
+      else if (const auto* live = owner_.liveWave(id_, *p))
+        paintLiveWave(g, c, *p, *live, box, x0, x1);
       else
         paintClipNotes(g, c, *p, box);
       if (selected) {
@@ -497,7 +520,7 @@ public:
     if (const auto& sel = owner_.timeSel_; !sel.empty() && std::find(sel.trackIds.begin(), sel.trackIds.end(), id_) != sel.trackIds.end()) {
       const int x0 = laneX((double)sel.fromTick), x1 = laneX((double)sel.toTick);
       const auto band = juce::Rectangle<int>::leftTopRightBottom(x0, 0, x1, getHeight());
-      g.setColour(kAccent.brighter(0.5f).withAlpha(0.3f));
+      g.setColour(kAccent.brighter(0.5f).withAlpha(0.42f));
       g.fillRect(band);
       g.setColour(kAccent.brighter(0.5f).withAlpha(0.9f));
       g.fillRect(x0, 0, 1, getHeight());
@@ -537,9 +560,10 @@ public:
       owner_.beginBoxMove();
       return;
     }
+    // The lower half selects only the time dragged over (the clip itself is not picked: long clips would light up whole).
+    if (!edge && !e.mods.isPopupMenu() && lowerHalf(e)) { owner_.selectClip(id_, {}); owner_.startTimeSelection(e, id_); return; }
     owner_.selectClip(id_, hit->id);
     if (e.mods.isPopupMenu()) { owner_.showClipMenu(id_, hit->id, laneTick(e.x, kBar)); return; }
-    if (!edge && lowerHalf(e)) { owner_.startTimeSelection(e, id_); return; }  // the lower half selects time, as the reference
     drag_ = hit->id;
     resize_ = edge;
     grabOffset_ = laneTick(e.x, 1) - hit->startTick;
@@ -602,9 +626,9 @@ public:
       owner_.beginBoxMove();
       return;
     }
+    if (edge == 0 && !e.mods.isPopupMenu() && lowerHalf(e)) { owner_.selectClip(id_, {}); owner_.startTimeSelection(e, id_); return; }
     owner_.selectClip(id_, hit->id);
     if (e.mods.isPopupMenu()) { owner_.showAudioClipMenu(id_, hit->id, laneTick(e.x, 1)); return; }
-    if (edge == 0 && lowerHalf(e)) { owner_.startTimeSelection(e, id_); return; }
     drag_ = hit->id;
     audioEdge_ = edge;
     grabOffset_ = laneTick(e.x, 1) - hit->startTick;
@@ -1951,6 +1975,9 @@ MainComponent::MainComponent(EngineSession::Options options, doc::Document docum
   tracksView_->setViewedComponent(&tracksHolder_, false);
   addAndMakeVisible(*tracksView_);
   tracksHolder_.addAndMakeVisible(addTrack_);  // under the last track, scrolling with them
+  masterLane_.setInterceptsMouseClicks(false, false);
+  masterLane_.draw = [this](juce::Graphics& g, juce::Rectangle<int> r) { paintMasterRow(g, r); };
+  tracksHolder_.addAndMakeVisible(masterLane_);
   tracksHolder_.addMouseListener(this, false);  // the empty space under the last track: the selection box
   boxOverlay_ = std::make_unique<BoxOverlay>(*this);
   addAndMakeVisible(*boxOverlay_);  // over the tracks (kept in front in resized)
@@ -5670,11 +5697,11 @@ juce::Rectangle<int> MainComponent::timelineArea() const { return centre().withH
 // Top to bottom: the ruler, the tracks, the master's row right under them, the divider, the editor (or the Mixer, with
 // the CPU footer under it).
 juce::Rectangle<int> MainComponent::tracksArea() const {
-  return centre().withTrimmedTop(kRuler + kGap).withTrimmedBottom(editorHeight() + kGap + (mixerOpen_ ? masterRow() + kGap : masterRow()));
+  return centre().withTrimmedTop(kRuler + kGap).withTrimmedBottom(editorHeight() + kGap + (mixerOpen_ ? masterRow() + kGap : 0));
 }
 juce::Rectangle<int> MainComponent::masterArea() const {
   if (mixerOpen_) return centre().removeFromBottom(masterRow());
-  return centre().withTrimmedBottom(editorHeight() + kGap).removeFromBottom(masterRow());
+  return {};  // the master is the last row of the track list (masterLane_)
 }
 juce::Rectangle<int> MainComponent::editorArea() const {
   return centre().withTrimmedBottom(mixerOpen_ ? masterRow() + kGap : 0).removeFromBottom(editorHeight());
@@ -5683,9 +5710,9 @@ juce::Rectangle<int> MainComponent::editorArea() const {
 // The tracks and the editor share the height: the divider between them is dragged (kept in the settings); by
 // default the editor takes a little under half.
 int MainComponent::editorHeight() const {
-  const int room = centre().getHeight() - (kRuler + kGap) - (masterRow() + kGap) - kGap;  // the ruler and the master row stay
+  const int room = centre().getHeight() - (kRuler + kGap) - kGap;  // the ruler stays
   // By default the tracks take what their rows need (between 30% and 55% of the room); the editor the rest.
-  const int rowsNeeded = std::max(splitRows_, (int)rows_.size()) * trackRow() + 30 + 8;  // removing a track leaves room
+  const int rowsNeeded = std::max(splitRows_, (int)rows_.size()) * trackRow() + kMasterRow + 30 + 8;  // removing a track leaves room
   // The Mixer: a compact band (kMixerHeight) so the tracks stay in view; the divider makes it taller or shorter
   // (its own height, kept in the settings apart from the editor's).
   if (!mixerOpen_ && editorCollapsed_) return kEditorCollapsed;  // folded to its bar (Ctrl+4, a double-click on the divider)
@@ -5782,11 +5809,13 @@ void MainComponent::resized() {
     timeBar_->setBounds(lanes.getX(), tracksArea().getBottom() - 8, lanes.getWidth(), 7);
     updateTimeBar();
     // At least as tall as the panel: the empty space under the last track takes the selection box.
-    tracksHolder_.setSize(tracks.getWidth(), std::max((int)rows_.size() * trackRow() + 30, tracks.getHeight()));
+    tracksHolder_.setSize(tracks.getWidth(), std::max((int)rows_.size() * trackRow() + kMasterRow + 30, tracks.getHeight()));
     boxOverlay_->setBounds(tracksView_->getBounds());
     boxOverlay_->toFront(false);
     auto inside = tracksHolder_.getLocalBounds();
     for (auto& row : rows_) row->setBounds(inside.removeFromTop(trackRow()));
+    masterLane_.setVisible(!mixerOpen_);
+    masterLane_.setBounds(inside.removeFromTop(mixerOpen_ ? 0 : kMasterRow));
     addTrack_.setBounds(inside.removeFromTop(30).removeFromLeft(96).reduced(0, 4));
   }
   if (mixer_) mixer_->setBounds(editorArea());
@@ -5944,6 +5973,64 @@ void MainComponent::endPan() {
   setMouseCursor(juce::MouseCursor::NormalCursor);
 }
 
+// The master: the last row of the track list, right under the tracks, as thin as a track (its meter along the lane).
+uint64_t MainComponent::patternSignature(const doc::Pattern& p) {
+  uint64_t h = 1469598103934665603ull ^ (uint64_t)p.lengthTicks;
+  auto mix = [&](uint64_t v) { h = (h ^ v) * 1099511628211ull; };
+  for (const auto& n : p.notes) { mix((uint64_t)n.tick); mix((uint64_t)n.length); mix((uint64_t)n.pitch); mix((uint64_t)std::llround(n.velocity * 1000)); }
+  return h;
+}
+
+const MainComponent::LiveWave* MainComponent::liveWave(const std::string& trackId, const doc::Pattern& p) const {
+  const auto it = liveWaves_.find(trackId + "|" + p.id);
+  if (it == liveWaves_.end() || it->second.signature != patternSignature(p)) return nullptr;
+  return &it->second;
+}
+
+// While the song plays: each pattern clip under the start line writes its track's level into its pattern's bins
+// (from the last bin written up to this one, so a slow frame leaves no holes). A pattern edit starts it again.
+void MainComponent::captureLiveWaves() {
+  if (!snap_.playing) { for (auto& [k, w] : liveWaves_) w.lastBin = -1; return; }
+  const doc::Document& d = history_.current();
+  const int64_t pos = (int64_t)snap_.positionTick;
+  for (const auto& t : d.tracks) {
+    const auto peak = snap_.trackPeaks.find(t.id);
+    for (const auto& c : t.clips) {
+      if (pos < c.startTick || pos >= c.startTick + c.lengthTicks) continue;
+      const doc::Pattern* p = t.findPattern(c.patternId);
+      if (!p || p->lengthTicks <= 0) break;
+      LiveWave& w = liveWaves_[t.id + "|" + p->id];
+      const uint64_t sig = patternSignature(*p);
+      const size_t bins = (size_t)((p->lengthTicks + kLiveWaveBin - 1) / kLiveWaveBin);
+      if (w.signature != sig || w.peaks.size() != bins) { w.signature = sig; w.peaks.assign(bins, -1.0f); w.lastBin = -1; }
+      const int bin = (int)(((pos - c.startTick + c.offsetTicks) % p->lengthTicks) / kLiveWaveBin);
+      const float level = t.mix.mute || peak == snap_.trackPeaks.end() ? 0.0f : std::max(peak->second.first, peak->second.second);
+      int from = w.lastBin >= 0 && w.lastBin != bin ? w.lastBin + 1 : bin;
+      if (from > bin && bin < 8) from = 0;  // wrapped round to the start
+      if (bin - from > 64) from = bin;      // a jump (the start line moved): only here
+      for (int b = from; b <= bin; ++b) w.peaks[(size_t)b] = level;
+      w.lastBin = bin;
+      break;
+    }
+  }
+}
+
+void MainComponent::paintMasterRow(juce::Graphics& g, juce::Rectangle<int> row) {
+  // As a track: the header (name, its level as a small meter), the lane empty (nothing is placed on the master).
+  auto head = row.removeFromLeft(kTrackHead).reduced(0, 1);
+  g.setColour(kCard);
+  g.fillRoundedRectangle(head.toFloat(), theme::kCorner);
+  g.setColour(kMuted);
+  g.fillRoundedRectangle(head.removeFromLeft(6).toFloat().reduced(2, 3), 1.5f);
+  auto meter = head.removeFromRight(70).reduced(6, juce::jmax(3, (head.getHeight() - 8) / 2));
+  drawMeter(g, meter.toFloat(), master_[0], master_[1]);
+  g.setFont(juce::FontOptions(theme::kFontStrong, juce::Font::bold));
+  g.setColour(kText);
+  g.drawText(lang::tr("Master"), head.withTrimmedLeft(4), juce::Justification::centredLeft);
+  g.setColour(kPanel.withAlpha(0.6f));
+  g.fillRect(row.reduced(0, 1));
+}
+
 void MainComponent::paint(juce::Graphics& g) {
   g.fillAll(kBackground);
   auto footer = getLocalBounds().removeFromBottom(kFooter);
@@ -5996,13 +6083,27 @@ void MainComponent::paint(juce::Graphics& g) {
   const int every = barPixels >= 28 ? 1 : barPixels >= 14 ? 2 : barPixels >= 7 ? 4 : barPixels >= 2 ? 16 : 64;
   g.setFont(juce::FontOptions(theme::kFontSmall));
   const int64_t firstBar = (int64_t)(viewStart() / kBar), lastBar = std::min<int64_t>(bars, (int64_t)((viewStart() + viewLength()) / kBar) + 1);
-  if (const int64_t tickStep = gridStep(12); tickStep < kBar) {  // zoomed in: a short tick per beat, a shorter one per grid step
+  // The time in between, as on the reference: a tick per beat and per grid step (to the zoom), the beats numbered
+  // (5.2, 5.3...) when they have room; zoomed out, a short tick on the bars that carry no number.
+  const float tickBase = (float)(ruler.getY() + kRulerLoop);
+  const double beatPixels = barPixels * kBeat / kBar;
+  if (const int64_t tickStep = gridStep(8); tickStep < kBar) {
     for (int64_t t = firstBar * kBar; t <= lastBar * kBar; t += tickStep) {
       if (t % kBar == 0) continue;
       const bool beat = t % kBeat == 0;
-      g.setColour(beat ? kOutline : kOutline.withAlpha(0.5f));
-      g.drawVerticalLine(xOfTick((double)t), (float)(ruler.getY() + kRulerLoop) - (beat ? 5.0f : 3.0f), (float)(ruler.getY() + kRulerLoop));
+      const int x = xOfTick((double)t);
+      g.setColour(beat ? kMuted.withAlpha(0.85f) : kMuted.withAlpha(0.45f));
+      g.drawVerticalLine(x, tickBase - (beat ? 8.0f : 4.0f), tickBase);
+      if (beat && beatPixels >= 34) {
+        g.setColour(kMuted.withAlpha(0.7f));
+        g.drawText(juce::String(t / kBar + 1) + "." + juce::String((t % kBar) / kBeat + 1), x + 3, ruler.getY() + kRulerBars, 36,
+                   kRulerLoop - kRulerBars - 1, juce::Justification::centredLeft);
+      }
     }
+  } else if (every > 1) {
+    g.setColour(kMuted.withAlpha(0.5f));
+    for (int64_t b = firstBar; b <= lastBar; ++b)
+      if (b % every) g.drawVerticalLine(xOfTick((double)(b * kBar)), tickBase - 4.0f, tickBase);
   }
   for (int64_t b = firstBar; b <= lastBar; ++b) {
     if (every > 1 && b % every) continue;
@@ -6073,22 +6174,6 @@ void MainComponent::paint(juce::Graphics& g) {
     g.drawFittedText(loadProblem_, area.reduced(12).removeFromTop(40), juce::Justification::centredLeft, 2);
   }
   if (mixerOpen_) { paintCpuFooter(g, masterArea()); return; }
-  // The master: the last row, right under the tracks, as thin as a track (its meter along the lane).
-  {
-    auto master = masterArea();
-    g.setColour(kPanel);
-    g.fillRoundedRectangle(master.toFloat(), theme::kCorner);
-    master.removeFromLeft(2);
-    auto head = master.removeFromLeft(kTrackHead - 4).reduced(0, 2);
-    g.setColour(kCard);
-    g.fillRoundedRectangle(head.toFloat(), theme::kCorner);
-    g.setColour(kMuted);
-    g.fillRoundedRectangle(head.removeFromLeft(6).toFloat().reduced(2, 3).withX((float)head.getX() - 4), 1.5f);
-    g.setFont(juce::FontOptions(theme::kFontStrong, juce::Font::bold));
-    g.setColour(kText);
-    g.drawText(lang::tr("Master"), head.withTrimmedLeft(6), juce::Justification::centredLeft);
-    drawMeter(g, master.reduced(6, juce::jmax(3, (master.getHeight() - 10) / 2)).withTrimmedRight(kTracksScrollBar).toFloat(), master_[0], master_[1]);
-  }
   // The folded editor: one bar with what it shows; a click (or Ctrl+4, or a double-click on the divider) opens it.
   if (const auto bar = editorBar(); !bar.isEmpty()) {
     g.setColour(kPanel);
@@ -6231,7 +6316,7 @@ int MainComponent::loopEdgeAt(juce::Point<int> p) const {
 
 void MainComponent::mouseMove(const juce::MouseEvent& e) {
   if (e.eventComponent == &tracksHolder_) {
-    setHint(u8("DRAG rectangle (selects clips) · DOUBLE-CLICK on a lane: new clip · CTRL+T add a track"));
+    setHint(u8("DRAG time selection · SHIFT+DRAG rectangle (selects clips) · CTRL+T add a track"));
     return;
   }
   const auto p = e.getPosition();
@@ -6251,7 +6336,9 @@ void MainComponent::mouseMove(const juce::MouseEvent& e) {
 void MainComponent::mouseDown(const juce::MouseEvent& e) {
   if (e.eventComponent == &tracksHolder_) {  // under the last track
     if (e.mods.isPopupMenu() || startPan(e)) return;
-    startBox(e);
+    // As on a lane: a drag selects time (from the last track up to the one under the mouse); Shift/Ctrl: the rectangle.
+    if (e.mods.isShiftDown() || e.mods.isCommandDown() || rows_.empty()) startBox(e);
+    else startTimeSelection(e, rows_.back()->id());
     return;
   }
   if (libraryEdge().contains(e.getPosition())) { sideGrab_ = 1; return; }
@@ -6318,6 +6405,7 @@ int64_t MainComponent::loopSnap() const { return std::max<int64_t>(kBeat / 4, gr
 void MainComponent::mouseDrag(const juce::MouseEvent& e) {
   if (e.eventComponent == &tracksHolder_) {
     if (panning_) dragPan(e);
+    else if (timeSelecting_) dragTimeSelection(e);
     else if (boxing_) dragBox(e);
     return;
   }
@@ -6375,6 +6463,7 @@ void MainComponent::mouseDrag(const juce::MouseEvent& e) {
 void MainComponent::mouseUp(const juce::MouseEvent& e) {
   if (e.eventComponent == &tracksHolder_) {
     if (panning_) endPan();
+    else if (timeSelecting_) endTimeSelection(e);
     else if (boxing_) endBox(e);
     return;
   }
@@ -6461,6 +6550,7 @@ void MainComponent::timerCallback() {
     grabKeyboardFocus();
   if (sendPending_) { sendPending_ = false; session_->setDocument(engineDocument()); }  // a drag's latest state
   snap_ = session_->snapshot();
+  captureLiveWaves();
   // A plugin's own window changed its sound: the song has unsaved changes (its state is taken when it is saved).
   if (snap_.pluginEdits != pluginEditsSeen_) { pluginEditsSeen_ = snap_.pluginEdits; pluginsDirty_ = true; }
   updatePlayTick();
@@ -6620,7 +6710,8 @@ void MainComponent::timerCallback() {
     setView(snap_.positionTick - viewLength() * 0.05, viewLength());  // round to the start (song end or loop)
   lastPlayTick_ = snap_.playing ? snap_.positionTick : -1;
   if (audioEditor_->isVisible() && playTick_ != audioEditorTick_) { audioEditorTick_ = playTick_; audioEditor_->repaint(); }
-  repaint(masterArea());
+  if (mixerOpen_) repaint(masterArea());
+  else masterLane_.repaint();
   // Menus show the undo labels and the save state: rebuild them only when those change.
   const juce::String menuState = u8(history_.undoLabel()) + "|" + u8(history_.redoLabel()) + "|" + juce::String((int)history_.canUndo()) +
                                  juce::String((int)history_.canRedo()) + juce::String((int)unsaved()) +

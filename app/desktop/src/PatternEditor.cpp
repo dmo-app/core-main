@@ -623,10 +623,13 @@ juce::Rectangle<int> PatternEditor::velocityLane() const {
 }
 
 // The part of the pattern shown (zoom): all of it, or viewLength_ ticks from viewStart_ (Ctrl+wheel).
+// A short pattern is not stretched over the whole width (a 1-beat hat had 4 giant steps): the view shows at least a
+// bar (drums: up to the bars that fit as pads), and the time after the pattern's end is shaded.
 double PatternEditor::shownLength() const {
   const double len = currentTrack() ? (double)pattern()->lengthTicks : 1.0;
-  if (viewLength_ > 0) return std::min(viewLength_, len);
-  return drums() ? std::min(len, drumFitLength()) : len;
+  const double bar = 4.0 * doc::kPpq;
+  if (viewLength_ > 0) return std::min(viewLength_, std::max(len, bar));
+  return drums() ? std::max(bar, std::min(len, drumFitLength())) : std::max(len, bar);
 }
 
 double PatternEditor::shownStart() const {
@@ -826,6 +829,13 @@ void PatternEditor::paint(juce::Graphics& g) {
     const bool bar = tick % (4 * doc::kPpq) == 0, beat = tick % doc::kPpq == 0;
     g.setColour(bar ? kBarLine : beat ? kGridLine.brighter(0.2f) : kGridLine);
     g.drawVerticalLine(xOfTick(tick), (float)area.getY(), (float)area.getBottom());
+  }
+  // After the pattern's end (a pattern shorter than the view): shaded, it repeats from its start.
+  if (const int endX = xOfTick(pattern()->lengthTicks); endX < area.getRight()) {
+    g.setColour(theme::kBackground.withAlpha(0.6f));
+    g.fillRect(juce::Rectangle<int>::leftTopRightBottom(endX, area.getY(), area.getRight(), area.getBottom()));
+    g.setColour(kBarLine);
+    g.fillRect(endX, area.getY(), 2, area.getHeight());
   }
   // Drums: how long each open hat rings, a thin line to the next hat that cuts it (the hats are one choke group;
   // the ride and the shaker are not in it). Without a next hat: to the end of the pattern.
@@ -2081,7 +2091,8 @@ void PatternEditor::eraseAt(juce::Point<int> p) {
 void PatternEditor::zoom(double factor, double at) {
   if (!currentTrack()) return;
   const double len = (double)pattern()->lengthTicks;
-  const double length = std::clamp(shownLength() * factor, std::min(len, (double)doc::kPpq), len);
+  const double most = std::max(len, 4.0 * doc::kPpq);  // a short pattern: out to a whole bar
+  const double length = std::clamp(shownLength() * factor, std::min(len, (double)doc::kPpq), most);
   viewStart_ = at - (at - shownStart()) * length / shownLength();
   viewLength_ = length;  // the whole pattern too (drums would otherwise go back to the first view)
   placePaging();

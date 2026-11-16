@@ -217,7 +217,17 @@ bool rackStepOn(const Pattern& p, int64_t start, int64_t length) {
 }
 
 bool toggleRackStep(Pattern& p, int64_t start, int64_t length, int pitch, double velocity, double swing) {
-  if (start < 0 || start >= p.lengthTicks || length < 1) throw DocumentError("step", "outside the pattern");
+  if (start < 0 || length < 1) throw DocumentError("step", "outside the pattern");
+  // A step past the end of a shorter pattern (a 1-beat hat in a 4-bar rack): the pattern grows to the bar that holds the
+  // step, its notes repeated as the loop played them, so what was heard stays and the step lands.
+  if (start >= p.lengthTicks) {
+    const int64_t bar = 4 * kPpq;
+    int64_t bars = 1;
+    while (bars * bar < start + length && bars < kRackMaxBars) bars *= 2;  // 1, 2, 4 or 8 bars, as the rack's lengths
+    if (bars * bar < start + length) throw DocumentError("step", "outside the pattern");
+    extendPatternRepeating(p, bars * bar);
+    if (rackStepOn(p, start, length)) return true;  // the repeat already plays there: the step shows on, as clicked
+  }
   if (rackStepOn(p, start, length)) {
     p.notes.erase(std::remove_if(p.notes.begin(), p.notes.end(), [&](const Note& n) { return n.tick >= start && n.tick < start + length; }),
                   p.notes.end());

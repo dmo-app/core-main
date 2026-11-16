@@ -51,6 +51,7 @@ public:
   double chosenUiScale() const;  // the View > UI size setting (0 = Auto)
 
   void paint(juce::Graphics& g) override;
+  void paintMasterRow(juce::Graphics& g, juce::Rectangle<int> area);
   void resized() override;
   bool keyPressed(const juce::KeyPress& key) override;
   bool keyStateChanged(bool isKeyDown) override;  // releases the piano keys let go
@@ -416,6 +417,26 @@ private:
   std::unique_ptr<TimeBar> timeBar_;  // under the lanes when zoomed in: drag it along the song
   void updateTimeBar();
   juce::Component tracksHolder_;
+  // The master's row: the last row of the track list, right under the tracks and scrolling with them (as the reference).
+  struct PaintBox : juce::Component {
+    std::function<void(juce::Graphics&, juce::Rectangle<int>)> draw;
+    void paint(juce::Graphics& g) override { if (draw) draw(g, getLocalBounds()); }
+  };
+  PaintBox masterLane_;
+  // The sound of a pattern played by a plugin (the background render only knows Core's own instruments): its level,
+  // caught from the track's meter while the song plays, per 1/128 of the pattern, so the clips draw a wave too.
+  struct LiveWave {
+    uint64_t signature = 0;     // the pattern's notes and length when it was caught (a change starts again)
+    std::vector<float> peaks;   // per bin of kLiveWaveBin ticks; < 0: not heard yet
+    int lastBin = -1;
+  };
+  static constexpr int64_t kLiveWaveBin = 30;  // 1/128 note at 960 ppq
+  std::map<std::string, LiveWave> liveWaves_;  // trackId|patternId
+  void captureLiveWaves();
+public:
+  const LiveWave* liveWave(const std::string& trackId, const doc::Pattern& pattern) const;
+  static uint64_t patternSignature(const doc::Pattern& pattern);
+private:
   PatternEditor editor_{*this};
   std::unique_ptr<AudioEditor> audioEditor_;
   SCorePanel score_{*this};

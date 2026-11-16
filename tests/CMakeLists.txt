@@ -68,6 +68,10 @@ add_executable(time_range_tests time_range_tests.cpp)
 target_include_directories(time_range_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(time_range_tests PRIVATE core_domain core_engine_lib)
 add_test(NAME time_range_tests COMMAND time_range_tests)
+add_executable(pattern_rack_tests pattern_rack_tests.cpp)
+target_include_directories(pattern_rack_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pattern_rack_tests PRIVATE core_domain core_engine_lib)
+add_test(NAME pattern_rack_tests COMMAND pattern_rack_tests)
 
 # The command line: what the app and the scripts call.
 add_test(NAME cli_version COMMAND core-engine --version)
@@ -80,7 +84,7 @@ add_test(NAME cli_measure COMMAND ${CMAKE_COMMAND} -DENGINE=$<TARGET_FILE:core-e
 add_test(NAME cli_unicode COMMAND ${CMAKE_COMMAND} -DENGINE=$<TARGET_FILE:core-engine> -DWORK=${CMAKE_CURRENT_BINARY_DIR}/cli
                                   -P ${CMAKE_CURRENT_SOURCE_DIR}/cli_unicode.cmake)
 
-set_tests_properties(engine_tests domain_tests role_tests midi_tests bug_tests audit_tests audit2_tests hunt_tests bitwig_tests time_range_tests cli_version cli_demo_render cli_measure cli_unicode
+set_tests_properties(engine_tests domain_tests role_tests midi_tests bug_tests audit_tests audit2_tests hunt_tests bitwig_tests time_range_tests pattern_rack_tests cli_version cli_demo_render cli_measure cli_unicode
                      PROPERTIES LABELS merge TIMEOUT 300)
 
 # The app's own end-to-end test (play, undo, save/reopen, export... on the null device, with its test plugins).

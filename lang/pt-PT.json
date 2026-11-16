@@ -5,6 +5,8 @@
  "name": "Português",
  "about": "Core in European Portuguese. Keys are the English texts exactly as the code, help and racks write them; a {} in a key is a hole that matches any text (numbers, names) and goes to the same place in the words. Texts with no entry stay in English. Names (styles, presets, plugins, knob names) stay in English on purpose. Check: python tools/i18n/extract_strings.py --check. Contract: docs/contracts/core-language.md.",
  "strings": {
+  "DRAG time selection · SHIFT+DRAG rectangle (selects clips) · CTRL+T add a track": "ARRASTAR seleção de tempo · SHIFT+ARRASTAR retângulo (seleciona clips) · CTRL+T nova pista",
+  "Core's tools in one device (the AI calls the same ones). Click: open / fold.": "As tools do Core num só dispositivo (a AI chama as mesmas). Clique: abrir / recolher.",
   "CLICK / DRAG the start line · DRAG UP/DOWN zoom (then sideways: move along) · RIGHT-CLICK sections · CTRL+WHEEL zoom": "CLIQUE / ARRASTAR a linha de início · ARRASTAR CIMA/BAIXO zoom (depois para o lado: andar) · CLIQUE DIREITO secções · CTRL+RODA zoom",
   "CLICK open the editor (CTRL+4) · CTRL+B focus on the tracks": "CLIQUE abre o editor (CTRL+4) · CTRL+B foco nas pistas",
   "CLICK select · CTRL/SHIFT+CLICK more tracks · RIGHT-CLICK track menu · DOUBLE-CLICK plugin window": "CLIQUE seleciona · CTRL/SHIFT+CLIQUE mais pistas · CLIQUE DIREITO menu da pista · DUPLO CLIQUE janela do plugin",
