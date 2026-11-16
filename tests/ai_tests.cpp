@@ -1050,7 +1050,13 @@ void vital() {
   fs::create_directories(dir / "b" / "Vital.vst3" / "Contents");  // a VST3 bundle is a folder
   const auto found = ai::findSynth({dir / "a", dir / "b"});
   CHECK(found && *found == dir / "b" / "Vital.vst3");
+  // The AI's plugins: today the synth, looked for the same way.
+  const auto plugins = ai::aiPlugins();
+  CHECK(plugins.size() == 1 && plugins[0].file == "Vital.vst3");
+  const auto again = ai::findAiPlugin(plugins[0], {dir / "a", dir / "b"});
+  CHECK(again && *again == dir / "b" / "Vital.vst3");
   fs::remove_all(dir);
+  CHECK(!ai::findAiPlugin(plugins[0], {dir / "b"}));
 
   const json vital = {{"format", "VST3"}, {"id", "VST3-Vital-1"}, {"name", "Vital"}, {"vendor", "Vital Audio"}, {"file", "C:/x/Vital.vst3"}};
   const json other = {{"format", "VST3"}, {"id", "VST3-Serum-2"}, {"name", "Serum 2"}, {"vendor", "Xfer"}, {"file", "C:/x/Serum2.vst3"}};

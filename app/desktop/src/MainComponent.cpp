@@ -3277,6 +3277,18 @@ void MainComponent::openAiChat() {
     h.keyFolder = bridgeFolder();
     h.apply = [this](const json& proposal) { return applyAiProposal(proposal); };
     h.zone = [this] { return aiZoneNow(); };
+    h.instruments = [this] { return plugins_->instruments(); };
+    h.scanPlugins = [this](const juce::Array<juce::File>& files, std::function<void(int, int)> done) {
+      juce::Component::SafePointer<MainComponent> self(this);
+      notice_ = u8("Scanning the AI's plugins...");
+      plugins_->scanOnly(files, [this, self, done](int found, int failed) {
+        if (self == nullptr) return;
+        notice_ = u8("AI plugins: ") + juce::String(found) + u8(" found") + (failed ? u8(", ") + juce::String(failed) + u8(" with problems") : juce::String()) + ".";
+        menuItemsChanged();
+        repaint();
+        if (done) done(found, failed);
+      });
+    };
     aiPanel_ = std::make_unique<AiPanel>(std::move(h));
     aiPanel_->onLayoutChange = [this] { resized(); repaint(); };
     aiPanel_->onClose = [this] { toggleAiChat(); };

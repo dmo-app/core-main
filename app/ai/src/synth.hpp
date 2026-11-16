@@ -43,4 +43,18 @@ inline std::optional<std::filesystem::path> findSynth(const std::vector<std::fil
   return std::nullopt;
 }
 
+// The plugins the AI uses, as files to look for (Settings of the AI panel scans only these): today the synth.
+struct AiPlugin {
+  std::string name, file, download;
+};
+inline std::vector<AiPlugin> aiPlugins() { return {{synth().name, synth().file, synth().download}}; }
+// Where a plugin of the AI is on this computer, or none.
+inline std::optional<std::filesystem::path> findAiPlugin(const AiPlugin& p, const std::vector<std::filesystem::path>& folders = vst3Folders()) {
+  for (const auto& f : folders) {
+    std::error_code ec;
+    if (std::filesystem::exists(f / p.file, ec)) return f / p.file;
+  }
+  return std::nullopt;
+}
+
 }  // namespace core::ai

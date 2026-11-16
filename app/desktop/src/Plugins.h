@@ -33,6 +33,8 @@ public:
 
   // In the background; onDone (message thread) gets how many plugins were found and how many files failed.
   void scan(std::function<void(int found, int failed)> onDone);
+  // Only these plugin files (the AI's, Settings of the AI panel): the rest of the list stays as it is.
+  void scanOnly(const juce::Array<juce::File>& files, std::function<void(int found, int failed)> onDone);
   bool scanning() const { return scanning_; }
   juce::String progress() const;  // "3 / 12: Something.vst3"
   // One file, now (the self-test uses it with its own test plugins).
@@ -42,6 +44,7 @@ public:
   static json qualifyFile(const juce::File& engine, const juce::File& plugin, juce::String* problem);
 
 private:
+  void scanFiles(juce::Array<juce::File> files, bool all, std::function<void(int, int)> onDone);
   void load();
   void store() const;
 

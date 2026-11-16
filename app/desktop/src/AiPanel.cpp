@@ -1,4 +1,5 @@
 #include "AiPanel.h"
+#include "synth.hpp"
 #include "models.hpp"
 #include "samples.hpp"
 #include <algorithm>
@@ -123,7 +124,20 @@ public:
     count_.setText(juce::String(n) + (n == 1 ? u8(" recipe in the memory") : u8(" recipes in the memory")), juce::dontSendNotification);
     count_.setColour(juce::Label::textColourId, kMuted);
     addAndMakeVisible(count_);
-    setSize(420, 440);
+    // The plugins the AI uses (Diogo, 2026-11-16): look for those only, not the whole VST3 folder.
+    label(pluginsLabel_, "PLUGINS THE AI USES");
+    pluginStatus_.setColour(juce::Label::textColourId, kText);
+    addAndMakeVisible(pluginStatus_);
+    scanAi_.setTooltip(u8("Scans only the AI's plugins (quick); the rest of the plugin list stays as it is"));
+    scanAi_.onClick = [this] { scanAiPlugins(); };
+    addAndMakeVisible(scanAi_);
+    getPlugin_.onClick = [this] {
+      for (const auto& p : ai::aiPlugins())
+        if (!ai::findAiPlugin(p)) juce::URL(u8(p.download)).launchInDefaultBrowser();
+    };
+    addChildComponent(getPlugin_);
+    refreshPlugins();
+    setSize(420, 520);
   }
 
   void paint(juce::Graphics& g) override { g.fillAll(kPanel); }
@@ -163,16 +177,65 @@ public:
     place_.setBounds(last.removeFromLeft(200));
     last.removeFromLeft(10);
     folder_.setBounds(last);
+    r.removeFromTop(10);
+    row(pluginsLabel_, 18);
+    row(pluginStatus_, 22);
+    auto pb = r.removeFromTop(kSpaceButton);
+    scanAi_.setBounds(pb.removeFromLeft(190));
+    pb.removeFromLeft(6);
+    getPlugin_.setBounds(pb.removeFromLeft(140));
   }
 
 private:
   void changed() { owner_.savePrefs(); }
+
+  // Each plugin of the AI: on this computer or not, and in Core's scanned list or not.
+  void refreshPlugins() {
+    juce::StringArray lines;
+    bool missing = false;
+    const auto known = owner_.host_.instruments ? owner_.host_.instruments() : std::vector<json>();
+    for (const auto& p : ai::aiPlugins()) {
+      const auto file = ai::findAiPlugin(p);
+      bool listed = false;
+      for (const auto& k : known)
+        listed |= juce::String::fromUTF8(k.value("name", std::string()).c_str()).equalsIgnoreCase(u8(p.name)) ||
+                  juce::String::fromUTF8(k.value("file", std::string()).c_str()).endsWithIgnoreCase(u8(p.file));
+      missing |= !file;
+      lines.add(u8(p.name) + u8(": ") +
+                (!file ? u8("not installed (free at ") + u8(p.download) + ")"
+                       : listed ? u8("installed and in Core's list") : u8("installed, not scanned yet")));
+    }
+    pluginStatus_.setText(lines.joinIntoString("  ·  "), juce::dontSendNotification);
+    getPlugin_.setButtonText(u8("Get ") + u8(ai::synth().name));
+    getPlugin_.setVisible(missing);
+  }
+
+  void scanAiPlugins() {
+    juce::Array<juce::File> files;
+    for (const auto& p : ai::aiPlugins())
+      if (const auto f = ai::findAiPlugin(p)) files.add(juce::File(juce::String(f->wstring().c_str())));
+    if (files.isEmpty() || !owner_.host_.scanPlugins) {
+      refreshPlugins();
+      return;
+    }
+    scanAi_.setEnabled(false);
+    pluginStatus_.setText(u8("Scanning the AI's plugins…"), juce::dontSendNotification);
+    juce::Component::SafePointer<Settings> self(this);
+    owner_.host_.scanPlugins(files, [self](int, int failed) {
+      if (self == nullptr) return;
+      self->scanAi_.setEnabled(true);
+      self->refreshPlugins();
+      if (failed) self->pluginStatus_.setText(self->pluginStatus_.getText() + u8(" (a plugin failed its check: Plugins menu)"), juce::dontSendNotification);
+    });
+  }
 
   AiPanel& owner_;
   juce::Label modelLabel_, effortLabel_, modeLabel_, limitLabel_, memoryLabel_, placeLabel_, count_;
   juce::ComboBox model_, effort_, mode_, place_, limit_;
   juce::ToggleButton useMemory_, keepMemory_;
   juce::TextButton exportMemory_{"Export…"}, importMemory_{"Import…"}, trainMemory_{"For training…"}, folder_{"Open the AI folder"};
+  juce::Label pluginsLabel_, pluginStatus_;
+  juce::TextButton scanAi_{"Scan the AI's plugins"}, getPlugin_;
 };
 
 AiPanel::AiPanel(Host host) : host_(std::move(host)) {
