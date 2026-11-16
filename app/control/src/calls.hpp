@@ -30,6 +30,7 @@
 #include <string>
 #include <vector>
 #include "document.hpp"
+#include "pcore.hpp"
 #include "samples.hpp"
 
 namespace core::control {
@@ -70,7 +71,8 @@ struct CoreFunction {
 // The functions this Core can call now: the built-in effects, every Style FX (Core's own devices and presets,
 // doc::applyNativeRack, no macros), Core's own plugins and "sample". Built every time: a new Style FX file changes
 // it at once.
-std::vector<CoreFunction> buildFunctions();
+// With a P-Core catalogue, "pcore" lists its parts, shapes, styles and scales (else it takes any, checked when applied).
+std::vector<CoreFunction> buildFunctions(const doc::PCoreCatalog* pcore = nullptr);
 // By id, or by the part after the family ("buildup/roll", "reverb") when only one function has it.
 const CoreFunction* findFunction(const std::vector<CoreFunction>& functions, const std::string& id);
 
@@ -100,6 +102,23 @@ json coreState(const std::vector<CoreFunction>& functions, const doc::Document& 
 
 // ---- a proposal: calls, checked
 
+// The part of the song Diogo selected for the AI (2026-11-16: "a AI só olha para aquela zona", for build-ups, rolls,
+// drops): the selected tracks and the song ticks [startTick, endTick), whole bars. A proposal that carries a "zone"
+// changes only those tracks (and new tracks it makes), and what plays in time only there:
+//   - "section": "Seleção" (kZoneSection) is the zone's bars; a song section is cut to the zone (outside it: left out);
+//   - P-Core with no section writes the zone's bars; the zone gets its own clip and pattern (edit.hpp zonePattern);
+//   - Arrange and Plays work on whole sections: only on one inside the zone; the song shape is left out;
+//   - a setting of the whole track (mix, an effect) is kept, with a warning that it is not only the selected bars.
+struct Zone {
+  std::vector<std::string> tracks;  // track ids
+  int64_t startTick = 0, endTick = 0;
+  bool active() const { return endTick > startTick && !tracks.empty(); }
+  json toJson() const;
+};
+Zone zoneFrom(const json& raw);  // raw["zone"]: {"tracks": [...], "startTick", "endTick"}; inactive when missing or bad
+extern const char* const kZoneSection;  // "Seleção"
+bool isZoneSection(const std::string& name);  // Seleção, Selecao, selection (any case)
+
 struct Call {
   const CoreFunction* fn = nullptr;
   std::string trackId, trackName;  // "" = Diogo chooses when applying; "master" for the master (effects only)
@@ -113,12 +132,14 @@ struct Call {
   std::string open;                    // "open": "effects", "instrument", "patterns", "mixer" or an effect id
   std::map<std::string, std::string> texts;  // text choices, checked against the function's options
   std::vector<std::string> warnings;   // types that do not fit: kept, shown
+  bool zoneSection = false;            // its "section" was the zone (kZoneSection)
 };
 
 struct Proposal {
   std::string id, summary;
   std::vector<Call> calls;
   std::vector<std::string> problems;  // why a call or a value was left out (shown, never applied)
+  Zone zone;                          // raw["zone"]: what the proposal may change (inactive = the whole song)
   json raw;
   bool needsTrack() const;            // calls without a track (Diogo picks one when applying)
   std::vector<std::string> warnings() const;  // of every call
@@ -134,6 +155,7 @@ std::string describeCall(const Call& call);
 // What applying needs from the app.
 struct ApplyEnv {
   const doc::SampleIndex* samples = nullptr;
+  const doc::PCoreCatalog* pcore = nullptr;  // "pcore" calls (pcore/styles.json)
 };
 // Makes every call of the proposal on `song` (the caller commits it as one undo step). chosenTrack: for the calls
 // without a track ("master" for the master). Throws doc::DocumentError when a call is refused: then nothing

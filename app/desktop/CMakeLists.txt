@@ -15,7 +15,7 @@ if(WIN32)
   set_source_files_properties(${core_juce_code}/CoreApp_resources.rc PROPERTIES OBJECT_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/resources/core-icon.png;${CMAKE_CURRENT_SOURCE_DIR}/resources/core-icon-small.png;${core_juce_code}/icon.ico")
 endif()
-target_sources(CoreApp PRIVATE src/Main.cpp src/MainComponent.cpp src/EngineSession.cpp src/PatternEditor.cpp src/Waveforms.cpp src/Stretch.cpp src/Plugins.cpp src/Autosave.cpp src/Diagnostics.cpp src/Theme.cpp src/LibraryPanel.cpp src/InspectorPanel.cpp src/Settings.cpp src/Keymap.cpp src/Mixer.cpp src/SCorePanel.cpp src/ChoiceDialog.cpp src/BuildupPanel.cpp src/PatternsWindow.cpp src/ToolDock.cpp src/ProposalsPanel.cpp src/Language.cpp)
+target_sources(CoreApp PRIVATE src/Main.cpp src/MainComponent.cpp src/EngineSession.cpp src/PatternEditor.cpp src/Waveforms.cpp src/Stretch.cpp src/Plugins.cpp src/Autosave.cpp src/Diagnostics.cpp src/Theme.cpp src/LibraryPanel.cpp src/InspectorPanel.cpp src/Settings.cpp src/Keymap.cpp src/Mixer.cpp src/SCorePanel.cpp src/ChoiceDialog.cpp src/BuildupPanel.cpp src/PatternsWindow.cpp src/ToolDock.cpp src/ProposalsPanel.cpp src/AiPanel.cpp src/Language.cpp)
 target_sources(CoreApp PRIVATE src/GlobalKeys.cpp)  # Space plays / stops in every window
 target_compile_definitions(CoreApp PRIVATE
   JUCE_WEB_BROWSER=0
@@ -23,7 +23,7 @@ target_compile_definitions(CoreApp PRIVATE
   JUCE_APPLICATION_NAME_STRING="$<TARGET_PROPERTY:CoreApp,JUCE_PRODUCT_NAME>"
   JUCE_APPLICATION_VERSION_STRING="$<TARGET_PROPERTY:CoreApp,JUCE_VERSION>")
 target_link_libraries(CoreApp
-  PRIVATE juce::juce_gui_basics juce::juce_audio_devices juce::juce_audio_formats core_engine_client core_domain core_previews core_version core_control core_sampling
+  PRIVATE juce::juce_gui_basics juce::juce_audio_devices juce::juce_audio_formats core_engine_client core_domain core_previews core_version core_control core_ai core_sampling
           $<$<PLATFORM_ID:Windows>:dbghelp>
   PUBLIC juce::juce_recommended_config_flags)
 
@@ -53,7 +53,11 @@ add_custom_command(TARGET CoreApp POST_BUILD
   # Patterns of the Library's Patterns tab (KBBB, hats, cymbals, build-ups...); Diogo's own go to %APPDATA%\Core\Patterns.
   COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/../../patterns $<TARGET_FILE_DIR:CoreApp>/patterns
   # PCore: styles, parts, shapes and scales (docs/contracts/core-pcore.md).
-  COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/../../pcore $<TARGET_FILE_DIR:CoreApp>/pcore)
+  COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/../../pcore $<TARGET_FILE_DIR:CoreApp>/pcore
+  # The AI's style knowledge base (built from ai/knowledge by core_ai_knowledge); the AI package installs it the same way.
+  COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:CoreApp>/ai
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CORE_AI_KNOWLEDGE_DB} $<TARGET_FILE_DIR:CoreApp>/ai/core-ai-knowledge.sqlite)
+add_dependencies(CoreApp core_ai_knowledge)
 
 
 # Development package (M1c): a zip with Core.exe, core-engine.exe and the demo, runnable on a Windows
@@ -68,6 +72,7 @@ add_custom_target(core-package
   COMMAND ${CMAKE_COMMAND} -E copy_directory $<TARGET_FILE_DIR:CoreApp>/lang ${CMAKE_BINARY_DIR}/package/Core/lang
   COMMAND ${CMAKE_COMMAND} -E copy_directory $<TARGET_FILE_DIR:CoreApp>/patterns ${CMAKE_BINARY_DIR}/package/Core/patterns
   COMMAND ${CMAKE_COMMAND} -E copy_directory $<TARGET_FILE_DIR:CoreApp>/pcore ${CMAKE_BINARY_DIR}/package/Core/pcore
+  COMMAND ${CMAKE_COMMAND} -E copy_directory $<TARGET_FILE_DIR:CoreApp>/ai ${CMAKE_BINARY_DIR}/package/Core/ai
   COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_BINARY_DIR}/package
           ${CMAKE_COMMAND} -E tar cf ${CMAKE_BINARY_DIR}/Core-windows-x64.zip --format=zip Core
   DEPENDS CoreApp

@@ -20,6 +20,7 @@
 #include "InspectorPanel.h"
 #include "LibraryPanel.h"
 #include "PatternEditor.h"
+#include "AiPanel.h"
 #include "PatternsWindow.h"
 #include "Plugins.h"
 #include "Waveforms.h"
@@ -164,6 +165,8 @@ private:
   std::vector<control::CoreFunction> callableFunctions() const;
   void pollBridge();          // the timer: the state written when it changed, the inbox read when it changed
   void showProposals();       // the AI button
+  void openAiChat();          // AI > AI chat: Core's own AI (AiPanel), docked in this window
+  std::vector<std::string> applyAiProposal(const nlohmann::json& proposal);  // one undo step; throws when refused
   void applyProposal(int index, juce::Component* button);
   void finishProposal(int index, const std::string& status, const json& result);
   int indexOf(const std::string& proposalId) const;
@@ -244,6 +247,13 @@ private:
   // plays a pattern, the engine gets that pattern alone, looped (doc::rackPlayDocument); stopping gives the song back.
   void openPatterns();
   std::unique_ptr<PatternsWindow> patternsWindow_;
+  std::unique_ptr<ai::Knowledge> aiKnowledge_;  // the AI's style knowledge base (ai/ beside Core.exe), opened with the chat
+  // Core's own AI chat (AI > AI chat, or the "AI" button at the bottom right), docked at the right side or the bottom.
+  std::unique_ptr<AiPanel> aiPanel_;
+  juce::TextButton aiChatButton_{"AI"};
+  bool aiPanelShown() const { return aiPanel_ && aiPanel_->isVisible(); }
+  juce::Rectangle<int> aiPanelArea() const;
+  void toggleAiChat();
   struct PatternPlay { std::string slot; std::optional<doc::Document> preview; int64_t openTick = 0; };
   std::optional<PatternPlay> patternPlay_;
   int64_t patternSongTick_ = 0;  // where the song was when the pattern started playing
@@ -445,6 +455,8 @@ private:
   void dragBox(const juce::MouseEvent& e);
   void endBox(const juce::MouseEvent& e);
   bool clipBoxed(const std::string& trackId, const std::string& clipId) const { return boxClips_.count({trackId, clipId}) > 0; }
+  control::Zone aiZone_;                 // the box's tracks and bars, for the AI (UI state, never saved)
+  control::Zone aiZoneNow() const;
   void beginBoxMove();
   void moveBox(int64_t delta);
   void endBoxMove();

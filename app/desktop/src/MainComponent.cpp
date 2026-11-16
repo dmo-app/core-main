@@ -2043,6 +2043,10 @@ MainComponent::MainComponent(EngineSession::Options options, doc::Document docum
   aiBadge_ = std::make_unique<AiBadge>();
   aiBadge_->onPress = [this](bool popup) { aiBadgePressed(popup); };
   addAndMakeVisible(*aiBadge_);
+  aiChatButton_.setTooltip(u8("Core's AI: opens or closes the chat (beats, structure, changes to parts)"));
+  aiChatButton_.setWantsKeyboardFocus(false);
+  aiChatButton_.onClick = [this] { toggleAiChat(); };
+  addAndMakeVisible(aiChatButton_);
   setWantsKeyboardFocus(true);
   if (realOutput_) {  // the user's MIDI keyboard, if it is plugged in
     editorHeight_ = settings_.getUserSettings()->getIntValue("editorHeight", 0);
@@ -2067,6 +2071,7 @@ MainComponent::MainComponent(EngineSession::Options options, doc::Document docum
 MainComponent::~MainComponent() {
   globalKeys_.reset();  // no more keys into a component being destroyed
   patternsWindow_.reset();  // its buttons call this window
+  aiPanel_.reset();         // its Apply calls this window (it keeps its chat on disk as it goes)
   if (settingsWindow_ != nullptr) delete settingsWindow_.getComponent();  // it shows this window's settings and jobs
   if (sampleScan_) sampleScan_->stop = true;  // its thread owns what it uses and ends at the next file
   if (analysisJob_) analysisJob_->stop = true;  // the same
@@ -2348,6 +2353,7 @@ void MainComponent::selectTrack(const std::string& trackId) {
   scoreOpen_ = false;
   automationOpen_ = false;
   boxClips_.clear();
+  aiZone_ = control::Zone{};
   if (trackId != selectedTrack_) { selectedTrack_ = trackId; selectedClip_.clear(); }
   editor_.setTrack(trackId);
   if (mixer_ && mixerOpen_ && !trackId.empty()) mixer_->select(trackId);  // a click on a track row chooses its strip
@@ -2408,6 +2414,7 @@ void MainComponent::selectClip(const std::string& trackId, const std::string& cl
   scoreOpen_ = false;
   automationOpen_ = false;
   boxClips_.clear();
+  aiZone_ = control::Zone{};
   if (trackId != editor_.track()) releaseAllKeys();
   selectedTrack_ = trackId;
   selectedClip_ = clipId;
@@ -2439,6 +2446,7 @@ void MainComponent::endBox(const juce::MouseEvent& e) {
   if (boxOverlay_) boxOverlay_->repaint();
   const juce::Rectangle<int> box(boxFrom_, boxTo_);
   if (box.getWidth() < 4 && box.getHeight() < 4) {  // a click: what it did on the press stays
+    if (!boxAdd_) aiZone_ = control::Zone{};
     // A click on an empty part of a lane also puts the start line there (to the beat), as in Ableton. Ctrl adds
     // to the selection and leaves the line where it is; while playing, only the ruler moves it (no jump by accident).
     if (!boxAdd_ && !snap_.playing) {
@@ -2473,6 +2481,18 @@ void MainComponent::endBox(const juce::MouseEvent& e) {
   for (const auto& t : tracks) if (t != shown) others.insert(t);
   alsoSelected_ = others;
   if (clips.size() > 1) boxClips_ = clips;
+  // The AI's zone (Diogo 2026-11-16): the selected tracks over the box's bars, whole bars.
+  {
+    const int x0 = getLocalPoint(nullptr, juce::Point<int>(box.getX(), box.getY())).x;
+    const int x1 = getLocalPoint(nullptr, juce::Point<int>(box.getRight(), box.getY())).x;
+    const int64_t a = tickAt(x0, 1, true), b = tickAt(x1, 1, true);
+    control::Zone z;
+    z.tracks = selectedTracks();
+    z.startTick = (std::max<int64_t>(0, a) / kBar) * kBar;
+    z.endTick = ((std::max(a, b) + kBar - 1) / kBar) * kBar;
+    if (z.endTick <= z.startTick) z.endTick = z.startTick + kBar;
+    aiZone_ = z;
+  }
   const size_t nTracks = selectedTracks().size();
   const juce::String n((int)nTracks);
   if (clips.size() > 1)
@@ -3238,7 +3258,85 @@ void MainComponent::setAiControl(bool on) {
 }
 
 std::vector<control::CoreFunction> MainComponent::callableFunctions() const {
-  return control::buildFunctions();
+  return control::buildFunctions(pcoreCatalog_ ? &*pcoreCatalog_ : nullptr);
+}
+
+// Core's own AI (2026-11-16): the chat window. Its proposals are checked here and applied as one "AI: ..." step.
+void MainComponent::openAiChat() {
+  if (!aiPanel_) {
+    AiPanel::Host h;
+    h.song = [this]() -> const doc::Document& { return history_.current(); };
+    h.functions = [this] { return callableFunctions(); };
+    h.pcore = pcoreCatalog_ ? &*pcoreCatalog_ : nullptr;
+    if (!aiKnowledge_) {  // ai/core-ai-knowledge.sqlite beside Core.exe (the AI package's), opened once
+      const juce::File db = juce::File::getSpecialLocation(juce::File::currentExecutableFile).getParentDirectory().getChildFile("ai").getChildFile("core-ai-knowledge.sqlite");
+      std::string why;
+      aiKnowledge_ = ai::Knowledge::open(pathOf(db), &why);
+      logLine(aiKnowledge_ ? "AI: knowledge base " + u8(aiKnowledge_->from()) + " (" + juce::String(aiKnowledge_->size()) + " chunks)" : "AI: " + u8(why));
+    }
+    h.knowledge = aiKnowledge_.get();
+    h.keyFolder = bridgeFolder();
+    h.apply = [this](const json& proposal) { return applyAiProposal(proposal); };
+    h.zone = [this] { return aiZoneNow(); };
+    aiPanel_ = std::make_unique<AiPanel>(std::move(h));
+    aiPanel_->onLayoutChange = [this] { resized(); repaint(); };
+    aiPanel_->onClose = [this] { toggleAiChat(); };
+    addChildComponent(*aiPanel_);
+  }
+  aiPanel_->setVisible(true);
+  aiPanel_->toFront(false);
+  resized();
+  repaint();
+  aiPanel_->focusInput();
+}
+
+void MainComponent::toggleAiChat() {
+  if (aiPanelShown()) {
+    aiPanel_->setVisible(false);  // the chat stays (and on disk)
+    resized();
+    repaint();
+    return;
+  }
+  openAiChat();
+}
+
+// The chat's place: the right side of the work area (full height under the top bar), or its bottom.
+juce::Rectangle<int> MainComponent::aiPanelArea() const {
+  auto r = workArea().withTrimmedTop(kTopBar + 4).reduced(16, 0).withTrimmedBottom(16);
+  if (!aiPanel_) return {};
+  if (aiPanel_->dock() == AiPanel::Dock::Side) return r.removeFromRight(std::min(aiPanel_->sideWidth(), r.getWidth() / 2));
+  return r.removeFromBottom(std::min(aiPanel_->bottomHeight(), r.getHeight() / 2));
+}
+
+// The selection the AI works in: the box's tracks that are still there, over its bars; inactive without a box.
+control::Zone MainComponent::aiZoneNow() const {
+  control::Zone z = aiZone_;
+  const doc::Document& d = history_.current();
+  z.tracks.erase(std::remove_if(z.tracks.begin(), z.tracks.end(), [&](const std::string& id) { return !d.findTrack(id); }), z.tracks.end());
+  return z.active() ? z : control::Zone{};
+}
+
+std::vector<std::string> MainComponent::applyAiProposal(const json& proposal) {
+  const doc::SampleIndex* samples = hasSampleIndex_ ? &sampleIndex_ : nullptr;
+  const control::Proposal p = control::validateProposal(proposal, callableFunctions(), history_.current(), samples);
+  if (p.calls.empty()) throw doc::DocumentError("calls", "nothing in the proposal can be applied");
+  // Checked again against the song as it is now: if it changed since and a call no longer fits, nothing is applied
+  // (never a part of what was shown). Ask the AI again.
+  if (const std::string why = ai::changedSince(proposal, p); !why.empty()) throw doc::DocumentError("calls", why);
+  const std::string target = selectedTrack_.empty() ? editor_.track() : selectedTrack_;  // calls without a track
+  if (p.needsTrack() && !history_.current().findTrack(target)) throw doc::DocumentError("calls", "select a track first: some calls name none");
+  control::ApplyEnv env{samples, pcoreCatalog_ ? &*pcoreCatalog_ : nullptr};
+  doc::Document probe = history_.current();  // refused here, before any undo step
+  const std::vector<std::string> lines = control::applyProposal(probe, p, target, env);
+  std::string label = control::kAiLabelPrefix + (p.summary.empty() ? lines.front() : p.summary);
+  if (label.size() > 70) {
+    size_t cut = 70;
+    while (cut > 0 && ((unsigned char)label[cut] & 0xC0) == 0x80) --cut;
+    label = label.substr(0, cut) + "\xE2\x80\xA6";
+  }
+  edit([&](doc::Document& d) { control::applyProposal(d, p, target, env); }, u8(label));
+  notice_ = u8(label) + u8(" (Edit > Undo takes it back)");
+  return lines;
 }
 
 // Every second: the state AICORE reads (written when it changed), and the proposals waiting.
@@ -3331,7 +3429,7 @@ void MainComponent::applyProposal(int index, juce::Component* button) {
   if (p.calls.empty()) return;
   auto run = [this, item, fns, samples](const std::string& target) {
     const control::Proposal again = control::validateProposal(item.proposal, fns, history_.current(), samples);
-    control::ApplyEnv env{samples};
+    control::ApplyEnv env{samples, pcoreCatalog_ ? &*pcoreCatalog_ : nullptr};
     std::vector<std::string> lines;
     try {
       doc::Document probe = history_.current();  // refused here, before any undo step
@@ -3400,7 +3498,7 @@ void MainComponent::aiBadgePressed(bool popup) {
   if (aiAllowed_ && !inbox_.empty()) showProposals();
 }
 
-namespace { enum AicoreMenuId { kAicoreOpen = 2000, kAicoreProposals, kAicoreBridge, kAicoreChoose, kAicoreAllow }; }
+namespace { enum AicoreMenuId { kAicoreOpen = 2000, kAicoreProposals, kAicoreBridge, kAicoreChoose, kAicoreAllow, kAiChat, kAiFolder }; }
 
 // The same items in the AICORE menu (menu bar) and on the button's right-click.
 static void addAicoreItems(juce::PopupMenu& menu, bool allowed, bool canSwitch, int waiting, const juce::String& state) {
@@ -4818,6 +4916,7 @@ juce::String MainComponent::MenuBar::getTooltip() {
       "Cut or render samples, the audio output and the MIDI input",
       "Core's own plugins: the song, the instruments, the gestures, each in its window",
       "Your sample library: its folder, rescan, the best samples for this song",
+      "Core's AI: ask for a beat, a song structure or a change to a part (a proposal you apply)",
       "AICORE, Core's add-on: open its chat, its proposals, its folder",
       "Logs (problems, crash dumps) and the version",
   };
@@ -4833,7 +4932,7 @@ juce::String MainComponent::MenuBar::getTooltip() {
   return {};
 }
 
-juce::StringArray MainComponent::getMenuBarNames() { return {"File", "Edit", "View", "Audio", "Plugins", "Samples", "AICORE", "Help"}; }
+juce::StringArray MainComponent::getMenuBarNames() { return {"File", "Edit", "View", "Audio", "Plugins", "Samples", "AI", "AICORE", "Help"}; }
 
 juce::PopupMenu MainComponent::getMenuForIndex(int index, const juce::String&) {
   juce::PopupMenu menu;
@@ -4945,9 +5044,12 @@ juce::PopupMenu MainComponent::getMenuForIndex(int index, const juce::String&) {
     menu.addItem(juce::PopupMenu::Item(u8("Shuffle samples (another good pick)")).setID(kSampleShuffle).setEnabled(hasSampleIndex_));
     menu.addItem(juce::PopupMenu::Item(u8("Suggest samples for new songs from style templates")).setID(kSampleAuto)
                      .setTicked(settings_.getUserSettings()->getBoolValue("suggestSamples", true)));
-  } else if (index == 5) {  // AICORE: the same items as the AICORE button's right-click
+  } else if (index == 5) {  // Core's own AI (2026-11-16): the chat window, apart from AICORE
+    menu.addItem(juce::PopupMenu::Item(u8("AI chat…")).setID(kAiChat));
+    menu.addItem(juce::PopupMenu::Item(u8("Open the AI folder (the key file)")).setID(kAiFolder));
+  } else if (index == 6) {  // AICORE: the same items as the AICORE button's right-click
     addAicoreItems(menu, aiAllowed_, realOutput_, aiAllowed_ ? (int)inbox_.size() : 0, aicoreState(aicore_, aiAllowed_));
-  } else if (index == 6) {
+  } else if (index == 7) {
     menu.addItem(juce::PopupMenu::Item(u8("Open the logs folder (problems, crash dumps)")).setID(kOpenLogs));
     menu.addSeparator();
     menu.addItem(juce::PopupMenu::Item(u8("About Core (version ") + CORE_VERSION + ")").setID(kAbout));
@@ -4992,6 +5094,8 @@ juce::PopupMenu MainComponent::getMenuForIndex(int index, const juce::String&) {
 
 void MainComponent::menuItemSelected(int id, int) {
   switch (id) {
+    case kAiChat: openAiChat(); break;
+    case kAiFolder: bridgeFolder().createDirectory(); bridgeFolder().startAsProcess(); break;
     case kAicoreOpen: openAicore(); break;
     case kAicoreProposals: showProposals(); break;
     case kAicoreAllow: setAiControl(!aiAllowed_); break;
@@ -5106,7 +5210,15 @@ void MainComponent::toggleSidePanel(bool library) {
 
 
 juce::Rectangle<int> MainComponent::topBar() const { return workArea().removeFromTop(kTopBar); }
-juce::Rectangle<int> MainComponent::content() const { return workArea().withTrimmedTop(kTopBar + 4).reduced(16, 0).withTrimmedBottom(16); }
+juce::Rectangle<int> MainComponent::content() const {
+  auto r = workArea().withTrimmedTop(kTopBar + 4).reduced(16, 0).withTrimmedBottom(16);
+  if (aiPanelShown()) {  // the AI chat takes its side (or the bottom); the song keeps the rest
+    const auto chat = aiPanelArea();
+    if (aiPanel_->dock() == AiPanel::Dock::Side) r.removeFromRight(chat.getWidth() + 8);
+    else r.removeFromBottom(chat.getHeight() + 8);
+  }
+  return r;
+}
 // Under the top bar, right of the page rail: where the panels and pages go.
 juce::Rectangle<int> MainComponent::body() const { return content().withTrimmedLeft(kRail + 8); }
 juce::Rectangle<int> MainComponent::centre() const {
@@ -5162,6 +5274,13 @@ juce::Rectangle<int> MainComponent::dividerArea() const {
 void MainComponent::resized() {
   auto footer = getLocalBounds().removeFromBottom(kFooter);
   if (aiBadge_) aiBadge_->setBounds(footer.removeFromRight(96).reduced(4, 0));
+  aiChatButton_.setBounds(footer.removeFromRight(56).reduced(4, 3));
+  aiChatButton_.setToggleState(aiPanelShown(), juce::dontSendNotification);
+  if (aiPanelShown()) {
+    const auto whole = workArea().withTrimmedTop(kTopBar + 4).reduced(16, 0).withTrimmedBottom(16);
+    aiPanel_->setLimits(whole.getWidth() / 2, whole.getHeight() / 2);
+    aiPanel_->setBounds(aiPanelArea());
+  }
   // Top bar: the logo, the menus, the song's name; the transport (icons), tempo and position in the middle;
   // the engine's state on the right.
   auto top = topBar().withTrimmedLeft(16);
