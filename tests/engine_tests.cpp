@@ -9,6 +9,7 @@
 #include "core/engine.hpp"
 #include "core/graph.hpp"
 #include "core/project.hpp"
+#include "core/qualify.hpp"
 #include "core/server.hpp"
 #include "io/audio_file.hpp"
 #include "io/wav.hpp"
@@ -215,6 +216,48 @@ TEST("loop: posto no tempo novo antes de o audio aplicar o grafo novo nao e conv
   e.setLoop(true, -500, -100);
   CHECK_EQ(e.loopStart(), (int64_t)0);
   CHECK(e.loopEnd() >= 1);
+}
+
+// Qualify: um instrumento cujo acorde normal passa +6 dBFS e recusado ("too loud"); os 66 tons de uma vez do teste
+// de extremos nao contam (sfizz sem SFZ deu +20 dBFS, 16/11).
+namespace {
+class LoudSynth final : public core::PluginProcessor {
+public:
+  explicit LoudSynth(float perNote) : perNote_(perNote) {}
+  void process(float* l, float* r, int frames, const core::MidiNote* notes, int count) override {
+    for (int k = 0; k < count; ++k)
+      if (notes[k].pitch >= 0) held_ = std::max(0, held_ + (notes[k].on ? 1 : -1));
+    for (int i = 0; i < frames; ++i) { l[i] += perNote_ * held_; r[i] += perNote_ * held_; }
+  }
+  bool isInstrument() const override { return true; }
+  int latencySamples() const override { return 0; }
+private:
+  float perNote_;
+  int held_ = 0;
+};
+class OneProvider final : public core::PluginProvider {
+public:
+  explicit OneProvider(float perNote) : perNote_(perNote) {}
+  std::shared_ptr<core::PluginProcessor> get(const std::string&, const core::json&, double, bool, std::string*) override {
+    return std::make_shared<LoudSynth>(perNote_);
+  }
+  void keepOnly(const std::vector<std::string>&) override {}
+private:
+  float perNote_;
+};
+}  // namespace
+
+TEST("qualify: instrumento demasiado alto no acorde normal e recusado; os extremos nao contam") {
+  const core::json plugin = {{"name", "Loud"}, {"id", "x"}};
+  OneProvider quiet(0.1f);   // acorde de 4: 0.4 (-8 dBFS); 66 notas: 6.6 (+16 dBFS) so nos extremos
+  const core::json ok = core::qualifyPlugin(quiet, plugin, 48000, 1);
+  CHECK_EQ(ok.value("verdict", std::string()), std::string("ok"));
+  CHECK(ok.value("signalPeakDb", 0.0) < 0);
+  CHECK(ok.value("peakDb", 0.0) > 12);
+  OneProvider loud(0.8f);    // acorde de 4: 3.2 (+10 dBFS)
+  const core::json bad = core::qualifyPlugin(loud, plugin, 48000, 1);
+  CHECK_EQ(bad.value("verdict", std::string()), std::string("unsafe"));
+  CHECK(bad["problems"].dump().find("too loud") != std::string::npos);
 }
 
 CORE_TEST_MAIN

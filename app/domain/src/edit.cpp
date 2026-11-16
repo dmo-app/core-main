@@ -562,6 +562,44 @@ std::string splitClip(Track& track, const std::string& clipId, int64_t atTick) {
   return second;
 }
 
+std::string zonePattern(Track& track, int64_t from, int64_t to) {
+  if (from < 0 || to <= from) throw DocumentError("clips", "an empty stretch of the song");
+  // Cut what crosses the edges.
+  for (const int64_t at : {from, to}) {
+    std::vector<std::string> crossing;
+    for (const auto& c : track.clips)
+      if (c.startTick < at && c.startTick + c.lengthTicks > at) crossing.push_back(c.id);
+    for (const auto& id : crossing) splitClip(track, id, at);
+  }
+  // What plays inside, unrolled into one new pattern.
+  const std::string pid = addPattern(track, to - from);
+  Pattern fresh = patternById(track, pid);
+  fresh.name = ("Zone " + fresh.name).substr(0, 40);
+  std::vector<std::string> inside;
+  int n = 0;
+  for (const auto& c : track.clips) {
+    if (c.startTick < from || c.startTick + c.lengthTicks > to) continue;
+    inside.push_back(c.id);
+    const Pattern& src = patternById(track, c.patternId);
+    const int64_t len = std::max<int64_t>(1, src.lengthTicks);
+    for (int64_t rep = (c.offsetTicks / len) * len - len; rep < c.offsetTicks + c.lengthTicks; rep += len)
+      for (const auto& note : src.notes) {
+        const int64_t inClip = rep + note.tick - c.offsetTicks;  // from the clip's start
+        if (inClip < 0 || inClip >= c.lengthTicks || note.tick >= len) continue;
+        Note copy = note;
+        copy.id = "n" + std::to_string(++n);
+        copy.tick = c.startTick + inClip - from;
+        copy.length = std::min(copy.length, c.lengthTicks - inClip);
+        fresh.notes.push_back(copy);
+      }
+  }
+  std::sort(fresh.notes.begin(), fresh.notes.end(), [](const Note& a, const Note& b) { return a.tick < b.tick; });
+  patternById(track, pid) = fresh;
+  for (const auto& id : inside) removeClip(track, id);
+  addClip(track, pid, from, to - from);
+  return pid;
+}
+
 void removeUnusedPatterns(Track& track) {
   if (track.patterns.size() <= 1) return;
   std::vector<Pattern> kept;

@@ -12,7 +12,7 @@ Desde 2026-11-16. Substituem as 11 suites antigas (removidas a 2026-11-15) com o
 
 | Label | O quê | Quando |
 |---|---|---|
-| `merge` | `engine_tests`, `domain_tests`, `cli_version`, `cli_demo_render`, `cli_measure` (segundos) | cada build, antes de cada merge, CI |
+| `merge` | `engine_tests`, `domain_tests`, `ai_tests`, `cli_version`, `cli_demo_render`, `cli_measure` (segundos) | cada build, antes de cada merge, CI |
 | `desktop` | `desktop_self_test`: `Core.exe --self-test` no null device (abre a janela ~20 s) | antes de promover para `Main/`, CI Windows |
 
 ## Correr
@@ -30,4 +30,5 @@ Gate de um comando: `ci/gate.ps1` (Windows, PC do Diogo) ou `ci/gate.sh` (Linux/
 
 - Motor (projecto, render, WAV, tempo): `engine_tests.cpp`.
 - Documento da app (guardar, undo, templates, projecção): `domain_tests.cpp`.
+- A AI dentro do Core (funções da música, chat com respostas gravadas, base de conhecimento, providers, modelos): `ai_tests.cpp`.
 - Linha de comandos do `core-engine`: um `cli_*.cmake` e um `add_test` em `CMakeLists.txt`.

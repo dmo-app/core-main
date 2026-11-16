@@ -1,4 +1,5 @@
 #include "qualify.hpp"
+#include <cstdio>
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -8,6 +9,7 @@
 namespace core {
 
 json qualifyPlugin(PluginProvider& provider, const json& plugin, double sampleRate, double seconds) {
+  constexpr double kMaxInstrumentPeak = 2.0;  // +6 dBFS
   json out = {{"plugin", plugin.value("name", std::string("plugin"))}, {"version", plugin.value("version", std::string())},
               {"problems", json::array()}, {"warnings", json::array()}};
   std::string why;
@@ -87,11 +89,19 @@ json qualifyPlugin(PluginProvider& provider, const json& plugin, double sampleRa
   const double cpu = 100.0 * (double)ns / 1e9 / audioSeconds;
   out["cpuPct"] = cpu;
   out["peakDb"] = peak > 0 ? 20 * std::log10(peak) : -200.0;
+  out["signalPeakDb"] = signalPeak > 0 ? 20 * std::log10(signalPeak) : -200.0;  // the chord / the noise alone (stage 1)
   out["seconds"] = audioSeconds;
   if (problem.empty()) {
     if (cpu > 25) out["warnings"].push_back("heavy: " + std::to_string((int)std::lround(cpu)) + " % of one core on its own");
     if (signalPeak < 1e-6) out["warnings"].push_back(instrument ? "made no sound with notes" : "let no sound through");
     if (peak > 4) out["warnings"].push_back("loud: peaks above +12 dBFS");
+  }
+  // An instrument whose ordinary chord (4 notes, velocity 0.8) goes above +6 dBFS would clip any mix it enters
+  // (Diogo, 2026-11-16: sfizz with no SFZ gave +20 dBFS). The 66 notes at once of the extremes are not judged.
+  if (problem.empty() && instrument && signalPeak > kMaxInstrumentPeak) {
+    char db[16];
+    std::snprintf(db, sizeof db, "%+.1f", 20 * std::log10(signalPeak));
+    out["problems"].push_back(std::string("too loud: a 4-note chord peaks at ") + db + " dBFS (the limit is +6)");
   }
   out["verdict"] = out["problems"].empty() ? "ok" : "unsafe";
   return out;
