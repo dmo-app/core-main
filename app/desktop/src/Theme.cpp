@@ -133,6 +133,14 @@ void drawIcon(juce::Graphics& g, const juce::String& name, juce::Rectangle<float
       const auto r = juce::Rectangle<float>(w, w).withCentre({c.x + (i % 2 ? 0.32f : -0.32f) * s, c.y + (i / 2 ? 0.32f : -0.32f) * s});
       if (i == 0) g.fillRoundedRectangle(r, 1.5f); else g.drawRoundedRectangle(r, 1.5f, 1.2f);
     }
+  } else if (name == "patterns") {  // the channel rack: three rows of steps, some on
+    const float w = s * 0.26f, gap = s * 0.1f;
+    const bool on[3][4] = {{true, false, true, false}, {false, true, false, true}, {true, true, false, true}};
+    for (int row = 0; row < 3; ++row)
+      for (int col = 0; col < 4; ++col) {
+        const auto r = juce::Rectangle<float>(w, w).withPosition(c.x - 2 * w - 1.5f * gap + col * (w + gap), c.y - 1.5f * w - gap + row * (w + gap));
+        if (on[row][col]) g.fillRoundedRectangle(r, 1.0f); else g.drawRoundedRectangle(r, 1.0f, 1.0f);
+      }
   } else if (name == "mixer") {  // three faders: vertical lines with their caps at different heights
     for (int i = 0; i < 3; ++i) {
       const float x = c.x - s * 0.45f + i * s * 0.45f, cap = c.y + (i == 0 ? 0.2f : i == 1 ? -0.3f : 0.05f) * s;

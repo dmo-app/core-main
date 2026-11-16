@@ -71,4 +71,12 @@ std::string addRoleTrack(Document& doc, const std::string& role, const RoleMap& 
 // The track plays the role's plugin (its notes stay). Throws as addRoleTrack.
 void setTrackRole(Document& doc, const std::string& trackId, const std::string& role, const RoleMap& map);
 
+// ---- silent tracks (Diogo 2026-11-16, "não sai som"): a song or template from before 0.7.0 keeps its old Core
+// sounds ("builtin") or has none, and 0.7.0 plays neither. The instrument role a track plays, guessed from its old
+// sound and its name (kick, hats, snare, drums -> drums; bass; pad; pluck/arp; lead): "" when nothing fits.
+std::string guessInstrumentRole(const Track& t);
+// Each silent track (kind "builtin" or "none", not audio or a bus) whose guessed role has a plugin in the map plays
+// that plugin; its notes stay. Returns how many changed; `left` gets the names of the silent tracks that stayed so.
+int giveSilentTracksRolePlugins(Document& doc, const RoleMap& map, std::vector<std::string>* left = nullptr);
+
 }  // namespace core::doc

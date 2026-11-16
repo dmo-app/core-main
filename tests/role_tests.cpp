@@ -1,9 +1,12 @@
 // Testes do mapa de papeis (roles.hpp) e das tools que tocam pelos plugins dos papeis (role_tools.hpp):
 // SUCK, PUM e os efeitos do build-up. Sem plugins verdadeiros: o dominio so guarda referencias e curvas.
+#include <algorithm>
 #include <filesystem>
+#include <set>
 #include "support/check.hpp"
 #include "edit.hpp"
 #include "follow.hpp"
+#include "core_plugins.hpp"
 #include "role_tools.hpp"
 #include "roles.hpp"
 
@@ -201,3 +204,193 @@ TEST("build-up: o filtro abre, o reverb e o delay crescem ate ao drop; papeis em
 }
 
 CORE_TEST_MAIN
+
+// "Não sai som" (Diogo 2026-11-16): uma musica de antes do 0.7.0 tem os sons antigos do Core (builtin) ou nenhum,
+// e o 0.7.0 nao toca nenhum dos dois. giveSilentTracksRolePlugins da a cada pista muda o plugin do seu papel.
+TEST("pistas mudas: o papel adivinha-se pelo nome e pelo som antigo") {
+  Track t;
+  t.name = "Kick"; t.instrument.kind = "builtin"; t.instrument.name = "kick";
+  CHECK_EQ(guessInstrumentRole(t), std::string("drums"));
+  t.name = "Hats 2"; CHECK_EQ(guessInstrumentRole(t), std::string("drums"));
+  t.name = "Sub Bass"; t.instrument.name = "wave"; CHECK_EQ(guessInstrumentRole(t), std::string("bass"));
+  t.name = "Big Pad"; CHECK_EQ(guessInstrumentRole(t), std::string("pad"));
+  t.name = "Arp"; CHECK_EQ(guessInstrumentRole(t), std::string("pluck"));
+  t.name = "Track 7"; CHECK_EQ(guessInstrumentRole(t), std::string("lead"));  // W-Core sem nome: lead
+  t.instrument.kind = "none"; t.instrument.name.clear();
+  CHECK_EQ(guessInstrumentRole(t), std::string(""));  // sem nome nem som antigo: nao se adivinha
+}
+
+TEST("pistas mudas: as builtin e none com papel no mapa passam a tocar o plugin; as outras ficam e sao listadas") {
+  Document d = newTemplateDocument();
+  // Como uma musica antiga: todas as pistas com o som antigo do Core.
+  for (auto& t : d.tracks)
+    if (playsPatterns(t)) { t.instrument = Instrument{}; t.instrument.kind = "builtin"; t.instrument.name = "kick"; }
+  const std::string bass = trackNamed(d, "ass");
+  const size_t notesBefore = trackById(d, bass).patterns.empty() ? 0 : trackById(d, bass).patterns[0].notes.size();
+  RoleMap m = fullMap();  // so "bass" tem plugin
+  std::vector<std::string> left;
+  const int changed = giveSilentTracksRolePlugins(d, m, &left);
+  CHECK_EQ(changed, 1);
+  CHECK_EQ(trackById(d, bass).instrument.kind, std::string("plugin"));
+  CHECK_EQ(trackById(d, bass).instrument.plugin.value("name", std::string()), std::string("Serum2"));
+  CHECK_EQ(trackById(d, bass).patterns[0].notes.size(), notesBefore);  // as notas ficam
+  CHECK(!left.empty());  // a bateria nao tem plugin no mapa: fica muda e e dita
+  // Com bateria no mapa, as restantes pistas mudas ganham-na; uma segunda passagem nao muda nada.
+  m.roles["drums"] = {fakePlugin("sfizz"), {}, {}};
+  left.clear();
+  const int more = giveSilentTracksRolePlugins(d, m, &left);
+  int drums = 0;
+  for (const auto& t : d.tracks) if (t.instrument.kind == "plugin" && t.instrument.plugin.value("name", std::string()) == "sfizz") ++drums;
+  CHECK_EQ(drums, more);
+  std::vector<std::string> again;
+  const int none = giveSilentTracksRolePlugins(d, m, &again);
+  CHECK_EQ(none, 0);
+  CHECK_EQ(again.size(), left.size());
+}
+
+TEST("pistas mudas: pistas de audio, bus e com plugin nao mudam") {
+  Document d = newTemplateDocument();
+  const std::string before = toJson(d).dump();
+  RoleMap m = fullMap();
+  m.roles["drums"] = {fakePlugin("sfizz"), {}, {}};
+  bool anySilent = false;
+  for (const auto& t : d.tracks) anySilent = anySilent || t.instrument.kind == "builtin" || t.instrument.kind == "none";
+  const int changed = giveSilentTracksRolePlugins(d, m);
+  if (!anySilent) { CHECK_EQ(changed, 0); CHECK_EQ(toJson(d).dump(), before); }
+  for (const auto& t : d.tracks) CHECK(t.instrument.kind != "builtin");
+}
+
+// ---- As tools da AI (Diogo 2026-11-16): R-Core / D-Core pelo bus, F-Core por intencao, ROLL, o catalogo.
+namespace {
+RoleMap aiMap() {
+  RoleMap m = fullMap();
+  m.roles["drive"] = guessRoleBinding("drive", fakePlugin("Airwindows"), json::array({{{"id", "20"}, {"name", "Drive"}}, {{"id", "21"}, {"name", "Dry/Wet"}}}));
+  return m;
+}
+std::vector<std::string> patternTracks(const Document& d) {
+  std::vector<std::string> out;
+  for (const auto& t : d.tracks) if (playsPatterns(t)) out.push_back(t.id);
+  return out;
+}
+int busesNamed(const Document& d, const std::string& prefix) {
+  int n = 0;
+  for (const auto& t : d.tracks) n += t.instrument.kind == "bus" && t.name.rfind(prefix, 0) == 0;
+  return n;
+}
+}  // namespace
+
+TEST("toolSharedBus: um so bus com o plugin do papel, sends sem duplicar, mais baixo nos drops") {
+  Document d = newTemplateDocument();
+  if (d.sections.empty()) addSection(d, "Drop 1", 0, std::min<int64_t>(d.lengthTicks, 16 * kPpq));
+  const auto tracks = patternTracks(d);
+  const RoleMap m = aiMap();
+  const SharedBusResult a = toolSharedBus(d, tracks, m, "reverb", "hall");
+  CHECK(a.newBus);
+  CHECK_EQ(a.sends, (int)tracks.size());
+  CHECK_EQ(busesNamed(d, "R-Core"), 1);
+  CHECK(findRoleEffect(d, a.busId, "reverb") >= 0);  // o Valhalla do papel no bus
+  const SharedBusResult b = toolSharedBus(d, tracks, m, "reverb", "hall");  // outra vez: o mesmo bus, os mesmos sends
+  CHECK(!b.newBus);
+  CHECK_EQ(b.busId, a.busId);
+  for (const auto& id : tracks) {
+    int toBus = 0;
+    for (const auto& s : trackById(d, id).mix.sends) toBus += s.to == a.busId;
+    CHECK_EQ(toBus, 1);
+  }
+  CHECK(findAutomation(d, a.busId, "gainDb") != nullptr);  // segue as seccoes
+  // Outro sitio de reverb: os sends mudam para la e o bus antigo, sem ninguem, sai.
+  const SharedBusResult c = toolSharedBus(d, tracks, m, "reverb", "plate");
+  CHECK(c.busId != a.busId);
+  CHECK(d.findTrack(a.busId) == nullptr);
+  CHECK_EQ(busesNamed(d, "R-Core"), 1);
+}
+
+TEST("toolSharedBus: sem plugin no papel, ou preset errado, recusa sem mudar a musica") {
+  Document d = newTemplateDocument();
+  const std::string before = toJson(d).dump();
+  CHECK_THROWS(toolSharedBus(d, patternTracks(d), RoleMap{}, "reverb", "room"));
+  CHECK_THROWS(toolSharedBus(d, patternTracks(d), aiMap(), "reverb", "nada"));
+  CHECK_THROWS(toolSharedBus(d, patternTracks(d), aiMap(), "chorus", ""));
+  CHECK_THROWS(toolSharedBus(d, {}, aiMap(), "delay", ""));
+  CHECK_EQ(toJson(d).dump(), before);
+  const SharedBusResult r = toolSharedBus(d, patternTracks(d), aiMap(), "delay", "");  // "": dotted
+  CHECK_EQ(busesNamed(d, "D-Core"), 1);
+  CHECK(r.sentence.find("dotted") != std::string::npos);
+}
+
+TEST("toolIntentFx: cada intencao escreve as macros dos papeis; papel em falta e saltado e dito") {
+  Document d = newTemplateDocument();
+  const std::string bass = trackNamed(d, "ass");
+  const int64_t end = std::min<int64_t>(d.lengthTicks, 16 * 4 * kPpq), start = end - 4 * 4 * kPpq;
+  for (const auto& intent : fxIntents()) {
+    Document x = d;
+    const RoleToolResult r = toolIntentFx(x, bass, aiMap(), intent, start, end, 0.7);
+    CHECK(!r.keys.empty());
+    CHECK(!r.sentence.empty());
+  }
+  RoleMap noDrive = fullMap();
+  const RoleToolResult imp = toolIntentFx(d, bass, noDrive, "impact", start, end, 0.7);
+  CHECK_EQ(imp.roles.size(), (size_t)1);  // so o reverb
+  CHECK(!imp.skipped.empty());            // e diz que falta o drive
+  const std::string before = toJson(d).dump();
+  CHECK_THROWS(toolIntentFx(d, bass, aiMap(), "nada", start, end, 0.7));
+  CHECK_THROWS(toolIntentFx(d, bass, RoleMap{}, "intro", start, end, 0.7));
+  CHECK_EQ(toJson(d).dump(), before);
+}
+
+TEST("toolRoll: um padrao novo que acelera ate ao drop, os clips do sitio saem; valores errados recusam") {
+  Document d = newTemplateDocument();
+  const std::string bass = trackNamed(d, "ass");
+  const int64_t end = std::min<int64_t>(d.lengthTicks, 16 * 4 * kPpq), start = end - 2 * 4 * kPpq;
+  const std::string before = toJson(d).dump();
+  CHECK_THROWS(toolRoll(d, bass, start, end, "nada"));
+  CHECK_THROWS(toolRoll(d, bass, start, end, "steps", -1, 13));
+  CHECK_THROWS(toolRoll(d, bass, start, end, "steps", -1, 0, 5));
+  CHECK_EQ(toJson(d).dump(), before);
+  const RollResult r = toolRoll(d, bass, start, end, "steps", -1, 5, 1);
+  CHECK(r.notes > 8);
+  const Track& t = trackById(d, bass);
+  int rollClips = 0;
+  for (const auto& c : t.clips) {
+    if (c.patternId == r.patternId) { ++rollClips; CHECK_EQ(c.startTick, start); continue; }
+    CHECK(c.startTick + c.lengthTicks <= start || c.startTick >= end);  // nada mais toca ali
+  }
+  CHECK_EQ(rollClips, 1);
+  // Mais rapido no fim: o ultimo intervalo entre notas e mais curto que o primeiro.
+  const Pattern* p = t.findPattern(r.patternId);
+  CHECK(p != nullptr);
+  std::vector<int64_t> ticks;
+  for (const auto& n : p->notes) ticks.push_back(n.tick);
+  std::sort(ticks.begin(), ticks.end());
+  CHECK(ticks[1] - ticks[0] > ticks.back() - ticks[ticks.size() - 2]);
+}
+
+TEST("catalogo das tools: ids unicos, cada uma com o que faz e parametros com nome") {
+  std::set<std::string> ids;
+  for (const auto& t : songToolCatalog()) {
+    CHECK(ids.insert(t.id).second);
+    CHECK(!t.what.empty());
+    for (const auto& p : t.params) CHECK(!p.name.empty() && !p.what.empty());
+  }
+  CHECK(ids.count("space") && ids.count("fx") && ids.count("roll") && ids.count("suck") && ids.count("pump") && ids.count("buildup"));
+  CHECK_EQ(songToolCatalogJson().size(), songToolCatalog().size());
+  Document d = newTemplateDocument();
+  CHECK_THROWS(sectionSpan(d, "nao existe nenhuma"));
+  CHECK_EQ(sectionSpan(d, "").end, d.lengthTicks);
+}
+
+TEST("cartoes das tools: a lista esta certa, sem S-Core, e acha-se por id e pelos nomes da AI") {
+  const auto problems = corePluginListProblems();
+  for (const auto& p : problems) std::printf("  problema: %s\n", p.c_str());
+  CHECK(problems.empty());
+  CHECK(findCorePlugin("score") == nullptr);  // S-Core nao e um cartao (Diogo 2026-11-16)
+  CHECK(findCorePlugin("Pattern Maker") && findCorePlugin("Pattern Maker")->id == "pcore");
+  CHECK(findCorePlugin("pump") && findCorePlugin("pump")->id == "pum");
+  CHECK(findCorePlugin("R-Core") && findCorePlugin("R-Core")->id == "rcore");
+  CHECK(findCorePlugin("") == nullptr);
+  // Cada tool do catalogo da AI tem o seu cartao (space = R-Core e D-Core, fx = F-Core).
+  for (const auto& t : songToolCatalog()) {
+    const std::string card = t.id == "space" ? "rcore" : t.id == "fx" ? "fcore" : t.id == "pump" ? "pum" : t.id;
+    CHECK(findCorePlugin(card) != nullptr);
+  }
+}

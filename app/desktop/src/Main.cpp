@@ -50,6 +50,8 @@ public:
     setTitleBarHeight(0);
     setContentOwned(content, true);
     setResizable(true, false);  // Windows resizes from the edges (the system's own border, no corner grip)
+    // Never narrower than the menus and the transport: a 130 px window hid the whole menu bar (Diogo 2026-11-16).
+    setResizeLimits(960, 560, 16384, 16384);
     centreWithSize(getWidth(), getHeight());
     setVisible(true);
   }
