@@ -17,24 +17,38 @@ Marca cada gatilho que este PR toca e põe a mesma lista na linha `Gatilhos:` do
 - [ ] ui: nova janela, painel ou menu
 - [ ] audio: qualquer coisa no caminho de áudio (motor, callback, render)
 - [ ] ambito: qualquer coisa fora da lista de âmbito do Core
+- [ ] default: qualquer default que mude comportamento (D50)
 - [ ] nenhum
 
 Reversível? Como se tira (flag, módulo fora do processo, um commit):
 
 ## Resumo
 
-## Definição de entregue
+## Definição de entregue (D55, D56)
 
 ```
 ramo / SHA:
-gate: build limpa? sim/não | merge N/N | ai N/N | desktop N/N | duração:
 autorizacao: python ci/autorizacao.py --ledger <ESTADO.md> → VERDE/VERMELHO
+gate do Core: build limpa? sim/não | merge N/N | desktop N/N | duração:
+gate do pacote da AI: ai N/N | duração:            (ou "não se aplica")
+contagem por âmbito: Core N → N | AI N → N   (nunca desce dentro do âmbito; mudar de âmbito exige decisão)
 testes novos: <nomes>
 prova de vermelho: <output antes> / <output depois>
-contagem vs entrega anterior: N → N (nunca desce)
 smoke de 8 cliques: screenshots em <pasta>
 decisões tocadas: D-...
 ```
+
+## Medido / não medido
+
+| Item | Linux | Windows | Não testado |
+|---|---|---|---|
+|  |  |  |  |
+
+<!-- Um teste só em Linux não valida Windows. Declara sempre o que NÃO foi testado. Nada de números inventados. -->
+
+## Defaults alterados
+
+<!-- Cada default que muda comportamento é um gatilho (D50): diz qual, o antes e o depois, e a decisão que o autoriza. Se não há, escreve "nenhum". -->
 
 ## Decisões pendentes do Diogo
 
