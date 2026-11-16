@@ -1,0 +1,20 @@
+# Inventario dos testes do Core: o gate compara o ctest com esta lista (regra de ferro 4: a contagem nunca desce).
+#   <nome> <labels separadas por virgula> [app]
+#   app = so existe quando a app JUCE e compilada (Windows); no gate Linux aparece como "sem app", nunca como verde.
+# Tirar uma linha ou uma label exige uma decisao numerada no ESTADO.md. Um teste novo entra aqui no mesmo commit.
+engine_tests        merge
+domain_tests        merge
+role_tests          merge,ai
+midi_tests          merge
+bug_tests           merge
+bitwig_tests        merge
+audit_tests         merge
+audit2_tests        merge
+hunt_tests          merge
+round3_tests        merge,ai
+cli_version         merge
+cli_demo_render     merge
+cli_measure         merge
+cli_unicode         merge
+gate_static         merge
+desktop_self_test   desktop,ui  app
