@@ -252,16 +252,15 @@ Track parseTrack(const json& v, const std::string& path, const std::set<std::str
       catch (const std::exception& e) { throw DocumentError(ir.at("synth"), e.what()); }
     }
   } else if (t.instrument.kind == "plugin") {
-    // Core has no VST (2026-11-08): a VST track of an older song plays W-Core; its notes stay (dropVst).
-    ir.object("plugin");
-    t.instrument.kind = "builtin";
-    t.instrument.name = "wave";
-    t.instrument.version = 1;
-    t.instrument.extra = json::object();
-    t.instrument.params.clear();
-    t.instrument.extra["fromVst"] = true;
+    // A VST3 reference (Serum 2) to A/B Core's sounds against, in the same engine (Diogo 2026-11-15).
+    t.instrument.plugin = ir.object("plugin");
+    const json& p = t.instrument.plugin;
+    if (p.value("format", std::string()) != "vst3") throw DocumentError(join(ir.at("plugin"), "format"), "must be vst3");
+    if (!p.contains("id") || !p["id"].is_string() || p["id"].get<std::string>().empty()) throw DocumentError(join(ir.at("plugin"), "id"), "is required");
+    if (!p.contains("file") || !p["file"].is_string() || p["file"].get<std::string>().empty()) throw DocumentError(join(ir.at("plugin"), "file"), "is required");
+    t.instrument.plugin.erase("missing");
   } else if (t.instrument.kind != "audio" && t.instrument.kind != "bus") {
-    throw DocumentError(ir.at("kind"), "must be builtin, audio or bus");
+    throw DocumentError(ir.at("kind"), "must be builtin, audio, bus or plugin");
   }
   {
     const bool fromVst = t.instrument.extra.is_object() && t.instrument.extra.contains("fromVst");
@@ -390,7 +389,8 @@ json mixJson(const Mix& m) {
 
 json trackJson(const Track& t) {
   json instrument = {{"kind", t.instrument.kind}};
-  if (t.instrument.kind != "audio" && t.instrument.kind != "bus") { instrument["name"] = t.instrument.name; instrument["version"] = t.instrument.version; instrument["params"] = t.instrument.params; }
+  if (t.instrument.kind == "plugin") instrument["plugin"] = t.instrument.plugin;
+  else if (t.instrument.kind != "audio" && t.instrument.kind != "bus") { instrument["name"] = t.instrument.name; instrument["version"] = t.instrument.version; instrument["params"] = t.instrument.params; }
   if (!t.instrument.synth.is_null()) instrument["synth"] = t.instrument.synth;
   if (!t.instrument.samples.empty()) {
     json samples = json::array();
@@ -783,6 +783,7 @@ json toProjection(const Document& d, const std::filesystem::path& assetRoot) {
       }
       track["audioClips"] = audioClips;
     } else if (t.instrument.kind == "bus") { track["instrument"] = "bus"; track.erase("clips"); }
+    else if (t.instrument.kind == "plugin") { track["instrument"] = "plugin"; track["plugin"] = t.instrument.plugin; }
     else { track["instrument"] = t.instrument.name; track["instrumentVersion"] = t.instrument.version; track["params"] = t.instrument.params; }
     if (t.instrument.kind == "builtin" && !t.instrument.synth.is_null()) track["synth"] = t.instrument.synth;
     if (t.instrument.kind == "builtin" && (t.instrument.name == "sampler" ||
