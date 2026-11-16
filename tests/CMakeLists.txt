@@ -26,6 +26,12 @@ target_include_directories(role_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(role_tests PRIVATE core_domain core_engine_lib)
 add_test(NAME role_tests COMMAND role_tests)
 
+# MIDI files in and out (export with the rolls expanded as they play; import into tracks and patterns).
+add_executable(midi_tests midi_tests.cpp)
+target_include_directories(midi_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(midi_tests PRIVATE core_domain core_engine_lib)
+add_test(NAME midi_tests COMMAND midi_tests)
+
 # The command line: what the app and the scripts call.
 add_test(NAME cli_version COMMAND core-engine --version)
 set_tests_properties(cli_version PROPERTIES PASS_REGULAR_EXPRESSION "core-engine ${CORE_VERSION}")
@@ -34,7 +40,7 @@ add_test(NAME cli_demo_render COMMAND ${CMAKE_COMMAND} -DENGINE=$<TARGET_FILE:co
 add_test(NAME cli_measure COMMAND ${CMAKE_COMMAND} -DENGINE=$<TARGET_FILE:core-engine> -DWORK=${CMAKE_CURRENT_BINARY_DIR}/cli
                                   -P ${CMAKE_CURRENT_SOURCE_DIR}/cli_measure.cmake)
 
-set_tests_properties(engine_tests domain_tests role_tests cli_version cli_demo_render cli_measure PROPERTIES LABELS merge TIMEOUT 300)
+set_tests_properties(engine_tests domain_tests role_tests midi_tests cli_version cli_demo_render cli_measure PROPERTIES LABELS merge TIMEOUT 300)
 
 # The app's own end-to-end test (play, undo, save/reopen, export... on the null device, with its test plugins).
 # It opens Core's window for ~20 s, so it has its own label.

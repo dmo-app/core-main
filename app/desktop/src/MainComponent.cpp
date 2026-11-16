@@ -25,6 +25,7 @@
 #include "bridge.hpp"
 #include "calls.hpp"
 #include "storage.hpp"
+#include "midi.hpp"
 
 namespace core::app {
 
@@ -4344,6 +4345,56 @@ void MainComponent::exportWav(int bits, bool mono) {
                         });
 }
 
+// MIDI out (midi.hpp): the song as it plays, rolls expanded, one MIDI track per note track, the tempo with its glides.
+// For the Bitwig or any other DAW (Diogo 2026-11-16: the Bitwig stays an option, by .mid).
+void MainComponent::exportMidi() {
+  const juce::String name = history_.current().name.empty() ? juce::String("Song") : u8(history_.current().name);
+  chooser_ = std::make_unique<juce::FileChooser>(u8("Export MIDI"), exportFolder().getChildFile(juce::File::createLegalFileName(name) + ".mid"), "*.mid");
+  chooser_->launchAsync(juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles |
+                            juce::FileBrowserComponent::warnAboutOverwriting,
+                        [this](const juce::FileChooser& fc) {
+                          const juce::File f = fc.getResult();
+                          if (f == juce::File()) return;
+                          try {
+                            const doc::MidiFile midi = doc::songToMidi(history_.current());
+                            size_t notes = 0;
+                            for (const auto& t : midi.tracks) notes += t.notes.size();
+                            doc::saveMidiFile(doc::writeMidi(midi), pathOf(f.withFileExtension(".mid")));
+                            notice_ = u8("Exported MIDI: ") + juce::String((int)midi.tracks.size()) + u8(" tracks, ") + juce::String((int)notes) +
+                                      u8(" notes (rolls expanded) to ") + f.withFileExtension(".mid").getFullPathName();
+                            repaint();
+                          } catch (const std::exception& e) {
+                            showError(u8("Could not export MIDI"), u8(e.what()));
+                          }
+                        });
+}
+
+// MIDI in: each track of the file becomes a track of the song (no instrument yet: choose a plugin), its notes in
+// 4-bar patterns from the bar where the song is; the same bars twice are one pattern. One undo step.
+void MainComponent::importMidi() {
+  chooser_ = std::make_unique<juce::FileChooser>(u8("Import MIDI"), juce::File::getSpecialLocation(juce::File::userMusicDirectory), "*.mid;*.midi");
+  chooser_->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles, [this](const juce::FileChooser& fc) {
+    const juce::File f = fc.getResult();
+    if (f == juce::File()) return;
+    doc::MidiFile midi;
+    try {
+      midi = doc::parseMidi(doc::readMidiFile(pathOf(f)));
+    } catch (const std::exception& e) {
+      showError(u8("Could not import"), f.getFileName() + ": " + u8(e.what()));
+      return;
+    }
+    doc::MidiImportOptions o;
+    o.atTick = (int64_t)snap_.positionTick / kBar * kBar;
+    o.useTempo = history_.current().tracks.empty();  // an empty song takes the file's tempo
+    doc::MidiImportResult result;
+    edit([&](doc::Document& d) { result = doc::importMidi(d, midi, o); }, u8("Import MIDI"));
+    if (result.trackIds.empty()) return;  // the edit said why
+    notice_ = u8("Imported ") + f.getFileName() + ": " + juce::String((int)result.trackIds.size()) + u8(" tracks, ") + juce::String(result.notes) +
+              u8(" notes in ") + juce::String(result.patterns) + u8(" patterns. Choose a plugin for each track.");
+    repaint();
+  });
+}
+
 void MainComponent::selectDevice(const std::string& name) {
   if (!test_) {  // a self-test never changes the user's preferences
     settings_.getUserSettings()->setValue("audioDevice", u8(name));
@@ -4690,7 +4741,7 @@ bool MainComponent::previewLibrarySample(const doc::LibrarySample& sample, const
 namespace { enum MenuId { kMidiNone = 200, kMidiDevice = 201, kNewEmpty = 50, kOpen = 1, kSave, kSaveAs, kExport24, kExport32, kQuit, kUndo, kRedo, kImportAudio, kRelocate, kDevice = 100,
                        kMidiDevicesEnd = 400, kPluginCoreFirst = 420 /* + place in doc::corePlugins(), up to 20 */,
                        kPluginScan = 460, kPluginFolder, kPluginRetry, kMasterFx = 2400 /* + 60 */, kMasterFxAdd = 2500 /* + 400 */,
-                       kOpenLogs = 580, kAbout = 581, kExportMono = 590,
+                       kOpenLogs = 580, kAbout = 581, kExportMono = 590, kImportMidi = 595, kExportMidi = 596,
                        kSampleFolder = 1600, kSampleRescan, kSampleApply, kSampleAuto, kSampleShuffle, kSampleCatalogUndo,
                                               kRandomize = 1700 /* + strength 1..3; + 4: tempo per section; + 5: sound */, kViewLibrary = 1800, kViewInspector, kViewMixer, kViewScale = 1810 /* + 0 auto, + 1..5: 100..200 % */,
                        kViewSectionShades = 1820,
@@ -4754,12 +4805,14 @@ juce::PopupMenu MainComponent::getMenuForIndex(int index, const juce::String&) {
     menu.addItem(juce::PopupMenu::Item(u8("Save as…")).setID(kSaveAs));
     menu.addSeparator();
     menu.addItem(juce::PopupMenu::Item(u8("Import audio (WAV)…")).setID(kImportAudio));
+    menu.addItem(juce::PopupMenu::Item(u8("Import MIDI (.mid)…")).setID(kImportMidi));
     menu.addItem(juce::PopupMenu::Item(u8("Locate missing files…")).setID(kRelocate).setEnabled(!missing_.empty()));
     menu.addSeparator();
     const bool exporting = snap_.exportJob.active();
     menu.addItem(juce::PopupMenu::Item(u8("Export WAV 24-bit…")).setID(kExport24).setEnabled(!exporting));
     menu.addItem(juce::PopupMenu::Item(u8("Export WAV 32-bit float…")).setID(kExport32).setEnabled(!exporting));
     menu.addItem(juce::PopupMenu::Item(u8("Export WAV mono…")).setID(kExportMono).setEnabled(!exporting));
+    menu.addItem(juce::PopupMenu::Item(u8("Export MIDI (.mid)…")).setID(kExportMidi));
     menu.addSeparator();
     menu.addItem(juce::PopupMenu::Item(u8("Settings…")).setID(kSettings));
     menu.addItem(juce::PopupMenu::Item(u8("Keyboard shortcuts…")).setID(kShortcuts));
@@ -4929,6 +4982,8 @@ void MainComponent::menuItemSelected(int id, int) {
     case kExport24: exportWav(24); break;
     case kExport32: exportWav(32); break;
     case kExportMono: exportWav(24, true); break;
+    case kImportMidi: importMidi(); break;
+    case kExportMidi: exportMidi(); break;
     case kImportAudio: importAudio(); break;
     case kRelocate: relocateMissing(); break;
     case kMidiNone: openMidiInput({}); break;

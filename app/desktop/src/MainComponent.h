@@ -252,6 +252,8 @@ private:
   doc::Loop engineLoop() const;  // the song's loop, or the pattern's while the Patterns window plays
   void askTrackName(const std::string& trackId);
   void exportWav(int bits, bool mono = false);
+  void exportMidi();
+  void importMidi();
   // Plugins (VST3): what this PC has (Plugins menu > Scan), their windows and their states in the song.
   std::unique_ptr<PluginCatalog> plugins_;
   uint64_t pluginEditsSeen_ = 0;
