@@ -481,17 +481,14 @@ std::string JuceHost::vstPreset(const std::string& key) {
   }
   std::string out;
   if (!p || p->failed()) return out;
-  struct Visitor final : juce::ExtensionsVisitor {
-    juce::MemoryBlock preset;
-    void visitVST3Client(const VST3Client& client) override { preset = client.getPreset(); }
-  };
   runSync([&] {
-    Visitor v;
-    if (!guarded([&] { p->instance().getExtensions(v); })) {
+    juce::MemoryBlock preset;
+    // JUCE 9: getVST3Client() (null when the plugin is not VST3); the ExtensionsVisitor is gone.
+    if (!guarded([&] { if (auto* c = p->instance().getVST3Client()) preset = c->getPreset(); })) {
       p->markFailed(PluginProcessor::Failure::Crash);
       return;
     }
-    if (v.preset.getSize() > 0) out = utf8(juce::Base64::toBase64(v.preset.getData(), v.preset.getSize()));
+    if (preset.getSize() > 0) out = utf8(juce::Base64::toBase64(preset.getData(), preset.getSize()));
   });
   return out;
 }
