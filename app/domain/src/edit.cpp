@@ -1327,8 +1327,14 @@ std::vector<EffectMenuEntry> effectMenuEntries(const json& chain) {
     const json& fx = chain[(size_t)i];
     if (!fx.is_object()) continue;
     const bool plugin = fx.value("type", std::string()) == "plugin" && fx.contains("plugin");
-    if (!plugin) continue;  // the menus' old filter: only the plugins were offered (bug 2026-11-17)
-    out.push_back({i, true, true, fx["plugin"].value("name", std::string("Plugin"))});
+    std::string label;
+    if (plugin) label = fx["plugin"].value("name", std::string("Plugin"));
+    else {
+      const EffectInfo* info = findEffect(effectName(fx));
+      label = info ? std::string(info->label) : effectName(fx);
+    }
+    if (label.empty()) label = "Effect";
+    out.push_back({i, plugin, plugin, std::move(label)});
   }
   return out;
 }
