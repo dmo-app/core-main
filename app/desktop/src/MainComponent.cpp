@@ -1982,7 +1982,7 @@ MainComponent::MainComponent(EngineSession::Options options, doc::Document docum
         // The Patterns window (channel rack, templates, swing, Send to Arrange): Diogo 2026-11-16, "facilidade em criar".
         {"patterns", "Patterns: the channel rack and the templates (Ctrl+P)", [this] { openPatterns(); }},
         {"library", "Library", [this] { toggleSidePanel(true); }},
-        {"plugins", "Tools: Core's tools as cards (the AI uses the same ones)", [this] { togglePlugins(); }},
+        {"plugins", "Tools and plugins: Core's tools as cards, and the installed plugins by maker", [this] { togglePlugins(); }},
         {"inspector", "Inspector", [this] { toggleSidePanel(false); }}};
     for (const auto& item : items) {
       auto b = std::make_unique<juce::TextButton>(item.tip);
@@ -2000,6 +2000,7 @@ MainComponent::MainComponent(EngineSession::Options options, doc::Document docum
   addChildComponent(pluginCards_);
   pluginCards_.onOpen = [this](const doc::CorePluginInfo& p, juce::Component& card) { openCorePlugin(p, &card); };
   pluginCards_.onGrey = [this](const juce::String& missing) { notice_ = u8("Settings > Roles: choose the plugin of ") + missing; repaint(); };
+  pluginCards_.onVendor = [this](const doc::PluginVendorGroup& g, juce::Component& card) { showVendorPlugins(g, &card); };
   mixerButton_.setButtonText("MIX");
   mixerButton_.setTooltip(u8("The mixer in the bottom panel (Ctrl+M)"));
   mixerButton_.setClickingTogglesState(false);
@@ -2326,13 +2327,20 @@ juce::PopupMenu MainComponent::coreToolMenu(const std::string& toolId, const std
     m.addSubMenu(u8("A new track"), fresh);
   } else if (toolId == "fcore") {
     if (needTrack())
-      for (const auto& intent : doc::fxIntents())
-        m.addSubMenu(u8(capital(intent)) + on, where([safe, trackId, intent](const doc::SongSpan& span) {
+      for (const auto& intent : doc::fxIntents()) {
+        juce::PopupMenu sub = where([safe, trackId, intent](const doc::SongSpan& span) {
           if (!safe) return;
           safe->runTool(u8("F-Core: ") + u8(intent), [&](doc::Document& d, const doc::RoleMap& r) {
             return withSkipped(doc::toolIntentFx(d, trackId, r, intent, span.start, span.end, 0.7));
           });
-        }, true));
+        }, true);
+        // Or a zone of their own: first and last bar, this track / the selected ones / all (Diogo 2026-11-17).
+        sub.addSeparator();
+        sub.addItem(juce::PopupMenu::Item(u8("Choose bars and tracks…")).setAction([safe, trackId, intent] {
+          if (safe) safe->askIntentZone(intent, trackId);
+        }));
+        m.addSubMenu(u8(capital(intent)) + on, sub);
+      }
   } else if (toolId == "rcore" || toolId == "dcore") {
     const std::string kind = toolId == "rcore" ? "reverb" : "delay";
     std::vector<std::string> tracks = selectedTracks();
@@ -2398,6 +2406,100 @@ void MainComponent::openCorePlugin(const doc::CorePluginInfo& info, juce::Compon
   auto options = juce::PopupMenu::Options();
   if (near) options = options.withTargetComponent(near);
   m.showMenuAsync(options);
+}
+
+// A maker's card in the Tools panel's PLUGINS tab: its plugins, each with what it can do here (Diogo 2026-11-17:
+// "ao carregar num deles assim aparecer as opçoes que cada tem"). Instruments: a new track, or replace the selected
+// track's; effects: add to the selected track's chain. The plugin's window opens right after, as everywhere else.
+void MainComponent::showVendorPlugins(const doc::PluginVendorGroup& group, juce::Component* near) {
+  juce::PopupMenu m;
+  juce::Component::SafePointer<MainComponent> safe(this);
+  const std::string trackId = toolTrack();
+  const doc::Track* t = history_.current().findTrack(trackId);
+  const juce::String on = t ? u8(" on ") + u8(t->name) : juce::String();
+  for (const auto& p : group.plugins) {
+    const juce::String name = u8(p.value("name", std::string("Plugin")));
+    const bool instrument = p.value("instrument", false);
+    juce::PopupMenu one;
+    if (instrument) {
+      one.addItem(juce::PopupMenu::Item(u8("New track with it")).setAction([safe, p] {
+        if (!safe) return;
+        std::string id;
+        safe->edit([&](doc::Document& d) { id = doc::addPluginTrack(d, p); }, u8("Add ") + u8(p.value("name", std::string("plugin"))));
+        if (!id.empty()) { safe->selectTrack(id); safe->session_->openPluginEditor(doc::pluginKey(id)); }
+      }));
+      if (t && doc::playsPatterns(*t))
+        one.addItem(juce::PopupMenu::Item(u8("Replace the instrument") + on).setAction([safe, p, trackId] {
+          if (!safe) return;
+          safe->fetchPluginStates();
+          safe->edit([&](doc::Document& d) { doc::replaceInstrumentWithPlugin(d, trackId, p); },
+                     u8("Instrument: ") + u8(p.value("name", std::string("plugin"))));
+          safe->session_->openPluginEditor(doc::pluginKey(trackId));
+        }));
+    } else if (t) {
+      one.addItem(juce::PopupMenu::Item(u8("Add as effect") + on).setAction([safe, p, trackId] {
+        if (!safe) return;
+        int at = -1;
+        safe->edit([&](doc::Document& d) { at = doc::addPluginEffect(d, trackId, p); }, u8("Add ") + u8(p.value("name", std::string("plugin"))));
+        if (const doc::Track* now = safe->history_.current().findTrack(trackId); now && at >= 0 && at < (int)now->effects.size())
+          safe->session_->openPluginEditor(doc::pluginKey(trackId, now->effects[(size_t)at].value("id", std::string())));
+      }));
+    }
+    if (one.getNumItems() == 0)
+      one.addItem(juce::PopupMenu::Item(u8(instrument ? "Click a track with notes first" : "Click a track first")).setEnabled(false));
+    m.addSubMenu(name, one);
+  }
+  if (m.getNumItems() == 0) m.addItem(juce::PopupMenu::Item(u8("No plugins of this maker")).setEnabled(false));
+  auto options = juce::PopupMenu::Options();
+  if (near) options = options.withTargetComponent(near);
+  m.showMenuAsync(options);
+}
+
+// F-Core over a chosen zone (Diogo 2026-11-17: "ao selecionar a zona aplicava nas pistas que queria ou em todas e
+// ainda tinha opçao de escolher os numero do bar inicial e final"): first and last bar, the tracks, and the amount.
+// The write itself is toolIntentFxTracks, through runTool: one undo step, a refusal changes nothing.
+void MainComponent::askIntentZone(const std::string& intent, const std::string& trackId) {
+  const doc::Document& song = history_.current();
+  const int64_t kBar = 4 * doc::kPpq;
+  const int totalBars = (int)std::max<int64_t>(1, song.lengthTicks / kBar);
+  const doc::Track* t = song.findTrack(trackId);
+  const std::vector<std::string> selected = selectedTracks();
+  auto* w = new juce::AlertWindow(u8("F-Core: ") + u8(intent), juce::String(), juce::MessageBoxIconType::NoIcon, this);
+  w->addTextEditor("from", "1", lang::tr("First bar:"));
+  w->addTextEditor("to", juce::String(totalBars), lang::tr("Last bar:"));
+  juce::StringArray choices;
+  choices.add(t ? u8("This track (") + u8(t->name) + u8(")") : u8("This track"));
+  choices.add(u8("Selected tracks (") + juce::String((int)selected.size()) + u8(")"));
+  choices.add(u8("All tracks with notes"));
+  w->addComboBox("tracks", choices, lang::tr("Apply to:"));
+  w->addTextBlock(lang::tr("Amount (0 to 1):"));
+  auto* amount = new juce::Slider(juce::Slider::LinearHorizontal, juce::Slider::TextBoxLeft);
+  amount->setRange(0.0, 1.0, 0.05);
+  amount->setValue(0.7, juce::dontSendNotification);
+  w->addCustomComponent(amount);  // the window owns it; it lives as long as the safe pointer below
+  w->addButton("OK", 1, juce::KeyPress(juce::KeyPress::returnKey));
+  w->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+  juce::Component::SafePointer<juce::AlertWindow> safe(w);
+  w->enterModalState(true, juce::ModalCallbackFunction::create([this, safe, intent, trackId, selected, kBar, totalBars, amount](int result) {
+    if (result != 1 || safe == nullptr) return;
+    const int from = safe->getTextEditorContents("from").getIntValue();
+    const int to = safe->getTextEditorContents("to").getIntValue();
+    if (from < 1 || to < from || to > totalBars) {
+      showError(u8("F-Core: ") + u8(intent),
+                u8("Choose bars between 1 and ") + juce::String(totalBars) + u8(", the first no later than the last."));
+      return;
+    }
+    const int64_t start = (int64_t)(from - 1) * kBar, end = std::min<int64_t>((int64_t)to * kBar, history_.current().lengthTicks);
+    std::vector<std::string> tracks;
+    const int choice = safe->getComboBoxComponent("tracks")->getSelectedItemIndex();
+    if (choice == 1) tracks = selected;
+    else if (choice == 2) { for (const auto& tr : history_.current().tracks) if (doc::playsPatterns(tr)) tracks.push_back(tr.id); }
+    else tracks.push_back(trackId);
+    const double strength = amount->getValue();
+    runTool(u8("F-Core: ") + u8(intent), [&](doc::Document& d, const doc::RoleMap& r) {
+      return withSkipped(doc::toolIntentFxTracks(d, tracks, r, intent, start, end, strength));
+    });
+  }), true);
 }
 
 void MainComponent::giveSilentTracksPlugins() {
@@ -3715,6 +3817,7 @@ void MainComponent::scanPlugins() {
     if (self == nullptr) return;
     notice_ = u8("Plugins: ") + juce::String(found) + u8(" found") +
               (failed ? u8(", ") + juce::String(failed) + u8(" with problems (set aside)") : juce::String()) + ".";
+    if (showPlugins_) refreshInstalledCards();
     menuItemsChanged();
     repaint();
   });
@@ -5345,10 +5448,17 @@ void MainComponent::togglePlugins() {
   if (showPlugins_) {
     std::string problem;
     pluginCards_.setRoles(PluginCatalog::roles(&problem));
+    refreshInstalledCards();
   }
   resized();
   repaint();
   for (auto& row : rows_) row->repaint();
+}
+
+void MainComponent::refreshInstalledCards() {
+  std::vector<doc::json> all = plugins_->instruments();
+  for (const auto& p : plugins_->effects()) all.push_back(p);
+  pluginCards_.setInstalled(all);
 }
 juce::Rectangle<int> MainComponent::libraryArea() const { return body().removeFromLeft(libraryWidth()); }
 // Every panel's edge is dragged (Diogo 2026-11-09: "não me deixa expandir ou encurtar nenhuma janela"): the Library's

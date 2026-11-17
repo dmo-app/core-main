@@ -71,4 +71,24 @@ int relinkPlugins(Document& d, const std::vector<json>& scanned) {
   return n;
 }
 
+std::vector<PluginVendorGroup> pluginsByVendor(const json& plugins) {
+  std::vector<PluginVendorGroup> out;
+  if (!plugins.is_array()) return out;
+  for (const auto& p : plugins) {
+    if (!p.is_object()) continue;
+    std::string vendor = text(p, "vendor");
+    if (vendor.empty()) vendor = "Other";  // sem fabricante: aparece em "Other", nunca se esconde
+    auto it = std::find_if(out.begin(), out.end(), [&](const PluginVendorGroup& g) { return lowerAscii(g.vendor) == lowerAscii(vendor); });
+    if (it == out.end()) { out.push_back({vendor, {}}); it = out.end() - 1; }
+    it->plugins.push_back(p);
+  }
+  std::sort(out.begin(), out.end(), [](const PluginVendorGroup& a, const PluginVendorGroup& b) {
+    return lowerAscii(a.vendor) < lowerAscii(b.vendor);
+  });
+  for (auto& g : out)
+    std::sort(g.plugins.begin(), g.plugins.end(),
+              [](const json& a, const json& b) { return lowerAscii(text(a, "name")) < lowerAscii(text(b, "name")); });
+  return out;
+}
+
 }  // namespace core::doc

@@ -338,6 +338,29 @@ TEST("toolIntentFx: cada intencao escreve as macros dos papeis; papel em falta e
   CHECK_EQ(toJson(d).dump(), before);
 }
 
+TEST("toolIntentFxTracks: a intencao escreve em TODAS as pistas com notas, nao so na primeira") {
+  Document d = newTemplateDocument();
+  const auto tracks = patternTracks(d);
+  CHECK(tracks.size() >= 2);
+  const int64_t end = std::min<int64_t>(d.lengthTicks, 8 * kPpq);
+  const RoleToolResult r = toolIntentFxTracks(d, tracks, aiMap(), "intro", 0, end, 0.7);
+  CHECK_EQ(r.keys.size(), 2 * tracks.size());  // filter + reverb em cada pista, nao so numa
+  for (const auto& id : tracks) {
+    CHECK(findRoleEffect(d, id, "filter") >= 0);
+    CHECK(findRoleEffect(d, id, "reverb") >= 0);
+  }
+  CHECK(r.sentence.find("on " + std::to_string(tracks.size()) + " tracks") != std::string::npos);
+  // Pistas sem notas (buses, audio) nao recebem a tool; so elas: recusa.
+  std::vector<std::string> silent;
+  for (const auto& t : d.tracks) if (!playsPatterns(t)) silent.push_back(t.id);
+  const std::string before = toJson(d).dump();
+  if (!silent.empty()) CHECK_THROWS(toolIntentFxTracks(d, silent, aiMap(), "intro", 0, end, 0.7));
+  CHECK_THROWS(toolIntentFxTracks(d, {}, aiMap(), "intro", 0, end, 0.7));
+  CHECK_THROWS(toolIntentFxTracks(d, tracks, aiMap(), "nada", 0, end, 0.7));
+  CHECK_THROWS(toolIntentFxTracks(d, tracks, aiMap(), "intro", end, end, 0.7));
+  CHECK_EQ(toJson(d).dump(), before);  // nenhuma recusa muda a musica
+}
+
 TEST("toolRoll: um padrao novo que acelera ate ao drop, os clips do sitio saem; valores errados recusam") {
   Document d = newTemplateDocument();
   const std::string bass = trackNamed(d, "ass");

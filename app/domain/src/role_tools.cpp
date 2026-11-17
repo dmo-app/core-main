@@ -396,6 +396,36 @@ RoleToolResult toolIntentFx(Document& doc, const std::string& trackId, const Rol
   return r;
 }
 
+RoleToolResult toolIntentFxTracks(Document& doc, const std::vector<std::string>& trackIds, const RoleMap& map,
+                                  const std::string& intent, int64_t start, int64_t end, double amount) {
+  checkSpan(doc, start, end);
+  const std::string what = lowerText(intent);
+  if (std::find(fxIntents().begin(), fxIntents().end(), what) == fxIntents().end())
+    throw DocumentError("fx", "no intent '" + intent + "' (buildup, suck, intro, outro, impact, break)");
+  std::vector<std::string> eligible;
+  for (const auto& id : trackIds) {
+    const Track* t = doc.findTrack(id);
+    if (t && playsPatterns(*t)) eligible.push_back(id);
+  }
+  if (eligible.empty()) throw DocumentError("fx", "choose at least one track that plays notes");
+  RoleToolResult r;
+  for (const auto& id : trackIds) {
+    const Track* t = doc.findTrack(id);
+    if (!t || !playsPatterns(*t)) r.skipped.push_back("track '" + (t ? t->name : id) + "' plays no notes, skipped");
+  }
+  for (size_t i = 0; i < eligible.size(); ++i) {
+    const RoleToolResult one = toolIntentFx(doc, eligible[i], map, what, start, end, amount);
+    r.keys.insert(r.keys.end(), one.keys.begin(), one.keys.end());
+    for (const auto& role : one.roles)
+      if (std::find(r.roles.begin(), r.roles.end(), role) == r.roles.end()) r.roles.push_back(role);
+    for (const auto& why : one.skipped)
+      if (std::find(r.skipped.begin(), r.skipped.end(), why) == r.skipped.end()) r.skipped.push_back(why);
+    if (i == 0) r.sentence = one.sentence;
+  }
+  r.sentence += " on " + std::to_string(eligible.size()) + (eligible.size() == 1 ? " track" : " tracks");
+  return r;
+}
+
 RollResult toolRoll(Document& doc, const std::string& trackId, int64_t start, int64_t dropTick, const std::string& styleIn, int pitch,
                     int rise, int gapBeats) {
   checkSpan(doc, start, dropTick);

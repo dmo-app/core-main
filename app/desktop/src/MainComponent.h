@@ -250,6 +250,11 @@ private:
   juce::PopupMenu coreToolMenu(const std::string& toolId, const std::string& trackId);
   juce::PopupMenu coreToolsMenu(const std::string& trackId);
   void openCorePlugin(const doc::CorePluginInfo& info, juce::Component* near);
+  // The PLUGINS tab of the Tools panel (Diogo 2026-11-17): a maker's card opens its plugins' options; the F-Core
+  // intents can also be applied over chosen bars, on this track, the selected ones or all that play notes.
+  void showVendorPlugins(const doc::PluginVendorGroup& group, juce::Component* near);
+  void askIntentZone(const std::string& intent, const std::string& trackId);
+  void refreshInstalledCards();
   void runTool(const juce::String& label, std::function<std::string(doc::Document&, const doc::RoleMap&)> tool);
   std::string toolTrack() const;  // the track the tools work on: the selected one, else the piano roll's
   void togglePlugins();
