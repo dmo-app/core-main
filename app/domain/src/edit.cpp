@@ -1321,6 +1321,18 @@ const json& effectChain(const Document& doc, const std::string& trackId) {
   return t->effects;
 }
 
+std::vector<EffectMenuEntry> effectMenuEntries(const json& chain) {
+  std::vector<EffectMenuEntry> out;
+  for (int i = 0; i < (int)chain.size() && i < kMaxEffectsPerChain; ++i) {
+    const json& fx = chain[(size_t)i];
+    if (!fx.is_object()) continue;
+    const bool plugin = fx.value("type", std::string()) == "plugin" && fx.contains("plugin");
+    if (!plugin) continue;  // the menus' old filter: only the plugins were offered (bug 2026-11-17)
+    out.push_back({i, true, true, fx["plugin"].value("name", std::string("Plugin"))});
+  }
+  return out;
+}
+
 namespace {
 json& effectAt(Document& doc, const std::string& trackId, int index) {
   json& chain = effectChain(doc, trackId);
