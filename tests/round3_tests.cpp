@@ -144,7 +144,14 @@ TEST("ronda 3, R3-C: os textos novos do painel Tools e dos menus tem traducao") 
         "The role map could not be read ({}): Settings > Roles.", "Choose a track with notes first (click its name)",
         "Select the tracks that share it first", "No sections yet: right-click the timeline to add one", "The whole song",
         "A new track", "Open the Patterns window\xE2\x80\xA6", "Into the drop after", "Over the build-up", "Steps (1/4, 1/8, 1/16, 1/32)",
-        "Gradual (speeding up all the way)", "Instrument: {}", "New track: {}", "F-Core: {}"})
+        "Gradual (speeding up all the way)", "Instrument: {}", "New track: {}", "F-Core: {}",
+        // O separador PLUGINS e a zona por compassos/pistas (Diogo 2026-11-17).
+        "PLUGINS", "instruments", "effects", "First bar:", "Last bar:", "Apply to:", "Amount (0 to 1):",
+        "Tools and plugins: Core's tools as cards, and the installed plugins by maker",
+        "New track with it", "Replace the instrument", "Add as effect", "Click a track with notes first",
+        "Click a track first", "No plugins of this maker", "Choose bars and tracks\xE2\x80\xA6",
+        "This track", "This track ({})", "Selected tracks ({})", "All tracks with notes",
+        "Choose bars between 1 and {}, the first no later than the last."})
     CHECK(lang["strings"].contains(key));
 }
 
