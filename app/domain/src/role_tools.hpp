@@ -91,6 +91,13 @@ const std::vector<std::string>& fxIntents();
 RoleToolResult toolIntentFx(Document& doc, const std::string& trackId, const RoleMap& map, const std::string& intent,
                             int64_t start, int64_t end, double amount = 0.7);
 
+// The same intent over [start, end) on several tracks at once (Diogo 2026-11-17: "ao selecionar a zona aplicava nas
+// pistas que queria ou em todas"). Only tracks that play notes take it; a bus or an audio track is skipped and said.
+// The span and the intent are checked before anything is written, so a refusal changes nothing (one undo step).
+// Roles and skipped reasons are gathered across the tracks; the sentence says how many tracks were written.
+RoleToolResult toolIntentFxTracks(Document& doc, const std::vector<std::string>& trackIds, const RoleMap& map,
+                                  const std::string& intent, int64_t start, int64_t end, double amount = 0.7);
+
 // ---- ROLL: notes that speed up into the drop on a track (a snare or a kick roll), in a new pattern placed on the
 // span. style: "steps" (1/4, 1/8, 1/16, then 1/32) | "gradual" (speeding up the whole way). pitch -1: the track's
 // key (or 38, a snare). rise: semitones the roll climbs by the drop (0-12). gapBeats: silence before the drop (0-4).

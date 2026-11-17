@@ -396,6 +396,28 @@ RoleToolResult toolIntentFx(Document& doc, const std::string& trackId, const Rol
   return r;
 }
 
+RoleToolResult toolIntentFxTracks(Document& doc, const std::vector<std::string>& trackIds, const RoleMap& map,
+                                  const std::string& intent, int64_t start, int64_t end, double amount) {
+  checkSpan(doc, start, end);
+  const std::string what = lowerText(intent);
+  if (std::find(fxIntents().begin(), fxIntents().end(), what) == fxIntents().end())
+    throw DocumentError("fx", "no intent '" + intent + "' (buildup, suck, intro, outro, impact, break)");
+  std::vector<std::string> eligible;
+  for (const auto& id : trackIds) {
+    const Track* t = doc.findTrack(id);
+    if (t && playsPatterns(*t)) eligible.push_back(id);
+  }
+  if (eligible.empty()) throw DocumentError("fx", "choose at least one track that plays notes");
+  RoleToolResult r;
+  // BUG (red): only the first track is written; the rest are ignored.
+  const RoleToolResult one = toolIntentFx(doc, eligible.front(), map, what, start, end, amount);
+  r.roles = one.roles;
+  r.keys = one.keys;
+  r.skipped = one.skipped;
+  r.sentence = one.sentence + " on 1 track";
+  return r;
+}
+
 RollResult toolRoll(Document& doc, const std::string& trackId, int64_t start, int64_t dropTick, const std::string& styleIn, int pitch,
                     int rise, int gapBeats) {
   checkSpan(doc, start, dropTick);

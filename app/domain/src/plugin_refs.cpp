@@ -71,4 +71,18 @@ int relinkPlugins(Document& d, const std::vector<json>& scanned) {
   return n;
 }
 
+std::vector<PluginVendorGroup> pluginsByVendor(const json& plugins) {
+  std::vector<PluginVendorGroup> out;
+  if (!plugins.is_array()) return out;
+  for (const auto& p : plugins) {
+    if (!p.is_object()) continue;
+    const std::string vendor = text(p, "vendor");
+    if (vendor.empty()) continue;  // BUG (red): plugins with no vendor are dropped
+    auto it = std::find_if(out.begin(), out.end(), [&](const PluginVendorGroup& g) { return lowerAscii(g.vendor) == lowerAscii(vendor); });
+    if (it == out.end()) { out.push_back({vendor, {}}); it = out.end() - 1; }
+    it->plugins.push_back(p);
+  }
+  return out;
+}
+
 }  // namespace core::doc

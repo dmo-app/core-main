@@ -22,4 +22,14 @@ PluginKey pluginKey(const json& plugin);  // empty fields when the id does not h
 // number of references changed; the ones with no match are left as they are (the UI shows them missing).
 int relinkPlugins(Document& d, const std::vector<json>& scanned);
 
+// The scanned plugins grouped by their maker, for the Plugins panel's cards (Diogo 2026-11-17: "um card que ao
+// carregar abria os plugins, KiloHearts, Kick3, GlitchMachines... e depois ao carregar num deles as opções que cada
+// tem"). One group per vendor, alphabetical (case ignored); a plugin with no vendor goes to "Other". Every plugin in
+// `plugins` ({format, id, name, vendor, instrument, ...}) lands in exactly one group, instruments and effects alike.
+struct PluginVendorGroup {
+  std::string vendor;
+  std::vector<json> plugins;
+};
+std::vector<PluginVendorGroup> pluginsByVendor(const json& plugins);
+
 }  // namespace core::doc

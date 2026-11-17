@@ -5,6 +5,7 @@
 #include "core/server.hpp"
 #include "edit.hpp"
 #include "history.hpp"
+#include "plugin_refs.hpp"
 #include "storage.hpp"
 #include "templates.hpp"
 
@@ -128,6 +129,29 @@ TEST("templates: todos abrem e o motor toca-os sem erro") {
     for (float s : r.L) finite = finite && std::isfinite(s);
     CHECK(finite);
   }
+}
+
+TEST("plugins por fabricante: todos entram num grupo, sem fabricante vai para Other, ordem alfabetica") {
+  const json plugins = json::array({
+      {{"format", "vst3"}, {"id", "VST3-Snap Heap-aaaa-1111"}, {"name", "Snap Heap"}, {"vendor", "KiloHearts"}, {"instrument", false}},
+      {{"format", "vst3"}, {"id", "VST3-Multipass-bbbb-2222"}, {"name", "Multipass"}, {"vendor", "kiloHearts"}, {"instrument", false}},
+      {{"format", "vst3"}, {"id", "VST3-Fracture-cccc-3333"}, {"name", "Fracture"}, {"vendor", "GlitchMachines"}, {"instrument", false}},
+      {{"format", "vst3"}, {"id", "VST3-Kick3-dddd-4444"}, {"name", "Kick3"}, {"vendor", ""}, {"instrument", true}},
+      {{"format", "vst3"}, {"id", "VST3-SemFabricante-eeee-5555"}, {"name", "Sem Fabricante"}, {"instrument", true}},
+  });
+  const auto groups = pluginsByVendor(plugins);
+  size_t total = 0;
+  for (const auto& g : groups) total += g.plugins.size();
+  CHECK_EQ(total, plugins.size());  // nenhum plugin instalado se perde, mesmo sem fabricante
+  CHECK_EQ(groups.size(), (size_t)3);
+  if (groups.size() == 3) {
+    CHECK_EQ(groups[0].vendor, std::string("GlitchMachines"));  // alfabetico, maiusculas ignoradas
+    CHECK_EQ(groups[1].vendor, std::string("KiloHearts"));      // KiloHearts e kiloHearts: o mesmo fabricante
+    CHECK_EQ(groups[1].plugins.size(), (size_t)2);
+    CHECK_EQ(groups[2].vendor, std::string("Other"));           // sem fabricante: "Other", nao desaparece
+    CHECK_EQ(groups[2].plugins.size(), (size_t)2);
+  }
+  CHECK(pluginsByVendor(json::object()).empty());  // entrada que nao e lista: vazio, sem erro
 }
 
 CORE_TEST_MAIN
