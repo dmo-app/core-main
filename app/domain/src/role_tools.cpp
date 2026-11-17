@@ -409,12 +409,20 @@ RoleToolResult toolIntentFxTracks(Document& doc, const std::vector<std::string>&
   }
   if (eligible.empty()) throw DocumentError("fx", "choose at least one track that plays notes");
   RoleToolResult r;
-  // BUG (red): only the first track is written; the rest are ignored.
-  const RoleToolResult one = toolIntentFx(doc, eligible.front(), map, what, start, end, amount);
-  r.roles = one.roles;
-  r.keys = one.keys;
-  r.skipped = one.skipped;
-  r.sentence = one.sentence + " on 1 track";
+  for (const auto& id : trackIds) {
+    const Track* t = doc.findTrack(id);
+    if (!t || !playsPatterns(*t)) r.skipped.push_back("track '" + (t ? t->name : id) + "' plays no notes, skipped");
+  }
+  for (size_t i = 0; i < eligible.size(); ++i) {
+    const RoleToolResult one = toolIntentFx(doc, eligible[i], map, what, start, end, amount);
+    r.keys.insert(r.keys.end(), one.keys.begin(), one.keys.end());
+    for (const auto& role : one.roles)
+      if (std::find(r.roles.begin(), r.roles.end(), role) == r.roles.end()) r.roles.push_back(role);
+    for (const auto& why : one.skipped)
+      if (std::find(r.skipped.begin(), r.skipped.end(), why) == r.skipped.end()) r.skipped.push_back(why);
+    if (i == 0) r.sentence = one.sentence;
+  }
+  r.sentence += " on " + std::to_string(eligible.size()) + (eligible.size() == 1 ? " track" : " tracks");
   return r;
 }
 
